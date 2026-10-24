@@ -237,6 +237,42 @@ A critique said the faces read as green blobs at 16 to 28 px, Bahn people got gr
 
 Left: the queue's empty states and the inbox (another lane owns those pages, so the line-up isn't placed there); status copy in `bits.tsx` ("A person must act") belongs to the queue rework.
 
+## 6h. Scale: 1,000 orders (25 Oct)
+
+Bahn's brief says "hundreds of orders", but the dataset has 100. We tested at 1,000 in a separate database, without touching the dataset, the seed or the starter schema.
+
+**The data.** `scripts/scale-seed.ts` clones every dataset order and every row that hangs off it (items, vehicles, order addresses, conversations, messages, alerts, events, related records) 9 times. Copy k of an id is `<id>-s<k>`, of a reference `CD-420516-S3`, and every cloned row carries `details.synthetic_scale = {copy, of}`. Ids inside JSON and message text are rewritten the same way, so links stay inside one copy. Shared rows (customers, sites, drivers, site addresses) are reused. The script is idempotent, `--undo` removes the copies, and it refuses to run against the shared `controlroom` database. Times are unchanged, so every copy has exactly the original's trouble. That makes this a worst case (10× the problems), not a realistic fleet. A new check confirms that each copy triages exactly like its original (bucket, reason, severity, due time, sources).
+
+**Measured** with `scripts/scale-measure.ts`: a production build (`next start`), headless Chrome at 1440×900, medians of 5. j/k is the time from the key press to the next painted frame (p90 of 20 presses).
+
+| | 100 before | 1,000 before | 1,000 after | 100 after |
+|---|---|---|---|---|
+| `triageAll` | 47 ms | 434 ms | 109 ms | 16 ms |
+| `/api/agent/queue` time · size (gzip) | 52 ms · 45 kB (8) | 468 ms · 457 kB (25) | 108 ms · 457 kB (25) | 26 ms · 45 kB (8) |
+| Queue page: rows visible · LCP | 152 · 132 ms | 862 · 584 ms | 256 · 196 ms | 91 · 88 ms |
+| Queue page: rows rendered · DOM nodes | 28 · 363 | 180 · 1,704 | 80 · 874 | 28 · 363 |
+| j/k p90 | 17 ms | 17 ms | 17 ms | 17 ms |
+| Map page TTFB | 78 ms | 457 ms | 136 ms | 51 ms |
+| Board: cards visible · DOM nodes | 318 ms · 2,808 | 2,064 ms · 26,362 | 655 ms · 8,410 | 209 ms · 2,809 |
+
+**What was slow, and the fixes**
+1. **Triage was 80% date formatting, not queries.** The loaders were already batched (no N+1). A CPU profile showed `new Intl.DateTimeFormat(...)` running on every format call, thousands of times per queue load (fact claims, slots, time zone names). `lib/present/time.ts` now builds each formatter once per zone and option set. No export changed, and every caller (triage, story, board cards) gets the speed-up. What remains is Postgres JSON parsing for 20k rows.
+2. **The board rendered 1,000 cards** (26k DOM nodes, 2 s). Each lane now shows its first 40 cards with "Show 40 more of N", the same pattern the queue uses. The busiest lane in the dataset has 24 cards, so the 100-order board is unchanged.
+3. **Long queue groups are now readable at a glance.** At 1,000 orders "Now" has 140 rows. A group with more than 20 rows shows the first 20, plus a filter row that counts the next-step chips the rows already carry ("Answer driver 50", "Confirm with customer 30", "Decide: roadside or tow 10"), in rank order. Clicking a chip narrows the group. On a phone the filter is a single swipeable row. The dataset never reaches 20 in a group (Needs you is 19), so the 100-order queue renders exactly as before (same rows, same 363 nodes).
+
+**Bucket counts at 1,000:** Needs you 190 (Now 140, When you can 50), Ringo 30, waiting 60, quiet 720. The safety rows still come first, and Ringo's report still opens with "190 need you, 40 overdue. Start with the Bentley Continental GT." Honest reading: "Now" grows with the trouble, not with the order count. At 10× the trouble it is 140 rows, not short. The filter keeps those 140 rows workable: one desk can take "Answer driver" while another takes the customer calls.
+
+![Queue at 1,000 orders](docs/scale-queue-1000.jpg)
+
+**Checked:** `ring:check` 22/22 at 100 and at 1,000. Story pages and APIs work for cloned orders (`ord-00322-s4` gets the same one-decision card as 322). No horizontal scroll at 390 on the queue, board or map. Seeding twice gives the same 1,000 orders.
+
+**Thrown away / left alone**
+- Emptying `chips` in the queue response. They are 68% of its bytes and no screen renders them, but the answer is 25 kB gzipped, and the field is in the shared contract that other lanes build on.
+- Virtualising lists (it needs a dependency or a lot of code; paging covers it) and caching the queue between polls (110 ms per 20 s poll per tab is fine).
+- De-duplicating map arcs. At 1,000 orders, 10 identical arcs stack and look darker, and de-duplicating would change the 100-order map.
+- Left: the map's city panel lists its orders in load order, not rank order. With 50 in Hamburg, the worst may not be on top.
+- Model use: the queue page's handover strip starts the Scribe in the background. My browser runs triggered about 5 Scribe calls (one per server start and database state) before I noticed and blanked the key for the rest. No Ringo runs.
+
 ## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, and so on) are unverified. Serving under `/apps/<slug>` works in a local production build with the base path; whether the gateway keeps or strips the prefix on a real box is not checked.
