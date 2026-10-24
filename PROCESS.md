@@ -16,6 +16,7 @@ One person (Diana) ran every session: she set each lane's goal, read every lane 
 | 6 | After two dead lines (ivr-loop red-team case), Ringo booked a third callback, and then another. | The scenario suite run on its own database. | Two dead lines in a row go to a person. The suite asserts it. | [e8723a2](https://github.com/dianapaula19/bahn-ringo/commit/e8723a2) |
 | 7 | The research brief said Matrix cron jobs run agents. | The Matrix gateway source: a cron job only sends a fixed message. | The 5-minute loop is our own `box-loop.mjs`. | (Matrix lane, §3) |
 | 8 | Round 3: judges noted that "I'll handle it" wrote nothing, so the order stayed in everyone's queue. They also asked for a phone number on the customer button. | Whether the dataset has a customer phone number. It has none. | "I'll handle it" now writes a claim (who, when, note, back-in time). The number was **not** added, because inventing one breaks hard rule 9. | [490a24c](https://github.com/dianapaula19/bahn-ringo/commit/490a24c) (A15) |
+| 9 | Round 4: `demo:seed` rebuilt site playbook notes from every recorded call, including code's own phone-path note. | The fresh-clone run's `/sites/site-001` page: two older recordings predate the simulator naming its menus, so their notes read "press 2 → hold ? s → a person". | Rebuild Ringo's own notes from every recording (each re-checked against the transcript), but code's path note only from labelled calls. 10 notes, no noise. | [c7caf82](https://github.com/dianapaula19/bahn-ringo/commit/c7caf82) (A17) |
 
 ## 1. How we worked with coding agents
 
@@ -163,9 +164,8 @@ That is **29 of 30** scenario runs, and 9 of 10 scenarios passed every time. `ev
 - Learned rules live in the database, so a fresh clone starts with none. `npm run demo:seed` deliberately seeds no corrections or rules, because that would invent a person's reviews. The run panel shows a learned-rule block only while the run is live, like every gate event. Scoping uses open alert signals and work item kinds only.
 - Ringo prepares no customer-message drafts. The background runner's `--autorun` is off by default so it cannot take over a live demo.
 - The scenario suite runs 516 and 593 in parallel against the same site, so one scenario's playbook notes can be read by the other mid-run. Run it on its own database, not the demo one: it clears Ringo's rows on the orders it uses.
-- Reset keeps the scenario history, corrections and learned rules, but wipes the site playbooks and the trace those corrections came from.
+- Reset keeps the scenario history. Since round 4 it also clears corrections and learned rules, so a reset database cannot show a rule suggestion whose reviews are gone.
 - One scenario miss on the merged tree: in one of three runs, 516 hit Ringo's 24-tool-call limit after the gate refused two steps. He stopped `needs_person` with a proposal already written. The limit is unchanged.
-- "Needs you N" still counts the orders in Taken. The decide button and the shift report count only the free ones.
 
 ## Appendix: lane logs, in time order
 
@@ -558,3 +558,21 @@ Merged `r2-decide`, `r2-learn`, `r2-calls`, `r2-evals`, `r2-engine`, `r2-scale` 
 - Taking /board out of the nav. It is the only place that lists all 100 orders, and the cards no longer truncate the slot.
 - Not done: ranking the map's city panel by triage, and toning down Ringo's voice. Both are outside this lane's screens, and the second needs a model run to judge.
 - CONTRACT.md §4 still says 322's one-decision times are "message times in UTC". They are now Helsinki time with the zone name. The integrator owns that file.
+
+### A17. Round 4: one count, shorter order pages, Ringo's steps on the order (25 Oct)
+
+**What the re-judge said.** Control room and taste at 4: the counts disagreed ("22 need you", "Start deciding (20)", "20 left"); 516 was a 4,000 px page with the same quoted facts nested two or three times in the timeline; its first fact was a Monitoring alert labelled Claimed though it relays the site's refutation; "cheap work first, then stop" was hidden and /engine showed "0 turns · 0 in / 0 out" for every recorded run; EEST and CEST mixed on one page and the sidebar snapshot (12:00) disagreed with "Checked 12:09"; the README said demo:seed seeds no reviews while /trust showed a suggestion; Decide buttons did not say what a press writes.
+
+**What changed**
+- **One count.** `needsYouSplit()` in `lib/triage/claim.ts` is the only meaning of "needs you": open rows nobody has taken, Now first. The queue header, shift report, Start deciding, Decide's "N left" and the board toggle all use it; Taken is its own group, "not counted above". `ring:check` asserts the split partitions the queue and that those three screens count with it (there is no sidebar badge to align). "Ringo can phone these" shows a plain empty line, with no copy that implies rows.
+- **Order page.** Timeline entries link to facts ("2 facts in What we know" scrolls to them and highlights them) instead of re-nesting the blocks; What we know opens with 4, the timeline with the last 5. 516 at 1440: 3,986 px → 2,237 px. An alert now carries the level of what it relays (a site's word is quoted, a missing driver-app position observed, the rest claimed) and an open alert does not age out; 516's site-access alert, answered by Ringo's later quoted call, folds into "no longer true", linked to that call.
+- **Ringo's steps.** The order shows his last run as a strip: Read order 22 s → Read messages → Read site rules → Read playbook → Wrote 5 facts → Call stock control 28 s (sim) → Wrote 2 facts + notes → Stop: proposal ready, 1 min 18 s in all. /engine labels recorded runs "recorded run · no token data" and times them from the recording; a live run keeps its real turns and tokens.
+- **Time.** Ops times are Helsinki time with the zone said once per section; a slot at a place on another clock reads "23 Oct 11:00–13:00 EEST (10:00–12:00 CEST, site time)". The sidebar shows the desk clock (the clock behind "Checked") and "Data as of" the snapshot.
+- **Decide.** Every decision button carries "This will: …": "Records 'customer chose tow' on CD-420322, with who told you · then: booking the recovery needs approval as a cost"; Accept says it rechecks the order first.
+- **Board.** Cards rest folded to the car and its first problem and open on hover or focus; a line says to decide from Needs you.
+- **Demo state.** `demo:seed` rebuilds the site playbook notes from the recordings (row 9 above) and prints what it created and what it did not. No reviews are seeded, so the README's promise holds; the /trust suggestion the judge saw came from reviews made by hand in that database.
+
+**What we checked.** A fresh `git clone` of this branch on spare ports (Postgres 5448, RustFS 9019/9020, compose project `ringo-fresh`), following the README with no API key: `npm ci`, compose up, `db:push`, `db:seed`, `attachments:seed`, `demo:seed`, `typecheck`, `build`, `ring:check` (33 + 9 + 3), `smoke`, then screenshots of /, /orders/ord-00516, /sites/site-001, /evals, /trust and /engine. /trust showed no learned rule, the 516 page the step strip, site-001 the Finnish notes. The clone printed the wrong sim clock (a 2 s cache in the seed process; the app was right); fixed. Then torn down with its volumes. Screens at 1440×900 and 390×844, no horizontal scroll. **1 model run**: a live run on 516 to see the strip and /engine for a live run (Ringo re-read, saw his call was 6 minutes old, wrote one fact and stopped without dialling: Read order 2 s → Read messages → Wrote 1 fact → Stop, 12 s, 14,204 in / 1,509 out). The demo database was re-seeded afterwards.
+
+**Left.** Ringo's tool summaries still say UTC ("latest: support chat 08:34 UTC"); they show only in the live run log and /engine. The hero's "What Ringo did" stays folded; the strip below carries the same story.
+
