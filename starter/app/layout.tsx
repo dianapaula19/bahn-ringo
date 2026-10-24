@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Ringo — Bahn control room",
+  title: { default: "Needs you · Ringo — Bahn control room", template: "%s · Ringo" },
   description: "The orders that need a person, and why. Ringo checks pickup readiness by phone. Fictional data; calls and drivers are simulated.",
 }
 
