@@ -1,7 +1,6 @@
 // The one place Ringo builds an Anthropic client. The key comes from the env
 // (starter/.env.local, loaded by Next and by scripts/ring-shim.cjs). It is never logged or returned.
 import AnthropicClient from "@anthropic-ai/sdk"
-import { Anthropic } from "@posthog/ai/anthropic"
 import { PostHog } from "posthog-node"
 
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5"
@@ -15,7 +14,7 @@ const posthog = (() => {
     // PostHog is optional: without its env vars the app runs and sends nothing.
     return null
   }
-  return new PostHog(projectToken, { host, privacyMode: false, flushAt: 1, flushInterval: 0 })
+  return new PostHog(projectToken, { host, flushAt: 1, flushInterval: 0 })
 })()
 
 export type AiTraceContext = { sessionId: string; traceId: string }
@@ -26,9 +25,32 @@ let client: AnthropicClient | null | undefined
 export function anthropic(): AnthropicClient | null {
   if (client === undefined) {
     const apiKey = key()
-    client = apiKey ? posthog ? new Anthropic({ apiKey, posthog }) as unknown as AnthropicClient : new AnthropicClient({ apiKey }) : null
+    client = apiKey ? new AnthropicClient({ apiKey }) : null
   }
   return client ?? null
+}
+
+// @posthog/ai only wraps `messages`, not `beta.messages`, and its posthog* request fields make the API
+// answer 400. So Ringo reports each model call itself: model, tokens, latency, errors (no prompt content).
+export function captureAiGeneration(context: AiTraceContext | null, name: string, startedAt: number, result: { model?: string; usage?: { input_tokens?: number; output_tokens?: number } | null } | null, error?: unknown) {
+  if (!posthog || !context) return
+  posthog.capture({
+    distinctId: `ai-${context.sessionId}`,
+    event: "$ai_generation",
+    properties: {
+      $process_person_profile: false,
+      $ai_trace_id: context.traceId,
+      $ai_session_id: context.sessionId,
+      $ai_span_name: name,
+      $ai_provider: "anthropic",
+      $ai_model: result?.model ?? MODEL,
+      $ai_latency: (Date.now() - startedAt) / 1000,
+      $ai_input_tokens: result?.usage?.input_tokens ?? 0,
+      $ai_output_tokens: result?.usage?.output_tokens ?? 0,
+      $ai_is_error: Boolean(error),
+      ...(error ? { $ai_error: error instanceof Error ? error.name : "Error" } : {}),
+    },
+  })
 }
 
 export function captureAiToolSpan(context: AiTraceContext | null, name: string, input: unknown, output: unknown, startedAt: number, isError = false) {
@@ -66,13 +88,19 @@ export const BETAS = ["server-side-fallback-2026-07-01"]
 export async function shortReply(system: string, user: string, effort: "low" | "medium" = "low", context = newAiTrace()): Promise<string | null> {
   const c = anthropic()
   if (!c) return null
-  const message = await c.beta.messages.create({
-    model: MODEL, max_tokens: 2000, betas: BETAS, fallbacks: "default",
-    thinking: { type: "adaptive" }, output_config: { effort },
-    system, messages: [{ role: "user", content: user }],
-    posthogTraceId: context.traceId,
-    posthogProperties: { $ai_session_id: context.sessionId },
-  } as AnthropicClient.Beta.MessageCreateParamsNonStreaming)
+  const startedAt = Date.now()
+  let message
+  try {
+    message = await c.beta.messages.create({
+      model: MODEL, max_tokens: 2000, betas: BETAS, fallbacks: "default",
+      thinking: { type: "adaptive" }, output_config: { effort },
+      system, messages: [{ role: "user", content: user }],
+    } as AnthropicClient.Beta.MessageCreateParamsNonStreaming)
+    captureAiGeneration(context, "short_reply", startedAt, message)
+  } catch (e) {
+    captureAiGeneration(context, "short_reply", startedAt, null, e)
+    throw e
+  }
   if (message.stop_reason === "refusal") return null
   const text = message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("").trim()
   return text || null

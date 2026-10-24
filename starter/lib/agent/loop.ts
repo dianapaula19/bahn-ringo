@@ -11,7 +11,7 @@ import { loadOrder } from "@/lib/present/load"
 import { ringRuns, ringSteps } from "@/lib/ring-schema"
 import { ringEligibility } from "@/lib/triage/triage"
 import { newId, simNow } from "./clock"
-import { anthropic, BETAS, captureAiToolSpan, flushAiObservability, MODEL, newAiTrace } from "./llm"
+import { anthropic, BETAS, captureAiGeneration, captureAiToolSpan, flushAiObservability, MODEL, newAiTrace } from "./llm"
 import { LIMITS, runTool, TOOLS, type RunCtx, type ToolOutcome } from "./tools"
 
 export const SYSTEM = `You are Ringo, the pickup readiness agent in a car delivery control room. Your job on one order: find out whether the car can be collected (who has the keys, where the handover is, who releases it, which papers are needed), write down what you learn as graded facts, and then either finish or bring a person one clear decision.
@@ -138,15 +138,15 @@ async function loop(client: Anthropic, ctx: RunCtx, input: { orderId: string; tr
       return
     }
     ctx.ai = newAiTrace(ctx.runId)
+    const turnStartedAt = Date.now()
     const stream = client.beta.messages.stream({
       model: MODEL, max_tokens: 16000, betas: BETAS, fallbacks: "default",
       system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
       tools: TOOLS as Anthropic.Beta.BetaTool[], tool_choice: { type: "auto" },
       thinking: { type: "adaptive" }, output_config: { effort: "medium" }, messages,
-      posthogTraceId: ctx.ai.traceId,
-      posthogProperties: { $ai_session_id: ctx.ai.sessionId },
-    } as unknown as Anthropic.Beta.MessageCreateParamsStreaming)
-    const msg = await stream.finalMessage()
+    } as Anthropic.Beta.MessageCreateParamsStreaming)
+    const msg = await stream.finalMessage().catch((e) => { captureAiGeneration(ctx.ai, "ringo_turn", turnStartedAt, null, e); throw e })
+    captureAiGeneration(ctx.ai, "ringo_turn", turnStartedAt, msg)
     if (msg.stop_reason === "refusal") {
       ctx.stopped = forcedStop("Ringo could not continue on this order. A person should take over.", ctx.did, "Work the order by hand.")
       return

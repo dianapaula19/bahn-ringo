@@ -11,7 +11,7 @@ import { messages, operationalEvents, orders } from "@/lib/schema"
 import { ringCalls, ringEvents, ringProposals, ringRuns } from "@/lib/ring-schema"
 import { SNAPSHOT, simNow } from "./clock"
 import { resolveSources } from "./facts"
-import { anthropic, BETAS, flushAiObservability, MODEL, newAiTrace } from "./llm"
+import { anthropic, BETAS, captureAiGeneration, flushAiObservability, MODEL, newAiTrace } from "./llm"
 
 type Item = { id: string; table: string; at: string; orderId: string; text: string }
 const iso = (v: Date | string) => new Date(v).toISOString()
@@ -56,18 +56,19 @@ async function scribe(list: Item[]): Promise<{ text: string; sourceIds: string[]
   const c = anthropic()
   if (!c || !list.length) return null
   const ai = newAiTrace()
+  const startedAt = Date.now()
   try {
     const msg = await c.beta.messages.create({
       model: MODEL, max_tokens: 4000, betas: BETAS, fallbacks: "default", thinking: { type: "adaptive" },
       output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } }, system: SCRIBE,
       messages: [{ role: "user", content: list.map((i) => `[${i.id}] ${hhmm(i.at)} order ${i.orderId}: ${i.text}`).join("\n") }],
-      posthogTraceId: ai.traceId,
-      posthogProperties: { $ai_session_id: ai.sessionId },
     } as Anthropic.Beta.MessageCreateParamsNonStreaming)
+    captureAiGeneration(ai, "scribe", startedAt, msg)
     if (msg.stop_reason === "refusal") return null
     const text = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("")
     return (JSON.parse(text) as { sentences: { text: string; sourceIds: string[]; orderId: string | null }[] }).sentences
-  } catch {
+  } catch (e) {
+    captureAiGeneration(ai, "scribe", startedAt, null, e)
     return null
   } finally {
     await flushAiObservability()
