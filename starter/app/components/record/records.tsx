@@ -7,7 +7,7 @@ import { Icon } from "../icons"
 import { OrderLinks } from "../ui"
 import { CostsPanel, DriversPanel, FactsPanel, MarketPanel, TravelPanel, WorkPanel } from "./aside"
 import { EvidenceDetails, HistoryDays, ProposalCards, RouteDetails } from "./sections"
-import { withBase } from "@/lib/base"
+import { withBase, newTab } from "@/lib/base"
 
 type Entry = { id: string; icon: string; title: string; sub: string; count: number | null; body: ReactNode }
 
@@ -33,7 +33,7 @@ export function RecordsPanel({ view, orderId }: { view: RecordView; orderId: str
     { id: "events", icon: "waiting", title: "All events", sub: "the recorded history by day, with what each event changed", count: view.historyTotal, body: <HistoryDays view={view} /> },
   ]
   return <section className="records" id="records">
-    <div className="sec-head"><h2>Everything on this order</h2><span className="note">Folded away. Open what you need; the <a href={withBase(`/api/orders/${orderId}`)} target="_blank" rel="noopener noreferrer">order API</a> has every field.</span></div>
+    <div className="sec-head"><h2>Everything on this order</h2><span className="note">Folded away. Open what you need; the <a href={withBase(`/api/orders/${orderId}`)} {...newTab}>order API</a> has every field.</span></div>
     {entries.map((entry) => <details className="rec" key={entry.id} id={entry.id}>
       <summary>
         <Icon name={entry.icon} size={15} />

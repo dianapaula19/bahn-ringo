@@ -4,7 +4,7 @@ import type { RecordView } from "@/lib/present/types"
 import { fmtDateTime, fmtRange } from "@/lib/present/time"
 import { Icon } from "../icons"
 import { Chip, FactList, More, When } from "../ui"
-import { withBase } from "@/lib/base"
+import { withBase, newTab } from "@/lib/base"
 
 export function FactsPanel({ view }: { view: RecordView }) {
   return <section className="detail-panel" aria-label="Order facts">
@@ -185,6 +185,6 @@ export function SourcePanel({ view, orderId }: { view: RecordView; orderId: stri
       <p className="aside-text">{hint.category} by {hint.channel.toLowerCase()}{hint.owner ? ` · owner ${hint.owner}` : ""}{hint.waitingOn ? ` · waiting on ${hint.waitingOn}` : ""}. {hint.confirmed ? "Confirmed link." : "A candidate match, not a confirmed link."}{hint.basis ? ` ${hint.basis}` : ""}</p>
     </div>)}
     {view.otherRecords.length > 0 && <p className="aside-text">Also linked, not shown above: {view.otherRecords.map((record) => `${record.label.toLowerCase()} (${record.count})`).join(", ")}.</p>}
-    <p className="api-link">Every field and link: <a href={withBase(`/api/orders/${orderId}`)} target="_blank" rel="noopener noreferrer">order API</a>.</p>
+    <p className="api-link">Every field and link: <a href={withBase(`/api/orders/${orderId}`)} {...newTab}>order API</a>.</p>
   </section>
 }
