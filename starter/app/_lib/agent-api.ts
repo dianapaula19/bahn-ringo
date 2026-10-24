@@ -1,6 +1,6 @@
 // Client calls to /api/agent/* (CONTRACT §7).
 import type {
-  ActionType, Desk, Handover, OrderStory, QueueResponse, ReviewRequest, ReviewResponse, RunEvent, RunRequest, TrustLedger, TrustMode, TrustUpdateResponse,
+  ActionType, Desk, Handover, OrderStory, QueueResponse, ReviewRequest, ReviewResponse, RunDetail, RunEvent, RunRequest, TrustLedger, TrustMode, TrustUpdateResponse,
 } from "@/lib/contract"
 
 import { withBase } from "@/lib/base"
@@ -38,7 +38,7 @@ export const reviewProposal = (id: string, req: ReviewRequest) =>
 export const updateTrust = (actionType: ActionType, mode: TrustMode, note: string) =>
   post<TrustUpdateResponse>("/api/agent/trust", { actionType, mode, operatorId: DESK, note })
 
-/** Streams a run as NDJSON, one RunEvent per line. */
+/** Runs Ringo. A replay streams NDJSON; a live run starts with a short POST and is then polled (see pollRun). */
 export async function runRing(orderId: string, req: RunRequest, onEvent: (e: RunEvent) => void, signal?: AbortSignal): Promise<void> {
   const fail = (message: string, retryable: boolean) => onEvent({ type: "error", message, retryable, at: new Date().toISOString() })
   let res: Response
@@ -47,6 +47,7 @@ export async function runRing(orderId: string, req: RunRequest, onEvent: (e: Run
   } catch { if (!signal?.aborted) fail("Could not reach the control room.", true); return }
   if (res.status === 409) return fail("Ringo is already working on this order.", false)
   if (!res.ok || !res.body) { const b = await res.json().catch(() => null); return fail(b?.error ?? "Ringo could not start.", true) }
+  if (req.trigger !== "replay") return pollRun(res, onEvent, fail, signal)
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
   let buf = ""
   for (;;) {
@@ -57,4 +58,24 @@ export async function runRing(orderId: string, req: RunRequest, onEvent: (e: Run
     for (const l of lines) if (l.trim()) onEvent(JSON.parse(l) as RunEvent)
   }
   if (buf.trim()) onEvent(JSON.parse(buf) as RunEvent)
+}
+
+/** A live run outlasts a proxy's per-request cap (30 s on Matrix OS), so no request is long:
+ *  the POST answers {runId} once started, then GET /runs/[runId]?after=<seq> every second until run_ended. */
+async function pollRun(res: Response, onEvent: (e: RunEvent) => void, fail: (m: string, r: boolean) => void, signal?: AbortSignal): Promise<void> {
+  const start = await res.json().catch(() => null) as { runId?: string; events?: RunEvent[] } | null
+  if (!start?.runId) return fail("Ringo could not start.", true)
+  if (start.events) { start.events.forEach(onEvent); return } // ended before starting (offline)
+  let seen = 0, misses = 0
+  while (!signal?.aborted) {
+    let detail: RunDetail
+    try { detail = await get<RunDetail>(`/api/agent/runs/${encodeURIComponent(start.runId)}?after=${seen - 1}`, signal); misses = 0 } catch {
+      if (signal?.aborted) return
+      if (++misses >= 10) return fail("The connection to Ringo was lost. The run goes on; reload the order to see what was saved.", true)
+      await new Promise((r) => setTimeout(r, 1000)); continue
+    }
+    for (const e of detail.events) { seen++; onEvent(e); if (e.type === "run_ended") return }
+    if (detail.run.status !== "running" && detail.events.length === 0) return // ended without a run_ended line
+    await new Promise((r) => setTimeout(r, 1000))
+  }
 }

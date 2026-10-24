@@ -203,6 +203,8 @@ Left, because they are outside the order flow and nobody hit them: customer, dri
 
 Left, because nobody would act on them: about a third of PostHog event POSTs were aborted. These are the scripts' hard `page.goto` navigations cutting off in-flight beacons; normal in-app navigation doesn't do that. Customer, driver and site pages with an unknown id still return 200 (as before). Then `POST /api/agent/reset` again.
 
+**Live runs behind a 30 s proxy (25 Oct).** On Matrix OS the gateway aborts every proxied request after 30 s total, streamed body included. A live run takes 35 to 48 s, so the browser got a 504 and saw nothing, although the run finished on the server. Now `POST /api/agent/orders/[id]/run` starts `runRing` in the background (kept alive with `after()`) and answers `202 {runId}` once `run_started` is stored. The panel then polls `GET /api/agent/runs/[runId]?after=<seq>` every second until `run_ended`, and renders the same events as before. The 409 "already running" and Escape (stop polling only) behave as before. Replay still streams, because it is under 25 s. A real run on ord-00023 took 37 s; the longest single request was 0.7 s (33 polls).
+
 ## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, and so on) are unverified. Serving under `/apps/<slug>` works in a local production build with the base path; whether the gateway keeps or strips the prefix on a real box is not checked.
