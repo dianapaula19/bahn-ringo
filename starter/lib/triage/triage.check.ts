@@ -16,7 +16,8 @@ import { emptyRing, type RingOrderState } from "@/lib/agent/store"
 import type { Bundle } from "@/lib/present/bundle"
 import { loadOrder } from "@/lib/present/load"
 import { ringEvents, ringProposals } from "@/lib/ring-schema"
-import { nextAction } from "./next-action"
+import { inNow, nextAction } from "./next-action"
+import { similarGroups } from "./similar"
 import { ringEligibility, triage } from "./triage"
 
 const NOW = SNAPSHOT
@@ -75,6 +76,39 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     assert.equal(nextAction({ reason: "DUE_SOON", why: "Site, 08:10 UTC: “Who collects?”", oneDecision: null, sources: [] }), "Call site")
     assert.equal(nextAction({ reason: "DUE_SOON", why: "A trade-in receipt shares a branch.", oneDecision: null, sources: [] }), null)
     assert.equal(nextAction({ reason: "WAITING_EXTERNAL", why: "", oneDecision: null, sources: [] }), null)
+  })
+  test("Now on the demo data: 322, 458, 593 are Now; 413 (due Monday) and 055 (medium) are not", () => {
+    for (const id of ["ord-00322", "ord-00458", "ord-00593"]) assert.equal(inNow(t(id), NOW), true, id)
+    for (const id of ["ord-00413", "ord-00055"]) assert.equal(inNow(t(id), NOW), false, id)
+  })
+})
+
+describe("Now: safety, or critical/high that is overdue or due within 2 h", () => {
+  const at = (min: number) => new Date(Date.parse(NOW) + min * 60_000).toISOString()
+  const row = (reason: string, severity: string, decideBy: string | null) => ({ reason, severity, decideBy }) as Parameters<typeof inNow>[0]
+  test("the rule's edges", () => {
+    assert.equal(inNow(row("SAFETY", "critical", null), NOW), true)       // safety always, even with no due time
+    assert.equal(inNow(row("DUE_SOON", "high", at(-30)), NOW), true)      // overdue
+    assert.equal(inNow(row("DUE_SOON", "high", at(120)), NOW), true)      // exactly 2 h
+    assert.equal(inNow(row("DUE_SOON", "high", at(121)), NOW), false)     // just past the window
+    assert.equal(inNow(row("DRIVER_WAITING", "high", null), NOW), false)  // no due time: when you can
+    assert.equal(inNow(row("DUE_SOON", "medium", at(-600)), NOW), false)  // overdue but routine
+  })
+})
+
+describe("decide mode: similar proposals", () => {
+  const prop = (id: string, actionType: string, payload: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    ({ id, origin: "ring", status: "PENDING_REVIEW", actionType, proposedPayload: payload, gate: { passed: true, findings: [], checkedAt: NOW }, ...extra }) as never
+  test("same change on the same fields groups; locked, blocked, other fields and dataset proposals do not", () => {
+    const groups = similarGroups([
+      prop("a", "endpoint.record_access", { key_holder: "x", access_instruction: "y" }),
+      prop("b", "endpoint.record_access", { access_instruction: "z", key_holder: "w" }),
+      prop("c", "endpoint.record_access", { key_holder: "x" }),                                        // other fields
+      prop("d", "address.update", { city: "Berlin" }), prop("e", "address.update", { city: "Hamburg" }), // locked: one at a time
+      prop("f", "endpoint.record_access", { key_holder: "x", access_instruction: "y" }, { gate: { passed: false, findings: [{ ruleId: "CL-10", effect: "block" }] } }),
+      prop("g", "endpoint.record_access", { key_holder: "x", access_instruction: "y" }, { origin: "dataset" }),
+    ])
+    assert.deepEqual(groups.map((g) => g.map((p: { id: string }) => p.id)), [["a", "b"]])
   })
 })
 

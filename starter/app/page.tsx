@@ -10,7 +10,8 @@ import { AppFrame } from "./components/app-frame"
 import { Icon } from "./components/icons"
 import { CAST, LizardFace } from "./components/ringo"
 import { Ago, When } from "./components/ring/bits"
-import { nextAction } from "@/lib/triage/next-action"
+import { inNow, nextAction } from "@/lib/triage/next-action"
+import "./decide/decide.css"
 
 const PAGE = 50
 const SEEN_KEY = "ring.lastSeen"
@@ -76,7 +77,10 @@ export default function NeedsYou() {
   return <AppFrame section="queue" snapshotAt={queue?.snapshotAt ?? null}><main className="page queue-page">
     <ShiftReport queue={queue} />
     <header className="queue-head">
-      <h1 id="needs-h">Needs you{queue && queue.needsYou.length > 0 && <span className="queue-count num">{queue.needsYou.length}</span>}</h1>
+      <div className="queue-title">
+        <h1 id="needs-h">Needs you{queue && queue.needsYou.length > 0 && <span className="queue-count num">{queue.needsYou.length}</span>}</h1>
+        {queue && queue.needsYou.length > 0 && <Link href="/decide" className="btn primary decide-start">Start deciding ({queue.needsYou.length})<Icon name="arrow" size={14} /></Link>}
+      </div>
       <p className="queue-sub">{queue
         ? <>Checked <When at={queue.now} now={queue.now} /> · {queue.total} orders · <span className="kbd-hint">j / k to move, Enter to open</span></>
         : "Checking every order…"}</p>
@@ -109,15 +113,13 @@ export default function NeedsYou() {
   </main></AppFrame>
 }
 
-const overdue = (q: QueueItem, now: string) => !!q.decideBy && q.decideBy < now
-
-// Now: safety, high severity, or past its time. The rest can wait a little. Rank order is kept inside each group.
+// Now: safety, or critical/high that is overdue or due within 2 h (lib/triage/next-action.ts). Rank order is kept inside each group.
 function NeedsYouGroups({ items, now }: { items: QueueItem[]; now: string }) {
-  const urgent = items.filter((q) => q.severity === "critical" || q.severity === "high" || overdue(q, now))
+  const urgent = items.filter((q) => inNow(q, now))
   const later = items.filter((q) => !urgent.includes(q))
   return <>
     {urgent.length > 0 && <><h2 className="q-group" id="now">Now · {urgent.length}</h2><Rows items={urgent} now={now} label="Orders that need a person now" person /></>}
-    {later.length > 0 && <><h2 className="q-group">When you can · {later.length}</h2><Rows items={later} now={now} label="Follow-ups" person /></>}
+    {later.length > 0 && <><h2 className="q-group">When you can · {later.length}</h2><Rows items={later} now={now} label="Follow-ups" /></>}
   </>
 }
 
@@ -141,7 +143,7 @@ function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: 
   </>
 }
 
-// Only an overdue card that needs a person is red; Ringo's and waiting rows stay calm.
+// Only an overdue card in Now is red; "When you can", Ringo's and waiting rows stay calm.
 function Due({ at, now, person }: { at: string | null; now: string; person: boolean }) {
   const rel = relativeTo(at, now)
   if (!at || !rel) return <span className="q-due" />
@@ -173,7 +175,7 @@ function ShiftReport({ queue }: { queue: QueueResponse | null }) {
   const lines = handover?.sentences ?? []
   const orders = new Set(lines.map((s) => s.orderId).filter(Boolean)).size
   const now = queue?.now ?? null
-  const late = queue ? queue.needsYou.filter((q) => overdue(q, queue.now)).length : 0
+  const urgent = queue ? queue.needsYou.filter((q) => inNow(q, queue.now)).length : 0
   const top = queue?.needsYou[0]
   const ready = !!queue && (!!handover || error)
 
@@ -186,7 +188,7 @@ function ShiftReport({ queue }: { queue: QueueResponse | null }) {
           <p>{error ? "I couldn't load what happened while you were out. The queue below is current."
             : lines.length ? <>Here&apos;s the lot since <When at={handover!.since} now={now} />: {lines.length} {lines.length === 1 ? "update" : "updates"} on {orders} {orders === 1 ? "order" : "orders"}.</>
               : <>Nothing new since <When at={handover!.since} now={now} />.</>}</p>
-          <p>{top ? <><a href="#needs-h">{queue!.needsYou.length} need you</a>{late > 0 && <>, <a href="#now">{late} overdue</a></>}. Start with the {top.vehicle}.</> : "Nothing needs you. Enjoy the coffee."}</p>
+          <p>{top ? <><a href="#needs-h">{queue!.needsYou.length} need you</a>{urgent > 0 && <>, <a href="#now">{urgent} right now</a></>}. Start with the {top.vehicle}.</> : "Nothing needs you. Enjoy the coffee."}</p>
           {queue!.ring.length > 0 && <p><a href="#ring-h">{queue!.ring.length} I can phone myself</a>. Open one and say the word.</p>}
         </>}
       </div>

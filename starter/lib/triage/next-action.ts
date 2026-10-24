@@ -35,3 +35,13 @@ function dueSoon(why: string): string | null {
   if (/driver has not confirmed/i.test(why)) return "Call driver"
   return null
 }
+
+const NOW_WINDOW = 2 * 3600_000
+
+/** The queue's "Now" group: safety always; otherwise critical/high severity that is overdue or due within 2 h.
+ *  Everything else in Needs you is "When you can" (still needs a person, just not this minute). */
+export function inNow(t: Pick<Triage, "reason" | "severity" | "decideBy">, now: string): boolean {
+  if (t.reason === "SAFETY") return true
+  if ((t.severity !== "critical" && t.severity !== "high") || !t.decideBy) return false
+  return Date.parse(t.decideBy) - Date.parse(now) <= NOW_WINDOW
+}

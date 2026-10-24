@@ -1,0 +1,92 @@
+/* Decision mode (/decide) and its entry on the queue. Uses the starter's tokens from globals.css. */
+
+.queue-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+.decide-start { text-decoration: none; }
+.decide-start .icon { color: currentColor; }
+
+kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; border: 1px solid var(--hair); border-bottom-width: 2px; border-radius: 5px; background: var(--tray); font-family: var(--font-mono); font-size: 11px; font-weight: 500; line-height: 1; color: var(--brown); }
+.btn.primary kbd { background: transparent; border-color: rgba(255, 254, 247, 0.35); color: var(--birch); }
+.btn kbd { margin-left: 2px; }
+/* The proposal card is shared with the order page; here its buttons show their key. */
+.dk-card [data-proposal] [data-key]::after { content: attr(data-key); display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; margin-left: 2px; padding: 0 5px; border: 1px solid var(--hair); border-bottom-width: 2px; border-radius: 5px; background: var(--tray); font-family: var(--font-mono); font-size: 11px; font-weight: 500; line-height: 1; color: var(--brown); text-transform: uppercase; }
+.dk-card [data-proposal] .btn.primary[data-key]::after { background: transparent; border-color: rgba(255, 254, 247, 0.35); color: var(--birch); }
+@media (hover: none), (pointer: coarse), (max-width: 480px) { .dk-card [data-proposal] [data-key]::after { display: none; } }
+@media (hover: none), (pointer: coarse), (max-width: 480px) { .btn kbd, .dk-top-actions .btn:first-child { display: none; } }
+
+.dk-page { max-width: 960px; }
+.dk-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px 16px; margin-top: 26px; }
+.dk-title { display: flex; align-items: baseline; gap: 18px; }
+.dk-title h1 { font-family: var(--font-display); font-weight: 600; font-size: 28px; letter-spacing: -0.02em; }
+.dk-count { font-size: 14px; color: var(--muted); }
+.dk-count b { font-size: 22px; font-weight: 600; color: var(--ink); margin-right: 2px; }
+.dk-count span { color: var(--subtle); }
+.dk-top-actions { display: flex; gap: 8px; }
+.dk-top-actions a.btn { text-decoration: none; }
+.dk-bar { grid-column: 1 / -1; height: 4px; border-radius: 999px; background: var(--hair-soft); overflow: hidden; }
+.dk-bar span { display: block; height: 100%; border-radius: inherit; background: var(--green); transition: width 0.4s ease; }
+
+.dk-status { margin-top: 16px; padding: 9px 12px; border-radius: var(--radius); background: var(--canvas); font-size: 13.5px; color: var(--brown); }
+.dk-status.tone-ok { background: var(--green-bg); color: var(--green-ink); }
+.dk-status.tone-warn { background: var(--orange-bg); color: var(--orange-ink); }
+.dk-status.tone-danger { background: var(--red-bg); color: var(--red-ink); }
+
+.dk-ringo { display: flex; align-items: center; gap: 10px; margin-top: 22px; font-size: 14px; color: var(--brown); }
+
+.dk-offer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 14px; padding: 12px 14px; border-radius: var(--radius); background: var(--teal-bg); font-size: 13.5px; color: var(--teal-ink); }
+.dk-offer b { font-weight: 600; }
+
+.dk-card { margin-top: 14px; padding: 18px 20px 22px; border-radius: var(--radius-lg); background: var(--birch); box-shadow: var(--shadow-card); outline: none; }
+.dk-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; font-size: 13px; color: var(--muted); }
+.dk-card-head .mono { font-size: 12.5px; color: var(--brown); }
+.dk-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dk-card .decision { margin-top: 14px; }
+.dk-facts { margin-top: 22px; }
+.dk-facts h3 { margin-bottom: 10px; font-size: 13px; font-weight: 600; color: var(--muted); }
+
+.dk-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }
+.dk-nav a.btn { text-decoration: none; }
+.dk-nav-step { display: flex; gap: 8px; margin-left: auto; }
+.dk-flip { transform: rotate(180deg); }
+
+.dk-batch { margin-top: 4px; }
+.dk-batch h2 { margin-top: 14px; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.dk-batch-n { margin-left: 8px; font-size: 14px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.dk-batch .fact-list.inline { margin-top: 6px; }
+.dk-batch .gate-list { margin-top: 10px; }
+.dk-batch-list { display: grid; gap: 8px; margin: 16px 0; }
+.dk-batch-list > li { padding: 12px 14px; border-radius: 12px; background: var(--birch); box-shadow: var(--shadow-card); }
+.dk-batch-list > li.is-out { opacity: 0.55; }
+.dk-batch-list label { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; cursor: pointer; }
+.dk-batch-list input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--ink); }
+.dk-batch-body { display: grid; gap: 4px; min-width: 0; }
+.dk-batch-ref { font-size: 12.5px; color: var(--muted); }
+.dk-batch-sum { font-size: 14.5px; font-weight: 600; }
+.dk-batch-pay { display: grid; gap: 2px; font-size: 13px; color: var(--brown); }
+.dk-batch-pay b { font-weight: 500; color: var(--muted); }
+.dk-batch-then { font-size: 13px; color: var(--muted); }
+
+.dk-help { width: min(480px, calc(100vw - 32px)); padding: 22px 24px; border: 0; border-radius: var(--radius-lg); background: var(--birch); color: var(--ink); box-shadow: 0 12px 40px rgba(18, 17, 14, 0.18); }
+.dk-help::backdrop { background: rgba(18, 17, 14, 0.32); }
+.dk-help h2 { font-size: 18px; font-weight: 600; }
+.dk-help dl { display: grid; gap: 8px; margin: 16px 0; }
+.dk-help dl > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; align-items: center; font-size: 13.5px; }
+.dk-help dd { color: var(--brown); }
+.dk-help-note { margin: 12px 0 16px; font-size: 12.5px; color: var(--muted); }
+
+.dk-done { margin-top: 28px; }
+.dk-done-actions { margin-top: 14px; }
+.dk-done-actions a.btn { text-decoration: none; }
+
+@media (max-width: 900px) {
+  .dk-card { padding: 14px 14px 18px; }
+  .dk-card .decision { margin-left: -4px; margin-right: -4px; }
+}
+@media (max-width: 480px) {
+  .dk-top { grid-template-columns: minmax(0, 1fr); margin-top: 16px; }
+  /* One row pinned to the bottom of the screen: the card scrolls, the buttons stay under the thumb. */
+  .dk-nav { position: sticky; bottom: 0; z-index: 2; flex-wrap: nowrap; gap: 8px; margin: 18px -16px 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--birch); box-shadow: 0 -1px 0 var(--hair); }
+  .dk-nav .btn { padding: 0 12px; white-space: nowrap; }
+  .dk-wide { display: none; }
+  .dk-help dl > div { grid-template-columns: 80px minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .dk-bar span { transition: none; } }
