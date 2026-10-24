@@ -195,6 +195,14 @@ Three persona agents (impatient lead, keyboard user, new dispatcher) clicked thr
 
 Left, because they are outside the order flow and nobody hit them: customer, driver and site pages with an unknown id still render their own "not found" with HTTP 200. Then `POST /api/agent/reset` cleared the 4 failed persona runs plus the day's test runs; the queue is back to the §8 picture (322 first, 458 and 593 in Needs you, 516/010/023 with Ringo).
 
+**Second clumsy-user run (24 Oct, late evening).** The first run sent PostHog no events at all: posthog-js captures nothing when `navigator.webdriver` is true or the user agent says HeadlessChrome. The persona browsers now hide both, and PostHog got event batches (all 200). No session recordings: recording is off in the PostHog project, not in the code. The run found these bugs; fixed:
+- On a phone, a tap 8 px left of "Watch a recorded run" started a live Ringo run, because the buttons were only 8 px apart. The gap is now 20 px.
+- A reload, or a second tab, during a live run showed "Run Ringo" enabled and "Ringo last ran …", as if nothing were running. The panel now reads the running run from the story: "Ringo is working on this order now (started …)", with Run and Send disabled (same 10-minute cutoff as `liveRun()`).
+- While a replay played, the main button said "Ringo is working…". It now says "Replaying…".
+- Cancelling Edit kept its note, which then showed up as the reason when you pressed Reject. Cancel now clears the note.
+
+Left, because nobody would act on them: about a third of PostHog event POSTs were aborted. These are the scripts' hard `page.goto` navigations cutting off in-flight beacons; normal in-app navigation doesn't do that. Customer, driver and site pages with an unknown id still return 200 (as before). Then `POST /api/agent/reset` again.
+
 ## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, and so on) are unverified. Serving under `/apps/<slug>` works in a local production build with the base path; whether the gateway keeps or strips the prefix on a real box is not checked.
