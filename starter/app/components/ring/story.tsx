@@ -109,8 +109,8 @@ export function ProposalCard({ proposal: p, story, onChanged }: { proposal: Prop
           <button type="button" className="btn" disabled={busy} onClick={() => setMode("edit")}>Edit</button>
           <button type="button" className="btn" disabled={busy} onClick={() => setMode("reject")}>Reject</button>
         </>}
-        {mode === "edit" && <><button type="button" className="btn primary" disabled={busy || !note.trim()} onClick={() => send("EDITED")}>Accept with my changes</button><button type="button" className="btn" onClick={() => { setMode("idle"); setDraft(p.proposedPayload) }}>Cancel</button></>}
-        {mode === "reject" && <><button type="button" className="btn danger" disabled={busy || !note.trim()} onClick={() => send("REJECTED")}>Reject</button><button type="button" className="btn" onClick={() => setMode("idle")}>Cancel</button></>}
+        {mode === "edit" && <><button type="button" className="btn primary" disabled={busy || !note.trim()} onClick={() => send("EDITED")}>Accept with my changes</button><button type="button" className="btn" onClick={() => { setMode("idle"); setDraft(p.proposedPayload); setNote("") }}>Cancel</button></>}
+        {mode === "reject" && <><button type="button" className="btn danger" disabled={busy || !note.trim()} onClick={() => send("REJECTED")}>Reject</button><button type="button" className="btn" onClick={() => { setMode("idle"); setNote("") }}>Cancel</button></>}
       </div>}
     {result && <p className={`result tone-${result.tone}`} role="status">{result.text}</p>}
   </article>
