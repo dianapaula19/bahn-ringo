@@ -1,0 +1,147 @@
+{
+  "ranAt": "2026-10-24T13:33:25.005Z",
+  "mode": "all_rules",
+  "cases": [
+    {
+      "proposalId": "agent-x68cbbd7e6e58691c",
+      "orderRef": "CD-420154",
+      "humanDecision": "APPROVED",
+      "humanNote": "Recheck only. Return with capacity and route feasibility before purchase.",
+      "expected": [
+        "CL-07"
+      ],
+      "fired": [
+        "CL-07"
+      ],
+      "hit": true
+    },
+    {
+      "proposalId": "agent-x3151927d69c76a10",
+      "orderRef": "CD-420194",
+      "humanDecision": "EDITED",
+      "humanNote": "Do not select a crossing from an unrefreshed list. Book only the verified replacement.",
+      "expected": [
+        "CL-04"
+      ],
+      "fired": [
+        "CL-04",
+        "CL-06"
+      ],
+      "hit": true
+    },
+    {
+      "proposalId": "agent-x40ab609877909161",
+      "orderRef": "CD-420020",
+      "humanDecision": "EDITED",
+      "humanNote": "Resolve only the connectivity gap. Keep boarding unconfirmed.",
+      "expected": [
+        "CL-02"
+      ],
+      "fired": [
+        "CL-02"
+      ],
+      "hit": true
+    },
+    {
+      "proposalId": "agent-xaa0af5ec9f775363",
+      "orderRef": "CD-420055",
+      "humanDecision": "REJECTED",
+      "humanNote": "Photos establish a reported condition, not when or by whom it happened.",
+      "expected": [
+        "CL-03"
+      ],
+      "fired": [
+        "CL-03"
+      ],
+      "hit": true
+    },
+    {
+      "proposalId": "agent-x44051005c0c18aaf",
+      "orderRef": "CD-420089",
+      "humanDecision": "APPROVED",
+      "humanNote": "Book the train, then still verify completion of the prior duty and station arrival.",
+      "expected": [
+        "CL-08"
+      ],
+      "fired": [
+        "CL-08"
+      ],
+      "hit": true
+    },
+    {
+      "proposalId": "agent-x4ac988b20000595f",
+      "orderRef": "CD-420299",
+      "humanDecision": "FAILED",
+      "humanNote": "Attempt this option, but retain the customer promise until a booking is confirmed.",
+      "expected": [
+        "CL-06"
+      ],
+      "fired": [
+        "CL-06"
+      ],
+      "hit": true
+    },
+    {
+      "proposalId": "agent-xf4800bb1b907cf89",
+      "orderRef": "CD-420449",
+      "humanDecision": "APPROVED",
+      "humanNote": "Prepare a named backup and recheck the driver's fitness at the agreed check-in. Do not represent the replacement as booked.",
+      "expected": [
+        "CL-05"
+      ],
+      "fired": [
+        "CL-05"
+      ],
+      "hit": true
+    },
+    {
+      "proposalId": "agent-x1c721af5508e707a",
+      "orderRef": "CD-420603",
+      "humanDecision": "APPROVED",
+      "humanNote": "Check capacity and driver rest first. Return for a separate booking decision.",
+      "expected": [
+        "CL-07"
+      ],
+      "fired": [
+        "CL-07"
+      ],
+      "hit": true
+    },
+    {
+      "proposalId": "agent-xf874ddfecf02bb68",
+      "orderRef": "CD-420194",
+      "humanDecision": "APPROVED",
+      "humanNote": "Send the check to billing. Do not tell the customer an invoice exists until the record is found.",
+      "expected": [
+        "CL-09"
+      ],
+      "fired": [
+        "CL-09"
+      ],
+      "hit": true
+    },
+    {
+      "proposalId": "agent-x95169653143f1607",
+      "orderRef": "CD-420322",
+      "humanDecision": "EDITED",
+      "humanNote": "Remove restart advice. Ask only for a safe location detail and keep the owner recovery decision open.",
+      "expected": [
+        "CL-01"
+      ],
+      "fired": [
+        "CL-01"
+      ],
+      "hit": true
+    }
+  ],
+  "flagged": 10,
+  "caught": 10,
+  "falseAlarms": 0,
+  "passed": 10,
+  "opinions": [
+    "CD-420593 agent-x6ad46f8e74398f5e pickup.verify_identity: BLOCK (CL-10 It asks the agent to contact the customer.)",
+    "CD-420399 agent-xb914e837479457b7 assignment.review_positioning: pass",
+    "CD-420299 agent-xde17f642729c5339 travel.verify_booking_outcome: pass",
+    "CD-420055 agent-x67ebc5bd109d4ac1 condition.compare_evidence: pass"
+  ]
+}
