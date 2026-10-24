@@ -847,3 +847,35 @@ details.more > :not(summary) { margin-top: 8px; }
 .map-svg.has-selected .map-city:not(.is-selected), .map-svg.has-selected .map-road, .map-svg.has-selected > g > circle:not(.selected) { opacity: 0.3; }
 .map-halo { fill: var(--birch); fill-opacity: 0.6; stroke: var(--ink); }
 .map-label.selected { fill: var(--ink); font-weight: 700; }
+
+/* ── Ringo learns from your edits (/trust suggestions + learned rules, banner after a review) ── */
+.learn-suggest { margin-top: 28px; display: grid; gap: 12px; }
+.learn-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; padding: 20px 22px; border-radius: var(--radius-lg); background: var(--teal-bg); box-shadow: 0 0 0 1px rgba(67, 175, 193, 0.28); }
+.learn-body { display: grid; gap: 10px; min-width: 0; }
+.learn-body .eyebrow { margin: 0; color: var(--teal-ink); font-weight: 500; }
+.learn-ask { font-size: 16px; font-weight: 500; line-height: 1.45; max-width: 66ch; }
+.learn-rule { font-size: 13.5px; color: var(--brown); max-width: 70ch; }
+.learn-rule span { color: var(--muted); }
+.learn-foot { font-size: 12.5px; color: var(--muted); }
+.learn-card .field textarea { background: var(--birch); }
+.learn-card .field textarea, .learn-row .field textarea { field-sizing: content; min-height: calc(3lh + 16px); }
+.learn-cites { display: grid; gap: 6px; margin-top: 8px; font-size: 13px; color: var(--brown); }
+.learn-cites q { display: block; margin-top: 1px; color: var(--muted); }
+.learn-cites q::before { content: "“"; } .learn-cites q::after { content: "”"; }
+.learn-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: start; padding: 14px 18px; border-radius: 12px; background: var(--birch); box-shadow: var(--shadow-card); }
+.learn-row.is-off .learn-text { color: var(--muted); }
+.learn-id { font-size: 12.5px; font-weight: 500; color: var(--teal-ink); }
+.learn-text { margin-top: 4px; font-size: 14px; line-height: 1.45; max-width: 70ch; }
+.learn-row .more { margin-top: 6px; }
+.learn-history { display: grid; gap: 3px; margin-top: 8px; padding-left: 0; list-style: none; font-size: 12.5px; color: var(--muted); }
+.learn-act { gap: 8px; flex-wrap: wrap; }
+.learn-banner { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 14px; border-radius: var(--radius); background: var(--teal-bg); font-size: 13.5px; line-height: 1.45; }
+.learn-banner a { color: var(--teal-ink); font-weight: 500; white-space: nowrap; }
+@media (max-width: 900px) {
+  .learn-row { grid-template-columns: 1fr; gap: 10px; }
+  .learn-act { justify-content: flex-start; }
+}
+@media (max-width: 480px) {
+  .learn-card { grid-template-columns: 1fr; gap: 10px; padding: 16px; }
+  .learn-banner { align-items: flex-start; }
+}

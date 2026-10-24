@@ -1,9 +1,10 @@
 // Client calls to /api/agent/* (CONTRACT §7).
 import type {
-  ActionType, Desk, Handover, OrderStory, QueueResponse, ReviewRequest, ReviewResponse, RunDetail, RunEvent, RunRequest, TrustLedger, TrustMode, TrustUpdateResponse,
+  ActionType, Desk, Handover, OrderStory, QueueResponse, ReviewRequest, RunDetail, RunEvent, RunRequest, TrustLedger, TrustMode, TrustUpdateResponse,
 } from "@/lib/contract"
 
 import { withBase } from "@/lib/base"
+import type { LearnedDecision, LearnedDecisionResponse, LearnedResponse, ReviewWithSuggestion } from "@/lib/agent/learn/types"
 
 export const DESK: Desk = "ops-readiness"
 
@@ -33,7 +34,11 @@ export const loadHandover = (since: string | null, signal?: AbortSignal) =>
   get<Handover>(`/api/agent/handover${since ? `?since=${encodeURIComponent(since)}` : ""}`, signal)
 
 export const reviewProposal = (id: string, req: ReviewRequest) =>
-  post<ReviewResponse>(`/api/agent/proposals/${encodeURIComponent(id)}/review`, req)
+  post<ReviewWithSuggestion>(`/api/agent/proposals/${encodeURIComponent(id)}/review`, req)
+
+export const loadLearned = (signal?: AbortSignal) => get<LearnedResponse>("/api/agent/learned", signal)
+export const decideLearned = (id: string, action: LearnedDecision["action"], text?: string) =>
+  post<LearnedDecisionResponse>(`/api/agent/learned/${encodeURIComponent(id)}`, { action, text, operatorId: DESK } satisfies LearnedDecision)
 
 export const updateTrust = (actionType: ActionType, mode: TrustMode, note: string) =>
   post<TrustUpdateResponse>("/api/agent/trust", { actionType, mode, operatorId: DESK, note })

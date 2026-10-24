@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react"
 import posthog from "posthog-js"
 import type { TrustLedger, TrustMode, TrustRow } from "@/lib/contract"
-import { loadTrust, updateTrust } from "../_lib/agent-api"
+import type { LearnedResponse } from "@/lib/agent/learn/types"
+import { loadLearned, loadTrust, updateTrust } from "../_lib/agent-api"
 import { AppFrame } from "../components/app-frame"
 import { Icon } from "../components/icons"
 import { CastLineup, RingoFace } from "../components/ringo"
 import { ACTION, MODE, When } from "../components/ring/bits"
+import { LearnedRules, Suggestions } from "./learned"
 
 const GROUPS: { mode: TrustMode; title: string; note: string }[] = [
   { mode: "auto", title: "Ringo does these on his own", note: "Asking and looking. Nothing on the order changes." },
@@ -20,10 +22,17 @@ export default function TrustPage() {
   const [error, setError] = useState("")
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [learned, setLearned] = useState<LearnedResponse | null>(null)
+  const [learnError, setLearnError] = useState("")
 
-  const refresh = useCallback((signal?: AbortSignal) => loadTrust(signal)
-    .then((data) => { setLedger(data); setError("") })
-    .catch((e: unknown) => { if (!signal?.aborted) setError(e instanceof Error ? e.message : "Could not load") }), [])
+  const refresh = useCallback((signal?: AbortSignal) => Promise.all([
+    loadTrust(signal).then((data) => { setLedger(data); setError("") })
+      .catch((e: unknown) => { if (!signal?.aborted) setError(e instanceof Error ? e.message : "Could not load") }),
+    // Learned rules load on their own: if they fail, the ledger still shows.
+    loadLearned(signal).then((data) => { setLearned(data); setLearnError("") })
+      .catch((e: unknown) => { if (!signal?.aborted) setLearnError(e instanceof Error ? e.message : "Could not load") }),
+  ]), [])
+  const learnedFor = (r: TrustRow) => learned?.rules.filter((l) => l.status === "active" && l.actionType === r.actionType).map((l) => l.ruleId) ?? []
   useEffect(() => { const c = new AbortController(); refresh(c.signal); return () => c.abort() }, [refresh])
 
   async function change(row: TrustRow, mode: TrustMode) {
@@ -46,6 +55,7 @@ export default function TrustPage() {
       <h1 className="page-title small">What Ringo may do</h1>
       <p className="intro">Ringo earns trust one action at a time. Bookings, dates, costs, addresses and customer messages always need a person.</p>
     </div></div>
+    {learned && <Suggestions rules={learned.rules} now={learned.now} onChanged={() => refresh()} />}
     {/* The crew sits above the rules: at the bottom it was only visible until the rules loaded and pushed it off screen. */}
     <section className="sec crew" id="crew" aria-labelledby="crew-h">
       <div className="sec-head"><h2 id="crew-h">Meet the crew</h2><span className="note">Who said it, at a glance. All fictional.</span></div>
@@ -72,6 +82,7 @@ export default function TrustPage() {
                 : r.updatedAt === ledger.now ? null : <>Set <When at={r.updatedAt} now={ledger.now} /></>
               return sub && <p className="trust-sub">{sub}</p>
             })()}
+            {learnedFor(r).length > 0 && <p className="trust-sub">Checked against what you taught Ringo: <a href="#learned">{learnedFor(r).join(", ")}</a></p>}
           </div>
           {g.mode !== "never" && reviewed(r) ? <dl className="trust-counts">
             <div><dt>Accepted as is</dt><dd className="num">{r.approvedUnchanged}</dd></div>
@@ -85,6 +96,9 @@ export default function TrustPage() {
         </li>)}</ul>}
       </section>
     })}
+    {learnError ? <section className="sec"><p className="board-error" role="alert">Rules Ringo learned from you: {learnError}.</p></section>
+      : !learned ? <section className="sec" aria-busy="true"><div className="q-skel" /></section>
+      : <LearnedRules rules={learned.rules} now={learned.now} onChanged={() => refresh()} />}
   </main></AppFrame>
 }
 

@@ -126,3 +126,42 @@ export const ringJobs = pgTable("ring_jobs", {
   createdByRunId: text("created_by_run_id").notNull(),
   firedRunId: text("fired_run_id"),
 })
+
+// Ringo learns from your edits (lib/agent/learn). One row per corrected field (EDITED)
+// or per rejection. Kept across a demo reset: it is the review record the rules cite.
+export const ringCorrections = pgTable("ring_corrections", {
+  id: text("id").primaryKey(),
+  proposalId: text("proposal_id").notNull(),
+  orderId: text("order_id").notNull(),
+  orderRef: text("order_ref").notNull(),
+  actionType: text("action_type").notNull(),
+  kind: text("kind").notNull(), // edit | reject
+  field: text("field"),
+  before: jsonb("before"),
+  after: jsonb("after"),
+  reasonClass: text("reason_class"),
+  note: text("note").notNull(),
+  situation: jsonb("situation").notNull(), // open alert signals + open work item kinds at review time
+  patternKey: text("pattern_key").notNull(),
+  reviewerId: text("reviewer_id").notNull(),
+  at: ts("at").notNull(),
+})
+
+// A pattern Ringo noticed: suggested → active (CL-Lxx in the gate) ↔ off, or dismissed for good.
+export const ringLearnedRules = pgTable("ring_learned_rules", {
+  id: text("id").primaryKey(),
+  patternKey: text("pattern_key").notNull().unique(),
+  ruleId: text("rule_id").unique(), // CL-L01…, set on accept
+  status: text("status").notNull(),
+  version: integer("version").notNull(),
+  actionType: text("action_type").notNull(),
+  spec: jsonb("spec").notNull(),
+  title: text("title").notNull(),
+  text: text("text").notNull(),
+  ask: text("ask").notNull(),
+  correctionIds: jsonb("correction_ids").notNull(),
+  history: jsonb("history").notNull(),
+  createdAt: ts("created_at").notNull(),
+  updatedAt: ts("updated_at").notNull(),
+  updatedBy: text("updated_by").notNull(),
+})
