@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type { Handover, QueueItem, QueueResponse } from "@/lib/contract"
 import { relativeTo } from "@/lib/present/time"
 import { withBase } from "@/lib/base"
@@ -121,12 +121,31 @@ function NeedsYouGroups({ items, now }: { items: QueueItem[]; now: string }) {
   </>
 }
 
+// Past LONG rows a group shows its first LONG and a "by next step" filter, so 1,000 orders still read at
+// a glance. The dataset's 100 orders never reach it (Needs you is 19), so their queue looks the same.
+const LONG = 20
+
 function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: string; label: string; person?: boolean }) {
-  const [shown, setShown] = useState(PAGE)
+  const long = items.length > LONG
+  const page = long ? LONG : PAGE
+  const [shown, setShown] = useState(page)
+  const [step, setStep] = useState<string | null>(null)
+  const steps = useMemo(() => new Map(items.map((q) => [q.orderId, nextAction(q)])), [items])
+  const counts = useMemo(() => {
+    const m = new Map<string, number>() // rank order: the step of the worst row comes first
+    for (const q of items) { const s = steps.get(q.orderId) ?? OTHER; m.set(s, (m.get(s) ?? 0) + 1) }
+    return [...m]
+  }, [items, steps])
+  const list = step ? items.filter((q) => (steps.get(q.orderId) ?? OTHER) === step) : items
+  const pick = (s: string | null) => { setStep(s); setShown(page) }
   return <>
+    {long && counts.length > 1 && <div className="q-steps" role="group" aria-label={`${label}, by next step`}>
+      <button type="button" className="q-step" aria-pressed={!step} onClick={() => pick(null)}>All <span className="num">{items.length}</span></button>
+      {counts.map(([s, n]) => <button type="button" key={s} className="q-step" aria-pressed={step === s} onClick={() => pick(step === s ? null : s)}>{s} <span className="num">{n}</span></button>)}
+    </div>}
     <ul className="q-list" aria-label={label}>
-      {items.slice(0, shown).map((q) => {
-        const next = nextAction(q)
+      {list.slice(0, shown).map((q) => {
+        const next = steps.get(q.orderId) ?? null
         return <li key={q.orderId}><Link data-row={q.orderId} className={`q-row sev-${q.severity}${q.reason === "SAFETY" ? " is-safety" : ""}`} href={`/orders/${q.orderId}`} onClick={() => { try { sessionStorage.setItem(ROW_KEY, q.orderId) } catch {} }}>
           <span className="q-main">
             <span className="q-why" title={q.why}>{q.reason === "SAFETY" && <span className="sr-only">Safety: </span>}{q.why}</span>
@@ -137,9 +156,11 @@ function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: 
         </Link></li>
       })}
     </ul>
-    {items.length > shown && <button type="button" className="show-more" onClick={() => setShown((n) => n + PAGE)}>Show {Math.min(PAGE, items.length - shown)} more of {items.length - shown}</button>}
+    {list.length > shown && <button type="button" className="show-more" onClick={() => setShown((n) => n + page)}>Show {Math.min(page, list.length - shown)} more of {list.length - shown}</button>}
   </>
 }
+
+const OTHER = "Other"
 
 // Only an overdue card that needs a person is red; Ringo's and waiting rows stay calm.
 function Due({ at, now, person }: { at: string | null; now: string; person: boolean }) {

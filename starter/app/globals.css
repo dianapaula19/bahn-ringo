@@ -559,6 +559,14 @@ details.more > :not(summary) { margin-top: 8px; }
 .q-skel.tall { height: 140px; }
 .q-group { margin-top: 26px; font-size: 13px; font-weight: 600; color: var(--muted); }
 .q-group + .q-list { margin-top: 8px; }
+.q-steps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.q-group + .q-steps + .q-list, .q-steps + .q-list { margin-top: 10px; }
+.q-step { display: inline-flex; align-items: baseline; gap: 6px; min-height: 30px; padding: 5px 11px; border: 1px solid var(--hair); border-radius: 999px; background: var(--birch); font-size: 12.5px; font-weight: 500; color: var(--brown); }
+.q-step:hover { border-color: var(--sand); }
+.q-step .num { color: var(--muted); }
+.q-step[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--birch); }
+.q-step[aria-pressed="true"] .num { color: inherit; opacity: 0.75; }
+@media (max-width: 480px) { .q-steps { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: calc(-1 * var(--gutter)); padding-right: var(--gutter); } .q-step { flex: none; } }
 /* Severity is the left edge: red for critical, orange for high, nothing otherwise. Safety rows get a faint tint. */
 .q-row { display: grid; grid-template-columns: minmax(0, 1fr) 176px 116px; grid-template-areas: "main next due"; align-items: center; gap: 16px; min-height: 56px; padding: 11px 16px 11px 14px; border-left: 3px solid transparent; border-radius: 10px; background: var(--birch); box-shadow: var(--shadow-card); color: var(--ink); text-decoration: none; }
 .q-row:hover { box-shadow: var(--shadow-card-hover); }
