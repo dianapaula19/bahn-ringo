@@ -21,7 +21,7 @@ export function Card({ card, role }: { card: BoardCard; role?: string | null }) 
       <div className="card-body">
         <div className="card-line">
           <span className="card-vehicle">{card.vehicle}</span>
-          {marks.length > 0 && <span className="card-marks" aria-hidden="true">{marks.map(([kind, tone]) => <Icon key={kind} name={MARK_ICON[kind] ?? "note"} size={14} className={`tone-${tone}`} />)}</span>}
+          {marks.length > 0 && <span className="card-marks">{marks.map(([kind, tone, title]) => <span key={kind} title={title} role="img" aria-label={title}><Icon name={MARK_ICON[kind] ?? "note"} size={14} className={`tone-${tone}`} /></span>)}</span>}
         </div>
         <div className="card-line">
           <span className="card-ref">{card.reference}</span>
@@ -54,11 +54,12 @@ function dateText(start: string, end: string | null, zone: string | null): strin
   return sameDay ? `${day} ${from}–${to}` : `${day} ${from} – ${fmtWeekday(end, zone)} ${to}`
 }
 
-function uniqueMarks(card: BoardCard): [string, Tone][] {
-  const seen = new Map<string, Tone>()
+/** Up to three marks, one per icon, each titled with the first item it stands for ("Open alert: Site access conflict"). */
+function uniqueMarks(card: BoardCard): [string, Tone, string][] {
+  const seen = new Map<string, [Tone, string]>()
   for (const item of card.attention) {
     const key = MARK_ICON[item.kind] ?? "note"
-    if (!seen.has(key)) seen.set(key, item.tone)
+    if (!seen.has(key)) seen.set(key, [item.tone, item.title])
   }
-  return [...seen.entries()].slice(0, 3).map(([key, tone]) => [Object.keys(MARK_ICON).find((kind) => MARK_ICON[kind] === key) ?? key, tone])
+  return [...seen.entries()].slice(0, 3).map(([key, [tone, title]]) => [Object.keys(MARK_ICON).find((kind) => MARK_ICON[kind] === key) ?? key, tone, title])
 }
