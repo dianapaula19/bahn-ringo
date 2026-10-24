@@ -4,7 +4,7 @@ import { fmtDateTime } from "@/lib/present/time"
 import { Icon } from "./icons"
 import { RingoFace } from "./ringo"
 
-export type Section = "queue" | "trust" | "board" | "inbox" | "customers" | "drivers" | "sites"
+export type Section = "queue" | "trust" | "board" | "inbox" | "customers" | "drivers" | "sites" | "map"
 
 const GROUPS: { label: string; links: { section: Section; href: string; label: string; icon: string }[] }[] = [
   { label: "Work", links: [
@@ -17,6 +17,7 @@ const GROUPS: { label: string; links: { section: Section; href: string; label: s
     { section: "customers", href: "/customers", label: "Customers", icon: "people" },
     { section: "drivers", href: "/drivers", label: "Drivers", icon: "driver" },
     { section: "sites", href: "/sites", label: "Places", icon: "building" },
+    { section: "map", href: "/map", label: "Map", icon: "pin" },
   ] },
 ]
 
@@ -27,7 +28,7 @@ export function AppFrame({ children, section, snapshotAt, board = false }: { chi
       <nav className="sidebar-nav" aria-label="Main navigation">
         {GROUPS.map((group) => <div className="nav-group" key={group.label}>
           <div className="nav-label">{group.label}</div>
-          {group.links.map((link) => <Link key={link.section} href={link.href} className={`nav-link${section === link.section ? " active" : ""}`} aria-current={section === link.section ? "page" : undefined}>
+          {group.links.map((link) => <Link key={link.section} href={link.href} prefetch={link.section === "map" ? false : undefined} className={`nav-link${section === link.section ? " active" : ""}`} aria-current={section === link.section ? "page" : undefined}>
             <Icon name={link.icon} size={15} />{link.label}
           </Link>)}
         </div>)}
