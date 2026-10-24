@@ -113,9 +113,11 @@ export function fmtRange(start: string | null | undefined, end: string | null | 
 }
 
 /** A window as the ops desk reads it: in the desk's zone. When the place keeps another clock, its own time follows,
- *  labelled: "23 Oct 11:00–13:00 EEST (10:00–12:00 CEST, site time)". */
-export function fmtWindow(start: string | null | undefined, end: string | null | undefined, zone: string | null | undefined, whose = "site time"): string {
-  const desk = fmtRange(start, end, OPERATOR_ZONE)
+ *  labelled: "23 Oct 11:00–13:00 EEST (10:00–12:00 CEST, site time)", or without "EEST" when `deskZone` is false. */
+export function fmtWindow(start: string | null | undefined, end: string | null | undefined, zone: string | null | undefined, whose = "site time", deskZone = true): string {
+  const full = fmtRange(start, end, OPERATOR_ZONE)
+  // deskZone false: the section already says "Helsinki time", so the desk's zone name is left off.
+  const desk = deskZone || !full ? full : full.slice(0, full.lastIndexOf(" "))
   const from = parse(start)
   if (!from || !zone) return desk
   const tz = safeZone(zone)
@@ -195,4 +197,13 @@ export function fmtDuration(minutes: number | null | undefined): string {
 
 export function compareIso(a: string | null | undefined, b: string | null | undefined): number {
   return String(a ?? "").localeCompare(String(b ?? ""))
+}
+
+/** "retry scheduled 09:20 UTC" → "retry scheduled 12:20": a UTC clock time inside free text (Ringo writes UTC), on the
+ *  desk's clock without a zone name, for screens that already say "Helsinki time". `day` is any time on that UTC day. */
+export function deskTimes(text: string, day: string): string {
+  const d = parse(day)
+  if (!d) return text
+  return text.replace(/\b(\d{1,2}):(\d{2}) UTC\b/g, (whole, h: string, m: string) =>
+    fmtClock(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), Number(h), Number(m))).toISOString()) || whole)
 }

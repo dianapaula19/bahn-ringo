@@ -5,7 +5,8 @@ import { messages as messagesTable } from "@/lib/schema"
 import type { Bundle, MessageRow } from "@/lib/present/bundle"
 import { describeEvent } from "@/lib/present/events"
 import { humanize } from "@/lib/present/labels"
-import { fmtClockZone } from "@/lib/present/time"
+import { deskTimes, fmtClock } from "@/lib/present/time"
+import type { RunSummary, StopDecision } from "@/lib/contract"
 import { loadBoardBundles, loadOrder } from "@/lib/present/load"
 import { orderFacts } from "@/lib/triage/facts"
 import { rankAll, ringEligibility, triage } from "@/lib/triage/triage"
@@ -44,7 +45,8 @@ export async function triageAll(now: string): Promise<{ bundle: Bundle; ring: Ri
   }
   return bundles.map((b) => {
     const bundle = { ...b, messages: byOrder.get(b.order.id) ?? [] }
-    const r = ring.get(b.order.id) ?? emptyRing()
+    const got = ring.get(b.order.id) ?? emptyRing()
+    const r = { ...got, runs: got.runs.map(deskDecision) }
     return { bundle, ring: r, triage: triage(bundle, r, now) }
   })
 }
@@ -67,12 +69,21 @@ const ACTOR_KIND: Record<string, StoryEntry["actorKind"]> = {
   customer: "customer", site_contact: "site", handoff_contact: "site", driver: "driver", operator: "operator", agent: "agent", system: "system",
 }
 
+/** Ringo's stop decision with its "09:20 UTC" times on the desk's clock, like every other line on the page. */
+function deskDecision(r: RunSummary): RunSummary {
+  if (!r.decision) return r
+  const d: StopDecision = r.decision
+  const fix = (t: string) => deskTimes(t, r.startedAt)
+  return { ...r, decision: { ...d, headline: fix(d.headline), oneDecision: d.oneDecision && fix(d.oneDecision), whatNext: d.whatNext && fix(d.whatNext), did: d.did.map(fix) } }
+}
+
 export async function buildStory(orderId: string): Promise<(OrderStory & WithClaim) | null> {
   const loaded = await loadOrder(orderId)
   if (!loaded) return null
   const now = await simNow()
   const b = loaded.bundle
-  const ring = await ringFor(orderId)
+  const raw = await ringFor(orderId)
+  const ring = { ...raw, runs: raw.runs.map(deskDecision) }
   const facts = orderFacts(b, ring, now)
   const factsBySource = (id: string) => facts.filter((f) => f.sourceId === id).map((f) => f.id)
   const t = triage(b, ring, now, facts)
@@ -102,13 +113,19 @@ export async function buildStory(orderId: string): Promise<(OrderStory & WithCla
   for (const e of ring.events) timeline.push({ at: e.at, actor: e.actorType === "agent" ? "Ringo" : humanize(e.actorId), actorKind: e.actorType === "agent" ? "ring" : "operator",
     text: e.command === "recovery.choice" ? `Recorded the customer's choice: ${e.changes.choice === "tow" ? "tow" : "roadside assistance"}. “${String(e.changes.note ?? "")}”` : `${humanize(e.command)} recorded (simulated)`,
     ref: { table: "ring_events", id: e.id }, factIds: factsBySource(e.id), channel: null, simulated: e.command !== "recovery.choice" })
-  for (const c of ring.claims) timeline.push({ at: c.at, actor: humanize(c.by), actorKind: "operator", text: `I'll handle it. Back in the queue at ${fmtClockZone(c.recheckAt)}${c.note ? `: ${c.note}` : "."}`, ref: { table: "ring_claims", id: c.id }, factIds: [], channel: null, simulated: false })
+  for (const c of ring.claims) timeline.push({ at: c.at, actor: humanize(c.by), actorKind: "operator", text: `I'll handle it. Back in the queue at ${fmtClock(c.recheckAt)}${c.note ? `: ${c.note}` : "."}`, ref: { table: "ring_claims", id: c.id }, factIds: [], channel: null, simulated: false })
   for (const r of ring.runs) if (r.decision && r.endedAt) timeline.push({ at: r.endedAt, actor: "Ringo", actorKind: "ring", text: r.decision.headline, ref: { table: "ring_runs", id: r.id }, factIds: r.decision.found, channel: null, simulated: false })
   timeline.sort((x, y) => x.at.localeCompare(y.at))
   const eligible = ringEligibility(b)
   const lastDecision = [...ring.runs].reverse().find((r) => r.decision && r.decision.outcome !== "failed")?.decision ?? null
+  const pending = ring.proposals.filter((p) => p.status === "PENDING_REVIEW")
+  // Rank by the decision the hero shows: Ringo's stop and his open proposals, plus what they cite.
+  const focus = {
+    text: [lastDecision?.headline ?? "", lastDecision?.oneDecision ?? "", ...pending.map((p) => p.summary)],
+    cited: [...pending.flatMap((p) => p.evidenceRefs.map((r) => r.id)), ...(lastDecision?.found ?? [])],
+  }
   return {
-    now, orderId, reference: b.order.reference, triage: t, facts: rankFacts(facts, t, b.order.status), timeline,
+    now, orderId, reference: b.order.reference, triage: t, facts: rankFacts(facts, t, b.order.status, focus), timeline,
     proposals: [...datasetProposals(b, now), ...ring.proposals], runs: ring.runs, calls: ring.calls, driverMessages: ring.driverMessages,
     callbacks: ring.jobs, decision: lastDecision, ringEligible: eligible.ok, ringIneligibleReason: eligible.reason,
     claim: activeClaim(ring.claims, lastActivity(b, ring), now),

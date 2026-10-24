@@ -1,9 +1,8 @@
 import Link from "next/link"
 import type { ReactNode } from "react"
-import { fmtDateTime } from "@/lib/present/time"
 import { Icon } from "./icons"
 import { RingoFace } from "./ringo"
-import { SavingsLine } from "./savings"
+import { DeskClock } from "./desk-clock"
 import { SkipLink } from "./ui"
 
 export type Section = "queue" | "decide" | "trust" | "board" | "inbox" | "customers" | "drivers" | "sites" | "map"
@@ -25,7 +24,7 @@ const GROUPS: { label: string; links: { section: Section; href: string; label: s
 ]
 
 /** `now` is the desk clock (simulated, running from the snapshot): the same clock as the queue's "Checked" and every
- *  "due in". `snapshotAt` is when the dataset was frozen. Both in Helsinki time. */
+ *  "due in". `snapshotAt` is when the dataset was frozen. Both in Helsinki time; DeskClock fetches them when a page has not. */
 export function AppFrame({ children, section, snapshotAt, now, board = false }: { children: ReactNode; section?: Section; snapshotAt?: string | null; now?: string | null; board?: boolean }) {
   return <div className={`app${board ? " app-board" : ""}`}>
     <SkipLink />
@@ -39,7 +38,7 @@ export function AppFrame({ children, section, snapshotAt, now, board = false }: 
           </Link>)}
         </div>)}
       </nav>
-      <div className="sidebar-foot"><SavingsLine />{now && <>Desk clock {fmtDateTime(now)} (simulated)<br /></>}{snapshotAt && <>Data as of {fmtDateTime(snapshotAt)}<br /></>}Fictional data · calls and drivers simulated<br /><Link href="/trust#crew" className="foot-link">Meet the crew</Link></div>
+      <div className="sidebar-foot"><DeskClock now={now} snapshotAt={snapshotAt} />Fictional data · calls and drivers simulated<br /><Link href="/trust#crew" className="foot-link">Meet the crew</Link></div>
     </aside>
     <div className="main" id="main" tabIndex={-1}>{children}</div>
   </div>

@@ -113,6 +113,7 @@ ul, ol { padding: 0; list-style: none; }
 .nav-link.active { background: var(--hair-soft); color: var(--ink); }
 .nav-link.active .icon { color: var(--ink); }
 .sidebar-foot { margin-top: auto; padding: 0 10px; font-size: 12px; line-height: 1.5; color: var(--subtle); }
+.desk-clock { margin: 0 0 10px; }
 .main { min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--hair); } /* on .main, not the sticky sidebar, so the line runs the full page height */
 .main:focus { outline: none; }
 .app-board .main { height: 100dvh; min-height: 0; }
@@ -586,6 +587,7 @@ details.more > :not(summary) { margin-top: 8px; }
 .is-safety .q-next { background: var(--birch); }
 .q-due { grid-area: due; font-size: 12.5px; color: var(--muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .q-due.tone-danger { color: var(--red-ink); font-weight: 650; }
+.q-soon { display: block; font-size: 11px; font-weight: 600; color: var(--orange-ink); margin-top: 1px; }
 .calm { display: flex; gap: 14px; align-items: flex-start; margin-top: 18px; padding: 28px 24px; border-radius: var(--radius-lg); background: var(--green-bg); color: var(--green-ink); }
 .calm-title { font-size: 20px; font-weight: 600; color: var(--ink); }
 .calm-sub { margin-top: 4px; font-size: 14px; color: var(--brown); }
@@ -980,7 +982,9 @@ details.more > :not(summary) { margin-top: 8px; }
 
 /* The last run as a strip of steps: read, read, read, call, stop. */
 .run-steps-wrap { margin-top: 12px; }
-.run-steps-head { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.run-steps-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.run-pick { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; font-size: 12.5px; vertical-align: baseline; }
+.run-pick select { min-height: 26px; padding: 0 6px; border: 1px solid var(--hair); border-radius: var(--radius); background: var(--birch); font: inherit; color: var(--ink); max-width: 100%; }
 .run-steps { display: flex; flex-wrap: wrap; gap: 6px 12px; list-style: none; padding: 0; margin: 0; }
 .run-step { position: relative; display: grid; gap: 1px; padding: 4px 8px; border-radius: 8px; background: var(--birch); box-shadow: 0 0 0 1px var(--hair); font-size: 12px; line-height: 1.3; }
 .run-step b { font-weight: 600; }

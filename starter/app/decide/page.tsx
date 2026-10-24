@@ -11,9 +11,11 @@ import posthog from "posthog-js"
 import type { OrderStory, Proposal, QueueItem, ReviewDecision } from "@/lib/contract"
 import { needsYouSplit, type Claim, type WithClaim } from "@/lib/triage/claim"
 import { withBase } from "@/lib/base"
-import { fmtClockZone, relativeTo } from "@/lib/present/time"
+import { relativeTo } from "@/lib/present/time"
+import { BY_HAND, thenLine } from "@/lib/triage/follow-up"
 import { fieldLabel } from "@/lib/present/labels"
-import { inNow, nextAction } from "@/lib/triage/next-action"
+import { dueSoon, inNow, nextAction } from "@/lib/triage/next-action"
+import { currentFacts } from "@/lib/triage/relevance"
 import { similarGroups, similarKey } from "@/lib/triage/similar"
 import { DESK, loadQueue, loadStory, reviewProposal } from "../_lib/agent-api"
 import { AppFrame } from "../components/app-frame"
@@ -107,7 +109,7 @@ export default function DecidePage() {
   function take() { card.current?.querySelector<HTMLButtonElement>("[data-claim]:not(:disabled)")?.click() }
   function claimed(orderId: string, c: Claim) {
     const ref = byId.get(orderId)?.reference
-    finish(orderId, { how: "TAKEN" }, { text: `${ref} is yours until ${fmtClockZone(c.recheckAt)}. It sits in Taken on the queue and comes back by itself then, or sooner if something new happens.`, tone: "ok" })
+    finish(orderId, { how: "TAKEN" }, { text: `${ref} is in Taken under your desk. ${thenLine(c.note ?? BY_HAND, c.recheckAt)}.`, tone: "ok" })
   }
 
   function move(step: number) { if (left.length) setIdx((at + step + left.length) % left.length) }
@@ -295,14 +297,15 @@ function DueTag({ item, now }: { item: QueueItem; now: string }) {
   const rel = relativeTo(item.decideBy, now)
   const urgent = inNow(item, now)
   if (!rel) return urgent ? <span className="chip tone-danger">Now</span> : null
-  return <span className={`chip${rel.past && urgent ? " tone-danger" : rel.past ? " tone-warn" : ""} num`}>{rel.past ? `Overdue ${rel.text.replace(/ ago$/, "")}` : <>Due <Ago at={item.decideBy} now={now} /></>}</span>
+  return <span className={`chip${rel.past && urgent ? " tone-danger" : rel.past ? " tone-warn" : ""} num`}>{rel.past ? `Overdue ${rel.text.replace(/ ago$/, "")}` : <>Due <Ago at={item.decideBy} now={now} />{dueSoon(item, now) && " · due soon"}</>}</span>
 }
 
 /** The facts that matter: the last words of the driver, customer or site in the past 2 h (who is waiting
- *  on what, in their own words), then triage's chips minus the one that repeats the headline. Each has its source and time. */
+ *  on what, in their own words), then the top 3 of the order page's "What we know" (one ranking: lib/triage/relevance.ts),
+ *  minus a line that repeats the headline. Each has its source and time. */
 function Facts({ story }: { story: OrderStory }) {
   const kinds = new Map(story.timeline.map((e) => [e.ref.id, e.actorKind]))
-  const chips = story.triage.chips.filter((f) => f.claim !== story.triage.why)
+  const chips = currentFacts(story.facts, new Set(story.triage.overtaken.map((o) => o.ref.id))).filter((f) => f.claim !== story.triage.why).slice(0, 3)
   const since = Date.parse(story.now) - 2 * 3600_000
   const voices = (["driver", "customer", "site"] as const)
     .map((k) => story.timeline.filter((e) => e.actorKind === k && Date.parse(e.at) >= since).at(-1))

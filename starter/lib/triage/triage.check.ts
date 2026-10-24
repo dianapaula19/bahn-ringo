@@ -17,10 +17,12 @@ import type { Bundle } from "@/lib/present/bundle"
 import { loadOrder } from "@/lib/present/load"
 import { fmtDateTime, fmtRange, fmtWindow } from "@/lib/present/time"
 import { ringEvents, ringProposals } from "@/lib/ring-schema"
-import { inNow, nextAction, unanswered } from "./next-action"
+import { byDeadline, dueSoon, inNow, nextAction, unanswered } from "./next-action"
 import { activeClaim, needsYouSplit, type Claim } from "./claim"
 import { readFileSync } from "node:fs"
-import { buildQueue } from "@/lib/agent/story"
+import { buildQueue, buildStory } from "@/lib/agent/story"
+import { currentFacts } from "./relevance"
+import { personStep, thenLine } from "./follow-up"
 import { orderFacts, rankFacts } from "./facts"
 import { similarGroups } from "./similar"
 import { ringEligibility, triage } from "./triage"
@@ -37,7 +39,7 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
   test("322 is the first SAFETY card, not a Ringo order, with a row-built decision", () => {
     const r = t("ord-00322")
     assert.equal(r.bucket, "needs_you"); assert.equal(r.reason, "SAFETY"); assert.equal(r.severity, "critical")
-    assert.equal(r.oneDecision, "Driver says they are safe and stopped (driver 11:22 EEST). Location unverified, no photo yet. Customer: keep it stopped (11:40 EEST). Decide with the customer: roadside or tow.")
+    assert.equal(r.oneDecision, "Driver says they are safe and stopped (driver 11:22). Location unverified, no photo yet. Customer: keep it stopped (11:40). Decide with the customer: roadside or tow.")
     assert.deepEqual(r.overtaken.map((o) => [o.ref.id, o.overtakenBy.id]), [["alert-x105238e92e7f3ba6", "alert-x539dcfdd5a51d9ab"]])
     assert.equal(ringEligibility(bundles.get("ord-00322")!).ok, false)
   })
@@ -78,7 +80,7 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     assert.equal(next("ord-00458"), "Confirm with customer")
     assert.equal(next("ord-00593"), "Answer driver")
     assert.equal(next("ord-00516"), "Run Ringo")
-    assert.equal(nextAction({ reason: "DUE_SOON", why: "Site, 11:10 EEST: “Who collects?”", oneDecision: null, sources: [] }), "Call site")
+    assert.equal(nextAction({ reason: "DUE_SOON", why: "Site, 11:10: “Who collects?”", oneDecision: null, sources: [] }), "Call site")
     assert.equal(nextAction({ reason: "DUE_SOON", why: "A trade-in receipt shares a branch.", oneDecision: null, sources: [] }), "Check release")
     assert.equal(nextAction({ reason: "DUE_SOON", why: "Something odd.", oneDecision: null, sources: [] }), null)
     assert.equal(nextAction({ reason: "WAITING_EXTERNAL", why: "", oneDecision: null, sources: [] }), null)
@@ -98,6 +100,7 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
       // one zone story: desk time first; a German slot adds its own clock, labelled (round 4)
       assert.equal(fmtWindow("2026-10-23T08:00:00Z", "2026-10-23T10:00:00Z", "Europe/Berlin"), "23 Oct 11:00–13:00 EEST (10:00–12:00 CEST, site time)")
       assert.equal(fmtWindow("2026-10-26T07:00:00Z", "2026-10-26T10:00:00Z", "Europe/Helsinki"), "26 Oct 09:00–12:00 EET")
+      assert.equal(fmtWindow("2026-10-23T08:00:00Z", "2026-10-23T10:00:00Z", "Europe/Berlin", "site time", false), "23 Oct 11:00–13:00 (10:00–12:00 CEST, site time)")
       assert.equal(fmtDateTime("2026-10-21T08:24:00Z", "Not/AZone"), "21 Oct 08:24 UTC")
     }
     assert.equal(fmtDateTime("2026-10-21T08:24:00Z", "Europe/Helsinki", false), fresh.format(new Date("2026-10-21T08:24:00Z")).replace(",", ""))
@@ -114,7 +117,7 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
   test("a waiting driver's own words set the deadline; an alert's cutoff counts when no task does", () => {
     const r = t("ord-00593")
     assert.equal(r.decideBy, "2026-10-21T08:27:00.000Z") // "I can wait another 30 minutes" at 07:57
-    assert.match(r.why, /11:27 EEST \(said 10:57 EEST\)/)
+    assert.match(r.why, /11:27 \(said 10:57\)/)
     assert.equal(t("ord-00603").decideBy, "2026-10-21T12:00:00.000Z") // ferry check-in cutoff
     assert.equal(t("ord-00702").decideBy, "2026-10-21T11:00:00.000Z") // delivery promise ends
   })
@@ -122,7 +125,7 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     const chose = { ...emptyRing(), events: [{ id: "revt-x", orderId: "ord-00322", at: "2026-10-21T09:10:00.000Z", command: "recovery.choice", actorType: "operator", actorId: "ops-readiness", proposalId: null, changes: { choice: "tow", note: "Customer on the phone 09:08" }, sourceRefs: [] }] }
     const r = t("ord-00322", chose)
     assert.equal(r.reason, "SAFETY")
-    assert.match(r.oneDecision ?? "", /^Customer chose a tow \(recorded 12:10 EEST by ops-readiness\)\. Book the tow \(it needs approval as a cost\)/)
+    assert.match(r.oneDecision ?? "", /^Customer chose a tow \(recorded 12:10 by ops-readiness\)\. Book the tow \(it needs approval as a cost\)/)
     assert.equal(nextAction(r), "Book recovery")
   })
   test("the hero's Unanswered line: the newest driver message with no reply after it", () => {
@@ -134,14 +137,24 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     const claimOnly = [...entries("ord-00322"), { actorKind: "operator" as never, actor: "op", at: "2026-10-21T09:01:00.000Z", text: "I'll handle it.", ref: { table: "ring_claims", id: "c-x" } }]
     assert.ok(unanswered(claimOnly)) // taking the order is not a reply to the driver
   })
-  test("What we know: 322 leads with the safety alert; its past pickup slot is history, not 'Reserved'", () => {
+  test("What we know: 322 leads with the warning, where the car stopped and the customer's call; its past pickup slot is history", () => {
     const b = bundles.get("ord-00322")!
     const facts = rankFacts(orderFacts(b, emptyRing(), NOW), t("ord-00322"), b.order.status)
-    assert.equal(facts[0].subject, "alert.safety_stop")
+    const first4 = facts.slice(0, 4).map((f) => f.subject)
+    for (const s of ["incident.warning", "incident.location", "incident.recovery"]) assert.ok(first4.includes(s), `${s} not in the first 4: ${first4}`)
+    assert.ok(facts.slice(0, 6).some((f) => f.subject === "alert.safety_stop"))
+    assert.ok(!first4.some((s) => /contact$|^proof\./.test(s)), `contacts or photos lead: ${first4}`)
     const slot = facts.find((f) => f.subject === "pickup.slot")!
     assert.equal(slot.level, "stale"); assert.equal(slot.note, "Pickup done")
     // a record's "confirmed" status is not printed under a claimed fact
     assert.ok(!facts.some((f) => (f.level === "claimed" || f.level === "quoted") && /\bconfirmed\b/.test(f.note ?? "") && !/unconfirmed/.test(f.note ?? "")))
+  })
+  test("What we know on 593 leads with the site's word that the VIN is not there (with demo:seed's recorded run)", async (c) => {
+    const s = await buildStory("ord-00593")
+    if (!s?.facts.some((f) => f.sourceKind === "ring_call")) return c.skip("no recorded Ringo run on 593 in this database (run npm run demo:seed)")
+    const first4 = currentFacts(s.facts).slice(0, 4)
+    assert.ok(first4.some((f) => f.sourceKind === "ring_call" && /VIN/.test(f.claim) && /not/.test(f.claim)), first4.map((f) => f.claim).join(" | "))
+    assert.ok(!first4.some((f) => /contact$/.test(f.subject)))
   })
   test("Now on the demo data: 322, 458, 593 are Now; 413 (due Monday) and 055 (medium) are not", () => {
     for (const id of ["ord-00322", "ord-00458", "ord-00593"]) assert.equal(inNow(t(id), NOW), true, id)
@@ -149,7 +162,7 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
   })
 })
 
-describe("Now: safety, anything overdue, or critical/high due within 2 h", () => {
+describe("Now: safety, anything overdue or due within 30 min, or critical/high due within 2 h; sorted by deadline", () => {
   const at = (min: number) => new Date(Date.parse(NOW) + min * 60_000).toISOString()
   const row = (reason: string, severity: string, decideBy: string | null) => ({ reason, severity, decideBy }) as Parameters<typeof inNow>[0]
   test("the rule's edges", () => {
@@ -160,6 +173,44 @@ describe("Now: safety, anything overdue, or critical/high due within 2 h", () =>
     assert.equal(inNow(row("DRIVER_WAITING", "high", null), NOW), false)  // no due time: when you can
     assert.equal(inNow(row("DUE_SOON", "medium", at(-600)), NOW), true)   // overdue is Now at any severity ("When you can" never says Overdue)
     assert.equal(inNow(row("DUE_SOON", "medium", at(60)), NOW), false)    // routine and not yet due
+    assert.equal(inNow(row("DUE_SOON", "medium", at(30)), NOW), true)     // due within 30 min is Now at any severity
+    assert.equal(inNow(row("DUE_SOON", "low", at(31)), NOW), false)       // just past the 30 min window
+    assert.equal(dueSoon(row("DUE_SOON", "medium", at(10)), NOW), true)   // the quiet "due soon" marker
+    assert.equal(dueSoon(row("DUE_SOON", "medium", at(-5)), NOW), false)  // overdue says "Overdue", not "due soon"
+    assert.equal(dueSoon(row("DUE_SOON", "medium", at(31)), NOW), false)
+  })
+  test("Now is sorted by deadline: safety leads, then overdue (oldest first), then the soonest", () => {
+    const rows = [row("DUE_SOON", "high", at(50)), row("DUE_SOON", "high", at(-43)), row("SAFETY", "critical", at(15)), row("DUE_SOON", "medium", at(10)), row("DUE_SOON", "high", at(-600))]
+    assert.deepEqual(byDeadline(rows).map((r) => r.decideBy), [at(15), at(-600), at(-43), at(10), at(50)])
+  })
+  test("on the demo data every Now row is in deadline order, and no 'When you can' row is due within 30 min", async () => {
+    const q = await buildQueue()
+    const s = needsYouSplit(q.needsYou, q.now)
+    const due = s.urgent.filter((x) => x.reason !== "SAFETY").map((x) => x.decideBy).filter((d): d is string => !!d)
+    assert.deepEqual(due, [...due].sort())
+    for (const x of s.later) assert.ok(!x.decideBy || Date.parse(x.decideBy) - Date.parse(q.now) > 30 * 60_000, `${x.orderId} is due within 30 min but sits in When you can`)
+  })
+})
+
+describe("after a decision: the person's next step, its owner, and when the order comes back", () => {
+  const names = { customer: "Pellavaro Auto", driver: "Yara Sivellin" }
+  test("Ringo's 'what next' becomes the reader's own step", () => {
+    assert.equal(personStep("A person contacts the customer to find the site that holds the VIN. The driver said…", names), "contact Pellavaro Auto to find the site that holds the VIN")
+    assert.equal(personStep("After approval, a person can release driver dispatch.", names), "release driver dispatch")
+    assert.equal(personStep("A person confirms the address with the customer first, then updates the pickup address.", names), "confirm the address with Pellavaro Auto first, then update the pickup address")
+    assert.equal(personStep("The pickup access instruction is updated so any driver is sent to bay 4.", names), null) // an outcome, not a step
+    assert.equal(thenLine("contact Pellavaro Auto to find the site that holds the VIN", "2026-10-21T09:40:00.000Z", names),
+      "Then: you contact Pellavaro Auto to find the site that holds the VIN · owner: you (readiness desk) · back in your queue at 12:40 or when Pellavaro Auto replies")
+  })
+  test("an open follow-up keeps the order in Needs you, due at its recheck time; closing it lets it go", () => {
+    const b = bundles.get("ord-00516")!
+    const claim = { id: "claim-f", orderId: "ord-00516", by: "ops-readiness", note: "release driver dispatch", at: NOW, recheckAt: new Date(Date.parse(NOW) + 30 * 60_000).toISOString(), releasedAt: null }
+    const ring = { ...emptyRing(), proposals: [{ status: "EXECUTED" } as never], claims: [claim] }
+    const r = triage(b, ring, NOW)
+    assert.equal(r.bucket, "needs_you"); assert.equal(r.decideBy, claim.recheckAt); assert.match(r.why, /^Your follow-up: release driver dispatch/)
+    assert.equal(nextAction(r), "Your follow-up")
+    const closed = triage(b, { ...ring, claims: [{ ...claim, releasedAt: NOW }] }, NOW)
+    assert.ok(!closed.sources.some((s) => s.table === "ring_claims"))
   })
 })
 

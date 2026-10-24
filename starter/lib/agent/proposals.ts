@@ -2,11 +2,13 @@
 import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import type {
-  ActionType, Desk, Execution, Proposal, ReviewRequest, ReviewResponse, SourceRef,
+  ActionType, Desk, Execution, Proposal, ReviewRequest, ReviewResponse, SourceRef, StopDecision,
 } from "@/lib/contract"
 import { rows, type Bundle } from "@/lib/present/bundle"
 import { loadOrder } from "@/lib/present/load"
-import { ringDriverMessages, ringEvents, ringFacts, ringMeta, ringProposals } from "@/lib/ring-schema"
+import { ringDriverMessages, ringEvents, ringFacts, ringMeta, ringProposals, ringRuns } from "@/lib/ring-schema"
+import { BY_HAND, FOLLOW_UP_MINUTES, personStep, thenLine } from "@/lib/triage/follow-up"
+import { claimOrder, followUpNames } from "./claims"
 import { datasetFacts } from "@/lib/triage/facts"
 import type { GateContext } from "./caselaw"
 import { newId, simNow } from "./clock"
@@ -156,12 +158,27 @@ export async function review(id: string, req: ReviewRequest): Promise<{ status: 
     await db.update(ringProposals).set({ status: "REJECTED", review: reviewRow }).where(eq(ringProposals.id, id))
     const suggestion = await recordCorrections(p, reviewRow, loaded.bundle)
     const proposal = toProposal((await db.select().from(ringProposals).where(eq(ringProposals.id, id)))[0])
-    return { status: 200, body: { proposal, execution: null, next: p.onReject ?? "Nothing changes. Ringo notes the reason.", suggestion } }
+    const then = await handOver(loaded.bundle, p, req.reviewerId, BY_HAND)
+    return { status: 200, body: { proposal, execution: null, next: `${p.onReject ?? "Nothing changes. Ringo notes the reason."} ${then}`, suggestion } }
   }
   await db.update(ringProposals).set({ status: "APPROVED_AWAITING_EXECUTION", review: reviewRow }).where(eq(ringProposals.id, id))
   const execution = await execute(loaded.bundle, { ...p, review: reviewRow }, finalPayload, req.reviewerId)
   const suggestion = await recordCorrections(p, reviewRow, loaded.bundle)
   const proposal = toProposal((await db.select().from(ringProposals).where(eq(ringProposals.id, id)))[0])
-  const next = execution.status === "STALE" ? "The order changed after Ringo read it, so nothing was changed. Run Ringo again to re-read." : (p.onApprove ?? "Done.")
+  const next = execution.status === "STALE"
+    ? "The order changed after Ringo read it, so nothing was changed. Then: you run Ringo again so he re-reads · owner: you · it stays in Needs you until then."
+    : `${p.onApprove ?? "Done."} ${await handOver(loaded.bundle, p, req.reviewerId, null)}`
   return { status: 200, body: { proposal, execution, next, suggestion } }
+}
+
+/** After a review the next step is the reviewer's: it is written as their follow-up (a claim, Taken for
+ *  FOLLOW_UP_MINUTES), so the order comes back to the queue at a known time, or sooner when someone replies.
+ *  The step: the proposal's own "if you accept" when it is a person's step, else what Ringo said comes next. */
+async function handOver(b: Bundle, p: Proposal, by: Desk, step: string | null): Promise<string> {
+  const names = followUpNames(b)
+  const run = p.runId ? (await db.select({ decision: ringRuns.decision }).from(ringRuns).where(eq(ringRuns.id, p.runId)))[0] : undefined
+  const decision = run?.decision as StopDecision | null | undefined
+  const todo = step ?? personStep(p.onApprove, names) ?? personStep(decision?.whatNext, names) ?? BY_HAND
+  const claim = await claimOrder(p.orderId, { by, note: todo.slice(0, 140), minutes: FOLLOW_UP_MINUTES })
+  return claim.ok ? `${thenLine(todo, claim.value.recheckAt, names)}.` : ""
 }

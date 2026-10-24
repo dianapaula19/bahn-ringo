@@ -42,3 +42,10 @@
   .engine-row > .engine-k { text-align: left; }
   .engine-meta > div { grid-template-columns: 1fr; gap: 0; }
 }
+.engine-problem { flex-basis: 100%; font-size: 12.5px; color: var(--orange-ink); }
+.engine-why { margin-bottom: 12px; padding: 10px 14px; border-radius: var(--radius); background: var(--orange-bg); font-size: 13px; line-height: 1.5; color: var(--brown); }
+.engine-why-head { font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+.engine-why ul { list-style: none; display: grid; gap: 4px; }
+.engine-why summary { cursor: pointer; font-weight: 500; color: var(--ink); }
+.engine-why details p { margin: 2px 0 2px 16px; max-width: 76ch; }
+.engine-savings { margin-top: 28px; }

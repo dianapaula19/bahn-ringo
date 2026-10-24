@@ -5,7 +5,7 @@ import { LEVEL_RANK } from "@/lib/agent/facts"
 import type { RingOrderState } from "@/lib/agent/store"
 import { rows, str, strings, type Bundle, type RelatedRow } from "@/lib/present/bundle"
 import { orderFacts } from "./facts"
-import { fmtClockZone } from "@/lib/present/time"
+import { fmtClock } from "@/lib/present/time"
 
 export const RING_KINDS = ["PICKUP_CONTACT_HANDLE_REQUIRED", "PICKUP_ACCESS_CHECK_REQUIRED", "KEY_HOLDER_STOCK_CHECK"]
 const RING_STATUSES = ["NEW", "WAITING_FOR_PICKUP"]
@@ -15,8 +15,8 @@ const SEV = { critical: 0, high: 1, medium: 2, low: 3 } as const
 type Sev = keyof typeof SEV
 
 const ref = (table: string, id: string): SourceRef => ({ table, id })
-// "11:22 EEST": the operator's clock with its zone name, so the queue and the slots read in one zone.
-const hhmm = (iso: string) => fmtClockZone(iso)
+// "11:22": the desk's clock (Helsinki). The screens say "Helsinki time" once per section, so no zone name per line.
+const hhmm = (iso: string) => fmtClock(iso)
 const openItems = (b: Bundle) => rows(b, "work_items").filter((w) => w.details.status === "OPEN" || w.details.status === "NEEDS_EXTERNAL_INPUT")
 const openAlerts = (b: Bundle) => b.alerts.filter((a) => a.status === "OPEN" || a.status === "ACKNOWLEDGED")
 const openIncidents = (b: Bundle) => rows(b, "incidents").filter((i) => !i.details.resolved_at)
@@ -87,7 +87,7 @@ function failedDataset(p: RelatedRow): string {
 /** Alert summaries end in boilerplate ("; source is a conversation, not a verified outcome."). Keep the part that says what is wrong. */
 const alertText = (summary: string) => summary.replace(/;\s*source is a conversation, not a verified outcome\.?$/i, ".")
 
-type Hit = { reason: TriageReason; why: string; sources: SourceRef[]; severity?: Sev; oneDecision?: string | null }
+type Hit = { reason: TriageReason; why: string; sources: SourceRef[]; severity?: Sev; oneDecision?: string | null; decideBy?: string }
 
 /** What a person recorded on a safety card: the customer's roadside-or-tow choice (ring_events "recovery.choice"). */
 export const RECOVERY_THEN: Record<string, string> = {
@@ -224,6 +224,14 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
     reason: "DUE_SOON", severity: due.details.priority === "high" ? "high" : "medium", sources: [ref("work_items", due.id)],
     why: String(due.details.summary ?? due.details.next_action),
   }
+  // 8b A person's open follow-up ("I'll handle it", or the step a decision handed them): it stays theirs until they
+  // close it. It sits in Taken while the claim holds and comes back due at its recheck time, or as soon as something
+  // new happens. ponytail: one desk, so "Your follow-up"; name the desk when there are several.
+  const follow = ring.claims.filter((c) => !c.releasedAt).sort((x, y) => x.at.localeCompare(y.at)).pop()
+  if (follow) return {
+    reason: "DUE_SOON", severity: "medium", decideBy: follow.recheckAt, sources: [ref("ring_claims", follow.id)],
+    why: `Your follow-up: ${follow.note ?? "you said you would handle it"}`.replace(/\.?$/, "."),
+  }
   // 9 RING_WORKING
   const live = ring.runs.find((r) => r.status === "running")
   const job = ring.jobs.find((j) => j.status === "scheduled")
@@ -286,7 +294,7 @@ export function triage(b: Bundle, ring: RingOrderState, now: string, facts?: Fac
   const ownerItem = openItems(b)[0]
   return {
     orderId: b.order.id, reference: b.order.reference, bucket: BUCKET[hit.reason], reason: hit.reason, why: hit.why,
-    rank: 0, severity: sev, decideBy: decideBy(b), ownerDesk: (str(ownerItem?.details.owner) ?? null) as Triage["ownerDesk"],
+    rank: 0, severity: sev, decideBy: hit.decideBy ?? decideBy(b), ownerDesk: (str(ownerItem?.details.owner) ?? null) as Triage["ownerDesk"],
     sources: hit.sources, chips: hit.reason === "QUIET" ? [] : chips(all, hit.sources), overtaken: overtaken(b),
     oneDecision: hit.oneDecision ?? null,
     pendingProposalIds: [...ring.proposals.filter((p) => p.status === "PENDING_REVIEW").map((p) => p.id),

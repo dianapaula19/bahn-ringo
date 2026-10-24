@@ -4,8 +4,9 @@ import type { EvidenceLevel, Fact, Triage } from "@/lib/contract"
 import { effectiveLevel } from "@/lib/agent/facts"
 import type { RingOrderState } from "@/lib/agent/store"
 import { rows, str, type Bundle } from "@/lib/present/bundle"
-import { humanize, label, labelIn } from "@/lib/present/labels"
+import { label, labelIn } from "@/lib/present/labels"
 import { fmtWindow } from "@/lib/present/time"
+import { rankByDecision } from "./relevance"
 
 const STATED_BY: Record<string, string> = {
   MANAGED_SITE_PROFILE: "Site profile", SITE_CONTACT: "Site contact", CUSTOMER_ORDER_INPUT: "Customer order input",
@@ -53,7 +54,7 @@ export function datasetFacts(bundle: Bundle, now?: string): Fact[] {
     // A window that has ended is history, not a reservation: the pickup is done, or the slot went by.
     const past = !!now && str(d.end_at) && Date.parse(String(d.end_at)) < Date.parse(now)
     const gone = subject === "pickup.slot" ? (PRE_PICKUP.includes(bundle.order.status) ? "Slot has passed" : "Pickup done") : "Window has passed"
-    add(w.id, subject, `${what}: ${fmtWindow(str(d.start_at), str(d.end_at), str(d.timezone), subject === "pickup.slot" ? "site time" : "local time at delivery")}.`, past ? "stale" : "reserved", "time_window", iso(d.stated_at) ?? iso(bundle.order.createdAt), d.source === "CUSTOMER" ? "Customer" : "Operations", past ? gone : null)
+    add(w.id, subject, `${what}: ${fmtWindow(str(d.start_at), str(d.end_at), str(d.timezone), subject === "pickup.slot" ? "site time" : "local time at delivery", false)}.`, past ? "stale" : "reserved", "time_window", iso(d.stated_at) ?? iso(bundle.order.createdAt), d.source === "CUSTOMER" ? "Customer" : "Operations", past ? gone : null)
   }
   for (const a of rows(bundle, "work_assignments")) {
     const d = a.details
@@ -75,10 +76,22 @@ export function datasetFacts(bundle: Bundle, now?: string): Fact[] {
     add(doc.id, "pickup.release_authority", d.status === "MISSING" ? "No signed release authority is on file." : `Release authority is ${String(d.status).toLowerCase()}.`,
       d.status === "VERIFIED" ? "verified" : "observed", "document", iso(d.updated_at), "Document record")
   }
+  // An open incident's own record: what the driver reported, where, the warning photo and who decides recovery.
+  for (const inc of rows(bundle, "incidents")) {
+    const d = inc.details
+    if (d.resolved_at) continue
+    const at = iso(d.opened_at)
+    const by = str(d.owner) ? bundle.dir.resolve(d.owner, "operator").name : "Incident record"
+    if (str(d.reported_symptom)) add(inc.id, "incident.warning", `${String(d.reported_symptom).replace(/\.$/, "")} (driver's report).`, "claimed", "incident", at, by)
+    if (str(d.reported_stop_text)) add(inc.id, "incident.location", `Where it stopped (driver's report): ${String(d.reported_stop_text).replace(/^driver reports (a |an )?/i, "a ").replace(/\.$/, "")}.`, "claimed", "incident", at, by,
+      d.location_verified === true ? "Location verified" : "Location not verified")
+    if (str(d.warning_photo_status) && d.warning_photo_status !== "RECEIVED") add(inc.id, "incident.photo", `Warning photo ${String(d.warning_photo_status).toLowerCase()}, not received yet.`, "observed", "incident", at, by)
+    if (d.recovery_decision === "PENDING_CUSTOMER") add(inc.id, "incident.recovery", "Roadside or tow is the customer's call; no recovery is booked.", "observed", "incident", at, by)
+  }
   for (const al of bundle.alerts) {
     if (al.status === "RESOLVED" || al.status === "DISMISSED") continue
     const level = alertLevel(al.summary)
-    add(al.id, `alert.${al.signal.toLowerCase()}`, al.summary, level, "alert", al.triggeredAt, "Monitoring", `${level === "quoted" ? "Relays what the site said · " : ""}${alertNote(al.severity, al.status, str(al.details.owner))}`)
+    add(al.id, `alert.${al.signal.toLowerCase()}`, al.summary, level, "alert", al.triggeredAt, "Monitoring", `${level === "quoted" ? "Relays what the site said · " : ""}${alertNote(al.severity, al.status, str(al.details.owner) ? bundle.dir.resolve(al.details.owner, "operator").name : null)}`)
   }
   return out
 }
@@ -95,7 +108,7 @@ export function alertLevel(summary: string): EvidenceLevel {
 
 /** "Critical alert, acknowledged by Shift lead" rather than "critical acknowledged". */
 function alertNote(severity: string, status: string, owner: string | null): string {
-  const state = status === "ACKNOWLEDGED" ? `acknowledged${owner ? ` by ${humanize(owner)}` : ""}` : status === "OPEN" ? "not yet acknowledged" : labelIn(status)
+  const state = status === "ACKNOWLEDGED" ? `acknowledged${owner ? ` by ${owner}` : ""}` : status === "OPEN" ? "not yet acknowledged" : labelIn(status)
   return `${label(severity)} alert, ${state}`
 }
 
@@ -123,11 +136,13 @@ export function orderFacts(bundle: Bundle, ring: RingOrderState, now: string): F
   return [...overtaken, ...ring.facts].map((f) => ({ ...f, level: effectiveLevel(f, now) }))
 }
 
-/** "What we know" in decision order: facts behind the card's reason first, then open alerts, then facts for the
- *  order's stage (pickup before collection, the road and delivery after), then the rest. Newest first inside each. */
-export function rankFacts(facts: Fact[], t: Pick<Triage, "sources">, status: string): Fact[] {
-  const behind = new Set(t.sources.map((s) => s.id))
-  const stage = PRE_PICKUP.includes(status) ? /^(pickup|claim|driver)\./ : /^(car|delivery|driver|proof)\./
-  const tier = (f: Fact) => (behind.has(f.sourceId) ? 0 : f.subject.startsWith("alert.") ? 1 : stage.test(f.subject) ? 2 : 3)
-  return [...facts].sort((x, y) => tier(x) - tier(y) || y.at.localeCompare(x.at))
+/** "What we know" in decision order (lib/triage/relevance.ts): facts the decision cites, then the ones that answer
+ *  its words, open alerts, the order's stage, the rest, and contacts/photos last. Decide's "What matters" takes the
+ *  top of the same list. `extra` adds what the story knows beyond triage: Ringo's headline, proposals and evidence. */
+export function rankFacts(facts: Fact[], t: Pick<Triage, "sources" | "why" | "oneDecision">, status: string, extra: { text?: string[]; cited?: string[] } = {}): Fact[] {
+  return rankByDecision(facts, {
+    text: [t.why, t.oneDecision ?? "", ...(extra.text ?? [])].join(" "),
+    cited: new Set([...t.sources.map((s) => s.id), ...(extra.cited ?? [])]),
+    preCollection: PRE_PICKUP.includes(status),
+  })
 }

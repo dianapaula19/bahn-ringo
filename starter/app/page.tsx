@@ -12,7 +12,7 @@ import { AppFrame } from "./components/app-frame"
 import { Icon } from "./components/icons"
 import { CAST, LizardFace } from "./components/ringo"
 import { Ago, When } from "./components/ring/bits"
-import { nextAction } from "@/lib/triage/next-action"
+import { dueSoon, nextAction } from "@/lib/triage/next-action"
 import "./decide/decide.css"
 
 const PAGE = 50
@@ -112,7 +112,7 @@ export default function NeedsYou() {
   </main></AppFrame>
 }
 
-// Now: safety, or critical/high that is overdue or due within 2 h (lib/triage/next-action.ts). Rank order is kept inside each group.
+// Now: safety, anything overdue or due within 30 min, or critical/high due within 2 h (lib/triage/next-action.ts), by deadline.
 // Taken: someone said "I'll handle it". The row comes back on its own at the recheck time or when something new happens.
 const claimOf = (q: QueueItem) => (q as QueueItem & WithClaim).claim ?? null
 type Split = ReturnType<typeof needsYouSplit<QueueItem & WithClaim>>
@@ -200,7 +200,8 @@ function barClass(q: QueueItem, now: string, person: boolean): string {
 function Due({ at, now, person, needsYou }: { at: string | null; now: string; person: boolean; needsYou: boolean }) {
   const rel = relativeTo(at, now)
   if (!at || !rel) return <span className="q-due">{needsYou ? "No deadline" : ""}</span>
-  return <span className={`q-due num${rel.past && person ? " tone-danger" : ""}`}>{rel.past ? <>Overdue {rel.text.replace(/ ago$/, "")}</> : <>Due <Ago at={at} now={now} /></>}</span>
+  return <span className={`q-due num${rel.past && person ? " tone-danger" : ""}`}>{rel.past ? <>Overdue {rel.text.replace(/ ago$/, "")}</> : <>Due <Ago at={at} now={now} /></>}
+    {dueSoon({ decideBy: at }, now) && <span className="q-soon">due soon</span>}</span>
 }
 
 /** Ringo's shift report: three plain lines over the queue and the handover. Counts come from the triaged rows

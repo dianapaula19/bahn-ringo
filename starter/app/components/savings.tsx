@@ -1,6 +1,6 @@
 "use client"
-// Time Ringo saved today: one line in the sidebar foot, and the full count with its formula on /trust.
-// Both read /engine/savings (formula in lib/savings.ts).
+// Time Ringo saved today, on /trust and /engine only: the measured phone time first, the desk-work estimate apart
+// and labelled as one. Reads /engine/savings (formula in lib/savings.ts).
 import "./savings.css"
 import Link from "next/link"
 import { useEffect, useState } from "react"
@@ -10,13 +10,13 @@ import { ESTIMATE_LABELS, fmtSaved, fmtSeconds, type Savings, type SavingsEstima
 import { Icon } from "./icons"
 import { RingoFace } from "./ringo"
 
-// The sidebar remounts on every page; keep the last answer for a minute so the line doesn't flicker.
+// Keep the last answer for a minute so moving between /trust and /engine doesn't flicker.
 let cache: { at: number; data: Savings } | null = null
 
 function useSavings(): [Savings | null | "error", (s: Savings) => void] {
   const [data, setData] = useState<Savings | null | "error">(() => cache?.data ?? null)
   useEffect(() => {
-    // The sidebar line and the /trust section are two readers on one page: a save updates both.
+    // A save on one reader updates any other on the page.
     const onSaved = () => { if (cache) setData(cache.data) }
     window.addEventListener("ringo-savings", onSaved)
     const c = new AbortController()
@@ -31,17 +31,10 @@ function useSavings(): [Savings | null | "error", (s: Savings) => void] {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
-export function SavingsLine() {
-  const [s] = useSavings()
-  if (s === "error") return null // a footer nicety; the count is on /trust
-  if (!s) return <p className="savings-line" aria-busy="true">Counting Ringo's time…</p>
-  if (!s.runs) return <p className="savings-line">Ringo hasn't worked an order yet today. <Link href="/trust#savings" className="foot-link">How it counts</Link></p>
-  return <p className="savings-line">Today Ringo saved {fmtSaved(s.totalSeconds)} of phone and desk time · {plural(s.calls, "call")}. <Link href="/trust#savings" className="foot-link">Details</Link></p>
-}
-
 const MIN = (n: number) => `${n} min`
 
-export function SavingsSection() {
+/** `edit`: the estimate form (on /trust); /engine shows the numbers only. */
+export function SavingsSection({ edit = true }: { edit?: boolean }) {
   const [s, set] = useSavings()
   const [draft, setDraft] = useState<SavingsEstimates | null>(null)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
@@ -81,20 +74,20 @@ export function SavingsSection() {
       <p className="savings-ringo"><RingoFace size={32} /><span>{s.runs
         ? "I sit through the hold music so you don't have to. Here's today's tab."
         : "Nothing on the tab yet today. When I work an order, the minutes show up here."}</span></p>
-      {s.runs > 0 && <p className="savings-total"><span className="savings-big">{fmtSaved(s.totalSeconds)}</span>
-        <span className="savings-sub">{plural(s.calls, "call")} · {plural(s.runs, "run")}</span></p>}
+      {s.runs > 0 && <p className="savings-total"><span className="savings-big">{fmtSeconds(s.lineSeconds + s.holdSeconds)}</span>
+        <span className="savings-sub">measured: on the phone for you, {plural(s.calls, "call")} · {plural(s.runs, "run")}</span></p>}
       <dl className="savings-parts">
         <div><dt>On the line <span className="savings-kind">measured</span></dt>
           <dd>{s.calls ? <>{plural(s.calls, "call")}, {fmtSeconds(s.lineSeconds)}</> : "No calls yet"}</dd></div>
-        <div><dt>On hold <span className="savings-kind">from the phone menus</span></dt>
+        <div><dt>On hold <span className="savings-kind">measured from the phone menus</span></dt>
           <dd>{s.holdSeconds ? fmtSeconds(s.holdSeconds) : "None"}</dd></div>
-        <div><dt>Desk work <span className="savings-kind estimate">estimate</span></dt>
-          <dd>{s.reads + s.driverMessages + s.notes === 0 ? "None yet" : <>{plural(s.reads, "read")} × {MIN(e.readMin)} + {plural(s.driverMessages, "driver message")} × {MIN(e.driverMessageMin)} + {plural(s.notes, "fact")} written × {MIN(e.noteMin)}
-            {" "}= {fmtSaved(s.estimateSeconds).replace(/^~/, "")}</>}</dd></div>
       </dl>
-      <p className="savings-formula">Saved = time on the line + hold time + reads × {MIN(e.readMin)} + driver messages × {MIN(e.driverMessageMin)} + facts written × {MIN(e.noteMin)}.
-        Line and hold time come from Ringo's simulated calls. The minutes per step are an estimate of the same work done by hand.</p>
-      <details className="more savings-edit" onToggle={(ev) => { if (!(ev.currentTarget as HTMLDetailsElement).open) { setDraft(null); setMsg(null) } }}>
+      <div className="savings-estimate">
+        <p className="savings-estimate-head"><span className="savings-kind estimate">Estimate, not measured</span> Desk work Ringo did that a person would otherwise do: {s.reads + s.driverMessages + s.notes === 0 ? "none yet" : <b>{fmtSaved(s.estimateSeconds)}</b>}</p>
+        {s.reads + s.driverMessages + s.notes > 0 && <p className="savings-estimate-sum">{plural(s.reads, "read")} × {MIN(e.readMin)} + {plural(s.driverMessages, "driver message")} × {MIN(e.driverMessageMin)} + {plural(s.notes, "fact")} written × {MIN(e.noteMin)}</p>}
+      </div>
+      <p className="savings-formula">The measured part is the time Ringo spent on simulated calls and on hold. The estimate counts his reads, driver messages and facts at minutes per step that a person sets on What Ringo may do; they are a guess, so the two are never added into one number.</p>
+      {edit && <details className="more savings-edit" onToggle={(ev) => { if (!(ev.currentTarget as HTMLDetailsElement).open) { setDraft(null); setMsg(null) } }}>
         <summary><Icon name="chevron" size={12} />Change the estimate</summary>
         <form onSubmit={save}>
           {(Object.keys(ESTIMATE_LABELS) as (keyof SavingsEstimates)[]).map((k) => <label key={k} className="savings-field">
@@ -105,7 +98,7 @@ export function SavingsSection() {
           <div className="savings-actions"><button type="submit" className="btn" disabled={busy || !draft}>Save minutes</button>
             {draft && <button type="button" className="link-btn" onClick={() => setDraft(null)}>Undo</button>}</div>
         </form>
-      </details>
+      </details>}
       {msg && <p className={`result ${msg.ok ? "tone-ok" : "tone-warn"}`} role="status">{msg.text}</p>}
     </div>
   </section>

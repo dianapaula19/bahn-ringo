@@ -1,9 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState } from "react"
 import posthog from "posthog-js"
-import type { CallRecord, CallTurn, OrderStory, RunDetail, RunEvent, RunOutcome, ToolName } from "@/lib/contract"
+import type { CallRecord, CallTurn, OrderStory, RunDetail, RunEvent, RunOutcome, RunSummary, ToolName } from "@/lib/contract"
+import { dayKey, fmtClock, fmtDateTime } from "@/lib/present/time"
 import { DESK, loadRun, runRing } from "../../_lib/agent-api"
 import { Icon } from "../icons"
 import { withBase } from "@/lib/base"
@@ -144,7 +145,7 @@ export function RunPanel({ story, onDone, heroRun = false, runRequest = 0, onRun
     {offline && <p className="result tone-warn" role="status">Ringo is offline right now (no model key). You can still watch a recorded run. <button type="button" className="link-btn" onClick={() => start("replay")}>Replay</button></p>}
     {lines.length === 0 && busyElsewhere && <p className="empty" role="status">Ringo is working on this order now (started <When at={last.startedAt} now={story.now} />). Reload in a moment to see what he found.</p>}
     {lines.length === 0 && !running && !busyElsewhere && !offline && (last && last.status !== "running"
-      ? <RunSteps key={last.id} runId={last.id} lead={<>Ringo last ran <When at={last.startedAt} now={story.now} />{last.trigger === "replay" && " (a recorded run)"}</>} />
+      ? <RunSteps key={last.id} runs={story.runs} now={story.now} />
       : !last && <p className="empty">Ringo has not run on this order yet.</p>)}
     {lines.length === 0 && running && <ul className="steps" aria-busy="true"><li className="step-line pending"><span className="spin" />Starting…</li></ul>}
     {lines.length > 0 && <ul className="steps" aria-live="polite">
@@ -208,57 +209,83 @@ function LineView({ line: l, now, live, acted }: { line: Line; now: string; live
 // ---------------------------------------------------------------- what the last run cost, step by step
 
 type Step = { label: string; ms: number; sim?: boolean; tone?: "warn" }
-const READ: Partial<Record<ToolName, string>> = { read_order: "Read order", read_messages: "Read messages", read_docs: "Read site rules", read_playbook: "Read playbook" }
-const STOPPED: Record<RunOutcome, string> = { proposal_ready: "Stop: proposal ready", needs_person: "Stop: a person decides", waiting: "Stop: calls back later", done: "Done", failed: "Stopped: it failed" }
-const CALL_OUT: Record<string, string> = { NO_ANSWER: "no answer", VOICEMAIL: "voicemail", CLOSED: "closed", DROPPED_UNKNOWN: "line dropped" }
+const READ: Partial<Record<ToolName, string>> = { read_order: "Read order", read_messages: "Messages", read_docs: "Site rules", read_playbook: "Playbook" }
+const STOPPED: Record<RunOutcome, string> = { proposal_ready: "Stop: proposal", needs_person: "Stop: you decide", waiting: "Stop: calls back", done: "Done", failed: "Stopped: failed" }
+const CALL_OUT: Record<string, string> = { NO_ANSWER: "no answer", VOICEMAIL: "voicemail", CLOSED: "closed", DROPPED_UNKNOWN: "dropped" }
 
-/** One run as its steps: cheap reads first, then the one call, then the stop. Each step's time runs from the end of
- *  the step before it, so the times add up to the run (model thinking included). Facts and playbook notes written
- *  between steps fold into one "Wrote" step. */
-export function runSteps(events: RunEvent[]): Step[] {
+/** One run as its steps: cheap reads first, then the call, then the stop. Each step is timed from its own tool call to
+ *  its result (a call from dialling to hang-up), so a read shows "<1 s". The time Ringo spends thinking between steps
+ *  is said once, in the header, not charged to the step after it. Facts and playbook notes written between steps fold
+ *  into one "Wrote" step. */
+export function runSteps(events: RunEvent[], span?: { startedAt: string; endedAt: string | null }): { steps: Step[]; total: number; thinking: number } {
   const out: Step[] = []
   const t = (e: RunEvent) => ("at" in e ? Date.parse(e.at) : e.type === "call_ended" ? Date.parse(e.call.endedAt ?? e.call.startedAt) : NaN)
-  const start = events.find((e) => e.type === "run_started")
-  let prev = start ? t(start) : NaN
-  let wrote = { facts: 0, notes: 0, end: NaN }
-  const push = (s: Omit<Step, "ms">, end: number) => {
-    if (wrote.facts || wrote.notes) { out.push({ label: `Wrote ${[wrote.facts && `${wrote.facts} ${wrote.facts === 1 ? "fact" : "facts"}`, wrote.notes && "notes"].filter(Boolean).join(" + ")}`, ms: wrote.end - prev }); prev = wrote.end; wrote = { facts: 0, notes: 0, end: NaN } }
-    out.push({ ...s, ms: (Number.isFinite(prev) ? end - prev : 0) }); prev = end
+  const started = new Map<string, number>()
+  let dialled = NaN
+  let wrote = { facts: 0, notes: 0, ms: 0 }
+  const flush = () => {
+    if (wrote.facts || wrote.notes) out.push({ label: `Wrote ${[wrote.facts && `${wrote.facts} ${wrote.facts === 1 ? "fact" : "facts"}`, wrote.notes && "notes"].filter(Boolean).join(" + ")}`, ms: wrote.ms })
+    wrote = { facts: 0, notes: 0, ms: 0 }
   }
+  const push = (s: Step) => { flush(); out.push(s) }
+  const took = (e: Extract<RunEvent, { type: "tool_result" }>) => Math.max(0, t(e) - (started.get(e.stepId) ?? t(e)))
   for (const e of events) {
-    if (e.type === "tool_result" && READ[e.tool]) push({ label: READ[e.tool]! }, t(e))
-    else if (e.type === "tool_result" && e.tool === "record_fact" && e.ok) { wrote.facts++; wrote.end = t(e) }
-    else if (e.type === "tool_result" && e.tool === "note_playbook" && e.ok) { wrote.notes++; wrote.end = t(e) }
+    if (e.type === "tool_call") { started.set(e.stepId, t(e)); if (e.tool === "place_call") dialled = t(e) }
+    else if (e.type === "tool_result" && READ[e.tool]) push({ label: READ[e.tool]!, ms: took(e) })
+    else if (e.type === "tool_result" && e.tool === "record_fact" && e.ok) { wrote.facts++; wrote.ms += took(e) }
+    else if (e.type === "tool_result" && e.tool === "note_playbook" && e.ok) { wrote.notes++; wrote.ms += took(e) }
     else if (e.type === "call_ended") {
       const rung = callRung(e.call.transcript)
-      const out_ = CALL_OUT[e.call.outcome ?? ""]
-      push({ label: `Call ${rung ? RUNG_LABEL[rung].toLowerCase() : "the site"}${out_ ? ` (${out_})` : ""}`, sim: true, tone: out_ ? "warn" : undefined }, t(e))
-    } else if (e.type === "tool_result" && e.tool === "send_driver_message" && e.ok) push({ label: "Message the driver", sim: true }, t(e))
-    else if (e.type === "tool_result" && e.tool === "schedule_callback" && e.ok) push({ label: "Book a callback" }, t(e))
-    else if (e.type === "stop") push({ label: STOPPED[e.decision.outcome] }, t(e))
+      const how = CALL_OUT[e.call.outcome ?? ""]
+      push({ label: `Call ${rung ? RUNG_LABEL[rung].toLowerCase() : "the site"}${how ? ` (${how})` : ""}`, ms: Number.isFinite(dialled) ? t(e) - dialled : NaN, sim: true, tone: how ? "warn" : undefined })
+    } else if (e.type === "tool_result" && e.tool === "send_driver_message" && e.ok) push({ label: "Message driver", ms: took(e), sim: true })
+    else if (e.type === "tool_result" && e.tool === "schedule_callback" && e.ok) push({ label: "Book callback", ms: took(e) })
+    else if (e.type === "stop") push({ label: STOPPED[e.decision.outcome], ms: NaN })
   }
-  return out
+  flush()
+  const times = events.map(t).filter(Number.isFinite)
+  const total = times.length ? Math.max(...times) - Math.min(...times) : 0
+  const whole = span?.endedAt ? Date.parse(span.endedAt) - Date.parse(span.startedAt) : NaN
+  if (Number.isFinite(whole) && whole > total) return finish(out, whole)
+  return finish(out, total)
 }
 
-const dur = (ms: number) => !Number.isFinite(ms) || ms < 1000 ? "<1 s" : ms < 60_000 ? `${Math.round(ms / 1000)} s` : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`
+function finish(out: Step[], total: number) {
+  const spent = out.reduce((n, s) => n + (Number.isFinite(s.ms) ? s.ms : 0), 0)
+  return { steps: out, total, thinking: Math.max(0, total - spent) }
+}
 
-function RunSteps({ runId, lead }: { runId: string; lead: ReactNode }) {
+const dur = (ms: number) => !Number.isFinite(ms) ? "" : ms < 1000 ? "<1 s" : ms < 60_000 ? `${Math.round(ms / 1000)} s` : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`
+const OUTCOME: Record<RunOutcome, string> = { proposal_ready: "proposal", needs_person: "a person decides", waiting: "calls back", done: "done", failed: "failed" }
+
+/** Ringo's runs on this order, newest first; the strip shows one, and earlier ones can be picked. */
+function RunSteps({ runs, now }: { runs: RunSummary[]; now: string }) {
+  const list = [...runs].filter((r) => r.status !== "running").sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+  const [runId, setRunId] = useState(list[0]?.id)
+  const run = list.find((r) => r.id === runId) ?? list[0]
   const [detail, setDetail] = useState<RunDetail | null>(null)
   const [error, setError] = useState(false)
   useEffect(() => {
+    if (!run) return
+    setDetail(null); setError(false)
     const c = new AbortController()
-    loadRun(runId, c.signal).then(setDetail).catch(() => { if (!c.signal.aborted) setError(true) })
+    loadRun(run.id, c.signal).then(setDetail).catch(() => { if (!c.signal.aborted) setError(true) })
     return () => c.abort()
-  }, [runId])
-  const steps = detail ? runSteps(detail.events) : []
-  const total = steps.reduce((n, s) => n + (Number.isFinite(s.ms) ? s.ms : 0), 0)
-  const head = <p className="run-steps-head">{lead}{steps.length > 0 && <> · {steps.some((x) => x.sim) ? "cheap work first, then the call, then stop" : "read first; no call needed, so he stopped"} · {dur(total)} in all</>} · <TraceLink runId={runId} /></p>
+  }, [run?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- refetch only when another run is picked
+  if (!run) return null
+  const { steps, total, thinking } = detail ? runSteps(detail.events, detail.run) : { steps: [], total: 0, thinking: 0 }
+  const lead = <>{run === list[0] ? "Ringo last ran" : "Ringo ran"} <When at={run.startedAt} now={now} />{run.trigger === "replay" && " (a recorded run)"}</>
+  const head = <div className="run-steps-head">
+    <p>{lead}{steps.length > 0 && <> · {steps.some((x) => x.sim) ? "cheap work first, then the call, then stop" : "read first; no call needed, so he stopped"} · {dur(total)} in all{thinking >= 1000 && <> ({dur(thinking)} thinking between steps)</>}</>} · <TraceLink runId={run.id} />
+    {list.length > 1 && <label className="run-pick"><span className="sr-only">Show the steps of</span><select value={run.id} onChange={(e) => setRunId(e.target.value)}>
+      {list.map((r, i) => <option key={r.id} value={r.id}>{i === 0 ? "Latest run" : "Earlier run"} {dayKey(r.startedAt) === dayKey(now) ? fmtClock(r.startedAt) : fmtDateTime(r.startedAt, null, false)}{r.decision ? ` · ${OUTCOME[r.decision.outcome]}` : ""}</option>)}</select></label>}</p>
+  </div>
   if (error || (detail && !steps.length)) return <div className="run-steps-wrap">{head}{error && <p className="empty">Could not load the steps of that run.</p>}</div>
-  if (!detail) return <div className="run-steps-wrap">{head}<ol className="run-steps" aria-busy="true" aria-label="Loading the last run's steps"><li className="run-step skel" /><li className="run-step skel" /><li className="run-step skel" /></ol></div>
+  if (!detail) return <div className="run-steps-wrap">{head}<ol className="run-steps" aria-busy="true" aria-label="Loading the run's steps"><li className="run-step skel" /><li className="run-step skel" /><li className="run-step skel" /></ol></div>
   return <div className="run-steps-wrap">
     {head}
-    <ol className="run-steps" aria-label="What Ringo's last run did, step by step">{steps.map((s, i) => <li key={i} className={`run-step${s.tone ? ` tone-${s.tone}` : ""}${i === steps.length - 1 ? " last" : ""}`}>
-      <b>{s.label}</b><small>{dur(s.ms)}{s.sim && <> · <Simulated>sim</Simulated></>}</small>
+    <ol className="run-steps" aria-label="What Ringo's run did, step by step">{steps.map((s, i) => <li key={i} className={`run-step${s.tone ? ` tone-${s.tone}` : ""}${i === steps.length - 1 ? " last" : ""}`}>
+      <b>{s.label}</b>{(dur(s.ms) || s.sim) && <small>{dur(s.ms)}{s.sim && <>{dur(s.ms) && " · "}<Simulated>sim</Simulated></>}</small>}
     </li>)}</ol>
   </div>
 }
