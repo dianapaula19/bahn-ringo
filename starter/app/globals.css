@@ -812,3 +812,8 @@ details.more > :not(summary) { margin-top: 8px; }
 .cast-lineup b { font-size: 14px; font-weight: 600; color: var(--ink); }
 @media (max-width: 480px) { .trust-intro { align-items: flex-start; gap: 14px; margin-top: 14px; } .cast-lineup { display: grid; grid-template-columns: 1fr 1fr; } }
 .foot-link { color: inherit; text-decoration: underline; text-decoration-color: var(--sand); text-underline-offset: 2px; }
+
+/* Map with ?city=: everything else steps back to 30%, the chosen city gets a halo and a bold label. */
+.map-svg.has-selected .map-city:not(.is-selected), .map-svg.has-selected .map-road, .map-svg.has-selected > g > circle:not(.selected) { opacity: 0.3; }
+.map-halo { fill: var(--birch); fill-opacity: 0.6; stroke: var(--ink); }
+.map-label.selected { fill: var(--ink); font-weight: 700; }
