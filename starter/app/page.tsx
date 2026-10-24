@@ -1,79 +1,152 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { LANES } from "@/lib/present/labels"
-import type { Overview } from "@/lib/present/types"
+import Link from "next/link"
+import { useCallback, useEffect, useState } from "react"
+import type { Handover, QueueItem, QueueResponse } from "@/lib/contract"
+import { relativeTo } from "@/lib/present/time"
+import { loadHandover, loadQueue } from "./_lib/agent-api"
 import { AppFrame } from "./components/app-frame"
-import { Card } from "./components/card"
 import { Icon } from "./components/icons"
+import { Ago, When, agentStatus } from "./components/ring/bits"
 
-export default function Home() {
-  const [search, setSearch] = useState("")
-  const [onlyAttention, setOnlyAttention] = useState(false)
-  const [overview, setOverview] = useState<Overview | null>(null)
+const PAGE = 50
+const SEEN_KEY = "ring.lastSeen"
+
+function readSeen(): string | null { try { return localStorage.getItem(SEEN_KEY) } catch { return null } }
+function writeSeen(at: string) { try { localStorage.setItem(SEEN_KEY, at) } catch { /* private window: strip falls back to the default window */ } }
+
+export default function NeedsYou() {
+  const [queue, setQueue] = useState<QueueResponse | null>(null)
   const [error, setError] = useState("")
 
+  const refresh = useCallback((signal?: AbortSignal) => loadQueue(signal)
+    .then((data) => { setQueue(data); setError("") })
+    .catch((e: unknown) => { if (!signal?.aborted) setError(e instanceof Error ? e.message : "Could not load the queue") }), [])
+
   useEffect(() => {
-    const controller = new AbortController()
-    const timer = setTimeout(() => {
-      fetch(`/api/overview?q=${encodeURIComponent(search)}`, { signal: controller.signal })
-        .then((response) => { if (!response.ok) throw new Error("Could not load orders"); return response.json() as Promise<Overview> })
-        .then((data) => { setOverview(data); setError("") })
-        .catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load orders") })
-    }, search ? 180 : 0)
-    return () => { clearTimeout(timer); controller.abort() }
-  }, [search])
+    const c = new AbortController()
+    refresh(c.signal)
+    const timer = setInterval(() => refresh(), 20000)
+    const onShow = () => { if (document.visibilityState === "visible") refresh() }
+    document.addEventListener("visibilitychange", onShow)
+    return () => { c.abort(); clearInterval(timer); document.removeEventListener("visibilitychange", onShow) }
+  }, [refresh])
 
-  const visible = useMemo(() => {
-    const cards = overview?.visible ?? []
-    return onlyAttention ? cards.filter((card) => card.attention.length > 0) : cards
-  }, [overview, onlyAttention])
-  const attentionTotal = overview ? Object.values(overview.attentionCounts).reduce((sum, count) => sum + count, 0) : 0
-  const filtering = !!search || onlyAttention
-  const lanes = LANES.filter(([lane]) => !filtering || visible.some((card) => card.displayLane === lane))
+  useEffect(() => {
+    if (!queue) return
+    const save = () => writeSeen(queue.now)
+    window.addEventListener("pagehide", save)
+    return () => { save(); window.removeEventListener("pagehide", save) }
+  }, [queue])
 
-  return <AppFrame section="board" board snapshotAt={overview?.snapshotAt ?? null}><main className="board-page">
-    <div className="board-head">
-      <div className="board-title">
-        <h1>Orders</h1>
-        <p className="board-sub">{overview
-          ? <><b>{overview.total}</b> orders · <b>{overview.counts.moving ?? 0}</b> moving · <b>{attentionTotal}</b> need a person</>
-          : "Loading the snapshot"}</p>
+  // j / k move between rows, Enter opens the focused one (native link behaviour).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || (e.key !== "j" && e.key !== "k")) return
+      const t = e.target as HTMLElement
+      if (t.closest("input, textarea, select, [contenteditable]")) return
+      const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-row]"))
+      if (!rows.length) return
+      const i = rows.indexOf(document.activeElement as HTMLElement)
+      const next = e.key === "j" ? Math.min(rows.length - 1, i + 1) : Math.max(0, i < 0 ? 0 : i - 1)
+      rows[next].focus(); rows[next].scrollIntoView({ block: "nearest" })
+      e.preventDefault()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
+
+  const moving = queue ? queue.total - queue.needsYou.length : 0
+
+  return <AppFrame section="queue" snapshotAt={queue?.snapshotAt ?? null}><main className="page queue-page">
+    <HandoverStrip now={queue?.now ?? null} />
+    <header className="queue-head">
+      <h1>Needs you{queue && queue.needsYou.length > 0 && <span className="queue-count num">{queue.needsYou.length}</span>}</h1>
+      <p className="queue-sub">{queue
+        ? <>Checked <When at={queue.now} now={queue.now} /> · {queue.total} orders · <span className="kbd-hint">j / k to move, Enter to open</span></>
+        : "Checking every order…"}</p>
+    </header>
+    {error && <p className="board-error" role="alert">{error}. Check that the app and database are running.</p>}
+
+    {!queue && !error && <ul className="q-list" aria-busy="true" aria-label="Loading">{[0, 1, 2, 3, 4].map((i) => <li key={i} className="q-skel" />)}</ul>}
+
+    {queue && queue.needsYou.length === 0 && <div className="calm">
+      <Icon name="check" size={22} />
+      <div><p className="calm-title">Nothing needs you.</p><p className="calm-sub">{moving} orders moving. We will show an order here the moment a person is needed.</p></div>
+    </div>}
+    {queue && queue.needsYou.length > 0 && <Rows items={queue.needsYou} now={queue.now} label="Orders that need a person" />}
+
+    {queue && <section className="sec" aria-labelledby="ring-h">
+      <div className="sec-head"><h2 id="ring-h">Ring is on it</h2><span className="count num">{queue.ring.length || ""}</span>
+        <span className="note">Pickup checks Ring can do by phone. Open one to run it.</span></div>
+      {queue.ring.length ? <Rows items={queue.ring} now={queue.now} label="Orders Ring can work" /> : <p className="empty">Ring has nothing to check right now.</p>}
+    </section>}
+
+    {queue && <details className="fine">
+      <summary><Icon name="chevron" size={13} className="chev" />Everything else is fine<span className="fine-count num">{queue.waiting.length + queue.quietCount}</span></summary>
+      <div className="fine-body">
+        {queue.waiting.length > 0 && <><h3 className="sub">Waiting on someone else · {queue.waiting.length}</h3><Rows items={queue.waiting} now={queue.now} label="Orders waiting on a reply" /></>}
+        <p className="empty">{queue.quietCount} orders have no open alert, task or question. <Link href="/board">See all orders</Link></p>
       </div>
-      <div className="board-tools">
-        <label className="search">
-          <span className="sr-only">Search orders</span>
-          <Icon name="search" />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Reference, car, plate, customer or city" />
-          {search && <button type="button" className="search-clear" onClick={() => setSearch("")} aria-label="Clear search"><Icon name="arrow" size={14} style={{ transform: "rotate(45deg)" }} /></button>}
-        </label>
-        <button type="button" className="toggle" aria-pressed={onlyAttention} onClick={() => setOnlyAttention((value) => !value)}>
-          <Icon name="alert" size={14} /> Needs a person{overview ? <b>{attentionTotal}</b> : null}
-        </button>
-      </div>
-    </div>
-    {error && <p className="board-error" role="alert">{error}. Check that the local database is running and seeded.</p>}
-    <section className="board" aria-label="Order lanes">
-      {lanes.map(([lane, label]) => {
-        const cards = visible.filter((card) => card.displayLane === lane)
-        const total = overview?.counts[lane] ?? 0
-        const needing = overview?.attentionCounts[lane] ?? 0
-        return <div className={`lane lane-${lane}`} key={lane}>
-          <header className="lane-head">
-            <h2>{label}</h2>
-            <span className="lane-count num">{filtering ? `${cards.length} of ${total}` : total}</span>
-            {needing > 0 && !onlyAttention && <span className="lane-attention num">{needing} need a person</span>}
-          </header>
-          <div className="lane-scroll">
-            {!overview && !error && <ul className="lane-list" aria-busy="true">{[0, 1, 2].map((index) => <li className="skeleton" key={index} />)}</ul>}
-            {overview && cards.length === 0 && <p className="lane-empty">{filtering ? "No matching orders in this lane." : "No orders in this lane."}</p>}
-            {cards.length > 0 && <ul className="lane-list">{cards.map((card) => <li key={card.id}><Card card={card} /></li>)}</ul>}
-          </div>
-        </div>
-      })}
-      {overview && filtering && visible.length === 0 && <p className="board-empty">
-        {search ? <>No orders match “{search}”{onlyAttention ? " among the orders that need a person" : ""}.</> : "No order in the snapshot needs a person."}
-      </p>}
-    </section>
+    </details>}
   </main></AppFrame>
+}
+
+function Rows({ items, now, label }: { items: QueueItem[]; now: string; label: string }) {
+  const [shown, setShown] = useState(PAGE)
+  return <>
+    <ul className="q-list" aria-label={label}>
+      {items.slice(0, shown).map((q) => {
+        const status = agentStatus(q)
+        return <li key={q.orderId}><Link data-row className={`q-row sev-${q.severity}`} href={`/orders/${q.orderId}`}>
+          <span className="q-sev" aria-label={`Severity ${q.severity}`} />
+          <span className="q-id"><span className="mono q-ref">{q.reference}</span><span className="q-vehicle">{q.vehicle}</span></span>
+          <span className="q-why">{q.why}</span>
+          <span className={`q-status tone-${status.tone}`}>{status.text}</span>
+          <Due at={q.decideBy} now={now} />
+        </Link></li>
+      })}
+    </ul>
+    {items.length > shown && <button type="button" className="show-more" onClick={() => setShown((n) => n + PAGE)}>Show {Math.min(PAGE, items.length - shown)} more of {items.length - shown}</button>}
+  </>
+}
+
+function Due({ at, now }: { at: string | null; now: string }) {
+  const rel = relativeTo(at, now)
+  if (!at || !rel) return <span className="q-due" />
+  return <span className={`q-due${rel.past ? " tone-danger" : ""}`}>{rel.past ? <>Overdue by {rel.text.replace(/ ago$/, "")}</> : <>Decide <Ago at={at} now={now} /></>}</span>
+}
+
+function HandoverStrip({ now }: { now: string | null }) {
+  const [since, setSince] = useState<string | null | undefined>(undefined)
+  const [handover, setHandover] = useState<Handover | null>(null)
+  const [error, setError] = useState(false)
+  const [all, setAll] = useState(false)
+
+  useEffect(() => { setSince(readSeen()) }, [])
+  useEffect(() => {
+    if (since === undefined) return
+    const c = new AbortController()
+    loadHandover(since, c.signal).then((data) => { setHandover(data); setError(false) }).catch(() => { if (!c.signal.aborted) setError(true) })
+    return () => c.abort()
+  }, [since])
+
+  const lines = handover?.sentences ?? []
+  return <section className="handover" aria-labelledby="handover-h">
+    <div className="handover-head">
+      <h2 id="handover-h">Since you left</h2>
+      {handover && <span className="handover-since">since <When at={handover.since} now={now} /></span>}
+      {since && <button type="button" className="link-btn" onClick={() => setSince(null)}>Show the last 3 hours</button>}
+    </div>
+    {!handover && !error && <div className="handover-skel" aria-busy="true"><span /><span /></div>}
+    {error && <p className="empty">The handover could not be loaded. The queue below is still current.</p>}
+    {handover && lines.length === 0 && <p className="empty">Nothing new happened while you were away.</p>}
+    {lines.length > 0 && <ul className="handover-list">
+      {(all ? lines : lines.slice(0, 3)).map((s, i) => <li key={i}>{s.orderId ? <Link href={`/orders/${s.orderId}`}>{s.text}</Link> : s.text}</li>)}
+    </ul>}
+    <div className="handover-foot">
+      {lines.length > 3 && <button type="button" className="link-btn" onClick={() => setAll((v) => !v)}>{all ? "Show less" : `Show all ${lines.length}`}</button>}
+      {handover && handover.dropped > 0 && <span className="handover-dropped">{handover.dropped} {handover.dropped === 1 ? "line was" : "lines were"} left out because the source could not be found.</span>}
+    </div>
+  </section>
 }

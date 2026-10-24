@@ -3,12 +3,14 @@ import type { ReactNode } from "react"
 import { fmtDateTime } from "@/lib/present/time"
 import { Icon } from "./icons"
 
-export type Section = "board" | "inbox" | "customers" | "drivers" | "sites"
+export type Section = "queue" | "trust" | "board" | "inbox" | "customers" | "drivers" | "sites"
 
 const GROUPS: { label: string; links: { section: Section; href: string; label: string; icon: string }[] }[] = [
   { label: "Work", links: [
-    { section: "board", href: "/", label: "Orders", icon: "car" },
+    { section: "queue", href: "/", label: "Needs you", icon: "alert" },
+    { section: "board", href: "/board", label: "All orders", icon: "car" },
     { section: "inbox", href: "/inbox", label: "Inbox", icon: "inbox" },
+    { section: "trust", href: "/trust", label: "What Ring may do", icon: "key" },
   ] },
   { label: "People and places", links: [
     { section: "customers", href: "/customers", label: "Customers", icon: "people" },
@@ -29,7 +31,7 @@ export function AppFrame({ children, section, snapshotAt, board = false }: { chi
           </Link>)}
         </div>)}
       </nav>
-      <div className="sidebar-foot">{snapshotAt ? `Snapshot ${fmtDateTime(snapshotAt)}` : "Fictional snapshot"}<br />Fictional data · read only</div>
+      <div className="sidebar-foot">{snapshotAt ? `Snapshot ${fmtDateTime(snapshotAt)}` : "Fictional snapshot"}<br />Fictional data · calls and drivers simulated</div>
     </aside>
     <div className="main">{children}</div>
   </div>
