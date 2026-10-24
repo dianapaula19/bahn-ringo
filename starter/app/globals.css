@@ -113,6 +113,7 @@ ul, ol { padding: 0; list-style: none; }
 .nav-link.active { background: var(--hair-soft); color: var(--ink); }
 .nav-link.active .icon { color: var(--ink); }
 .sidebar-foot { margin-top: auto; padding: 0 10px; font-size: 12px; line-height: 1.5; color: var(--subtle); }
+.desk-clock { margin: 0 0 10px; }
 .main { min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--hair); } /* on .main, not the sticky sidebar, so the line runs the full page height */
 .main:focus { outline: none; }
 .app-board .main { height: 100dvh; min-height: 0; }
@@ -981,7 +982,9 @@ details.more > :not(summary) { margin-top: 8px; }
 
 /* The last run as a strip of steps: read, read, read, call, stop. */
 .run-steps-wrap { margin-top: 12px; }
-.run-steps-head { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.run-steps-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.run-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.run-pick select { min-height: 30px; padding: 0 6px; border: 1px solid var(--hair); border-radius: var(--radius); background: var(--birch); font: inherit; color: var(--ink); max-width: 100%; }
 .run-steps { display: flex; flex-wrap: wrap; gap: 6px 12px; list-style: none; padding: 0; margin: 0; }
 .run-step { position: relative; display: grid; gap: 1px; padding: 4px 8px; border-radius: 8px; background: var(--birch); box-shadow: 0 0 0 1px var(--hair); font-size: 12px; line-height: 1.3; }
 .run-step b { font-weight: 600; }

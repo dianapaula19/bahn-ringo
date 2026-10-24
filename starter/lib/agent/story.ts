@@ -5,7 +5,8 @@ import { messages as messagesTable } from "@/lib/schema"
 import type { Bundle, MessageRow } from "@/lib/present/bundle"
 import { describeEvent } from "@/lib/present/events"
 import { humanize } from "@/lib/present/labels"
-import { fmtClock } from "@/lib/present/time"
+import { deskTimes, fmtClock } from "@/lib/present/time"
+import type { RunSummary, StopDecision } from "@/lib/contract"
 import { loadBoardBundles, loadOrder } from "@/lib/present/load"
 import { orderFacts } from "@/lib/triage/facts"
 import { rankAll, ringEligibility, triage } from "@/lib/triage/triage"
@@ -44,7 +45,8 @@ export async function triageAll(now: string): Promise<{ bundle: Bundle; ring: Ri
   }
   return bundles.map((b) => {
     const bundle = { ...b, messages: byOrder.get(b.order.id) ?? [] }
-    const r = ring.get(b.order.id) ?? emptyRing()
+    const got = ring.get(b.order.id) ?? emptyRing()
+    const r = { ...got, runs: got.runs.map(deskDecision) }
     return { bundle, ring: r, triage: triage(bundle, r, now) }
   })
 }
@@ -67,12 +69,21 @@ const ACTOR_KIND: Record<string, StoryEntry["actorKind"]> = {
   customer: "customer", site_contact: "site", handoff_contact: "site", driver: "driver", operator: "operator", agent: "agent", system: "system",
 }
 
+/** Ringo's stop decision with its "09:20 UTC" times on the desk's clock, like every other line on the page. */
+function deskDecision(r: RunSummary): RunSummary {
+  if (!r.decision) return r
+  const d: StopDecision = r.decision
+  const fix = (t: string) => deskTimes(t, r.startedAt)
+  return { ...r, decision: { ...d, headline: fix(d.headline), oneDecision: d.oneDecision && fix(d.oneDecision), whatNext: d.whatNext && fix(d.whatNext), did: d.did.map(fix) } }
+}
+
 export async function buildStory(orderId: string): Promise<(OrderStory & WithClaim) | null> {
   const loaded = await loadOrder(orderId)
   if (!loaded) return null
   const now = await simNow()
   const b = loaded.bundle
-  const ring = await ringFor(orderId)
+  const raw = await ringFor(orderId)
+  const ring = { ...raw, runs: raw.runs.map(deskDecision) }
   const facts = orderFacts(b, ring, now)
   const factsBySource = (id: string) => facts.filter((f) => f.sourceId === id).map((f) => f.id)
   const t = triage(b, ring, now, facts)

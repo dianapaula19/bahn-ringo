@@ -198,3 +198,12 @@ export function fmtDuration(minutes: number | null | undefined): string {
 export function compareIso(a: string | null | undefined, b: string | null | undefined): number {
   return String(a ?? "").localeCompare(String(b ?? ""))
 }
+
+/** "retry scheduled 09:20 UTC" → "retry scheduled 12:20": a UTC clock time inside free text (Ringo writes UTC), on the
+ *  desk's clock without a zone name, for screens that already say "Helsinki time". `day` is any time on that UTC day. */
+export function deskTimes(text: string, day: string): string {
+  const d = parse(day)
+  if (!d) return text
+  return text.replace(/\b(\d{1,2}):(\d{2}) UTC\b/g, (whole, h: string, m: string) =>
+    fmtClock(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), Number(h), Number(m))).toISOString()) || whole)
+}

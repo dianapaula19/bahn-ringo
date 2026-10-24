@@ -1,12 +1,11 @@
 /* Time Ringo saved (app/components/savings.tsx). Palette and type from globals.css. */
-.savings-line { margin: 0 0 10px; color: var(--muted); }
 .savings-card { padding: 18px 20px; border-radius: var(--radius-lg); background: var(--birch); box-shadow: var(--shadow-card); }
 .savings-ringo { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--brown); }
 .savings-total { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin-top: 14px; }
 .savings-big { font-family: var(--font-display); font-weight: 600; font-size: 30px; letter-spacing: -0.02em; color: var(--ink); }
 .savings-sub { font-size: 13.5px; color: var(--muted); }
 .savings-parts { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--hair-soft); }
-.savings-parts > div { display: grid; grid-template-columns: 230px 1fr; gap: 12px; font-size: 13.5px; }
+.savings-parts > div { display: grid; grid-template-columns: 280px 1fr; gap: 12px; font-size: 13.5px; }
 .savings-parts dt { color: var(--muted); }
 .savings-parts dd { color: var(--ink); font-variant-numeric: tabular-nums; }
 .savings-kind { margin-left: 6px; font-size: 11.5px; color: var(--subtle); }
@@ -23,3 +22,7 @@
   .savings-card { padding: 16px; }
   .savings-parts > div { grid-template-columns: 1fr; gap: 2px; }
 }
+.savings-estimate { margin-top: 14px; padding: 12px 14px; border-radius: var(--radius); background: var(--tray); box-shadow: 0 0 0 1px var(--hair-soft); }
+.savings-estimate-head { font-size: 13.5px; color: var(--brown); }
+.savings-estimate-head .savings-kind { margin: 0 8px 0 0; }
+.savings-estimate-sum { margin-top: 4px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
