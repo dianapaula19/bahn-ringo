@@ -18,6 +18,7 @@
     "eval:reviewer": "tsx scripts/eval-reviewer.ts",
     "eval:learned": "tsx --require ./scripts/ring-shim.cjs scripts/eval-learned.ts",
     "eval:ring": "tsx --require ./scripts/ring-shim.cjs scripts/eval-ring.ts",
+    "eval:suite": "tsx --require ./scripts/ring-shim.cjs scripts/eval-suite.ts",
     "ring:record": "tsx --require ./scripts/ring-shim.cjs scripts/ring-record.ts"
   },
   "dependencies": {

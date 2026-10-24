@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import posthog from "posthog-js"
 import type { TrustLedger, TrustMode, TrustRow } from "@/lib/contract"
 import type { LearnedResponse } from "@/lib/agent/learn/types"
@@ -99,6 +100,7 @@ export default function TrustPage() {
     {learnError ? <section className="sec"><p className="board-error" role="alert">Rules Ringo learned from you: {learnError}.</p></section>
       : !learned ? <section className="sec" aria-busy="true"><div className="q-skel" /></section>
       : <LearnedRules rules={learned.rules} now={learned.now} onChanged={() => refresh()} />}
+    <footer className="sec note-text"><Link href="/evals" className="foot-link">How we test Ringo</Link>: ten scripted situations, scored on what Ringo actually did.</footer>
   </main></AppFrame>
 }
 

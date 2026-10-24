@@ -1,0 +1,46 @@
+/* /evals: the scenario suite. Reuses .tiles, .tile, .sec and .chip from globals.css. */
+.ev-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 28px; }
+.ev-tiles .q-skel { margin-top: 0; }
+.ev-big { margin-top: 6px; font-family: var(--font-display); font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; }
+.ev-big span { margin-left: 6px; font-family: var(--font-body); font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--brown); }
+
+.ev-spark { display: flex; align-items: flex-end; gap: 10px; margin-top: 6px; }
+.ev-spark svg { display: block; width: 100%; max-width: 220px; height: 56px; overflow: visible; }
+.ev-spark figcaption { flex: none; font-size: 12.5px; color: var(--brown); white-space: nowrap; }
+.ev-grid { stroke: var(--hair); stroke-width: 1; }
+.ev-line { fill: none; stroke: var(--teal-ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ev-dot { fill: var(--teal-ink); stroke: var(--birch); stroke-width: 2; }
+.ev-hit { fill: transparent; }
+.ev-pt:hover .ev-dot { r: 5; }
+
+.ev-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.ev-skel { margin-top: 44px; }
+.ev-skel .q-skel { margin-top: 0; height: 220px; }
+.ev-card { display: flex; flex-direction: column; min-width: 0; padding: 16px 18px; border-radius: var(--radius-lg); background: var(--birch); box-shadow: var(--shadow-card); }
+.ev-card.fail { box-shadow: 0 0 0 1px #f3c2ca, 0 1px 2px rgba(66, 61, 51, 0.05); }
+.ev-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.ev-card-head h3 { font-size: 15px; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; }
+.ev-card-head .chip { flex: none; margin-top: 1px; }
+.ev-meta { margin-top: 4px; font-size: 12.5px; color: var(--subtle); }
+.ev-pair { display: grid; gap: 10px; margin-top: 12px; }
+.ev-pair dt { font-size: 12px; font-weight: 600; color: var(--muted); }
+.ev-pair dd { margin-top: 2px; font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+.ev-reasons { margin-top: 12px; padding: 8px 12px; border-radius: var(--radius); background: var(--red-bg); font-size: 13px; color: var(--red-ink); }
+.ev-reasons li + li { margin-top: 4px; }
+.ev-card.void .ev-reasons { background: var(--canvas); color: var(--brown); }
+.ev-checks { margin-top: auto; padding-top: 12px; font-size: 13px; color: var(--brown); }
+.ev-checks summary { cursor: pointer; color: var(--muted); width: fit-content; }
+.ev-checks summary:hover { color: var(--ink); }
+.ev-checks ul { display: grid; gap: 4px; margin-top: 8px; }
+.ev-checks li { display: flex; gap: 8px; line-height: 1.4; }
+.ev-checks li > span:first-child { flex: none; width: 14px; font-weight: 600; }
+.ev-checks li.ok > span:first-child { color: var(--green-ink); }
+.ev-checks li.bad { color: var(--red-ink); }
+.ev-checks em { color: var(--subtle); font-style: normal; }
+.ev-how .note-text { margin-top: 0; }
+
+
+@media (max-width: 900px) {
+  .ev-tiles { grid-template-columns: 1fr; }
+  .ev-cards { grid-template-columns: 1fr; }
+}

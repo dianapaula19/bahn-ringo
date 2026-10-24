@@ -398,6 +398,10 @@ async function scheduleCallback(ctx: RunCtx, input: { dueAt: string; reason: str
   const due = new Date(input.dueAt)
   if (Number.isNaN(due.getTime()) || due.getTime() <= Date.parse(now)) return { ok: false, summary: "Callback refused: the time must be in the future.", content: { error: `dueAt must be after ${now}.` } }
   if (s && !isOpen(s.sc.ivr.openingHours, s.sc.ivr.timezone, due.toISOString())) return { ok: false, summary: "Callback refused: the site is closed then.", content: { error: `The site is closed at that time. Hours: ${JSON.stringify(s.sc.ivr.openingHours)} (${s.sc.ivr.timezone}).` } }
+  // Two dead lines in a row and the order goes to a person, not into an endless "Ringo is on it" (found by the ivr-loop scenario).
+  const ended = (await ringFor(ctx.orderId)).calls.filter((c) => c.status === "ended")
+  const lastAnswered = ended.map((c) => c.outcome).lastIndexOf("ANSWERED")
+  if (ended.length - 1 - lastAnswered >= 2) return { ok: false, summary: "Callback refused: two calls in a row reached no one.", content: { error: "Two calls in a row reached no one. Do not book another try: stop with needs_person and say what a person could do to reach the site." } }
   const job = { id: newId("job"), orderId: ctx.orderId, dueAt: due.toISOString(), reason: input.reason, status: "scheduled" as const, createdByRunId: ctx.runId, firedRunId: null }
   await db.insert(ringJobs).values(job)
   await ctx.emit({ type: "callback_scheduled", job })
