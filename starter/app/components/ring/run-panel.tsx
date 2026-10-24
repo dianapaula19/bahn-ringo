@@ -68,7 +68,7 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
     setLines(text ? [{ kind: "you", text }] : [])
     try {
       await runRing(story.orderId, { trigger, message: text, operatorId: DESK }, (e) => {
-        if (e.type === "error" && /offline/i.test(e.message)) setOffline(true)
+        if (e.type === "error" && /offline/i.test(e.message)) { setOffline(true); return } // the offline note below says it once
         setLines((ls) => fold(ls, e))
       }, c.signal)
     } catch {
@@ -100,7 +100,7 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
     </form>
 
     {offline && <p className="result tone-warn" role="status">Ring is offline right now (no model key). You can still watch a recorded run. <button type="button" className="link-btn" onClick={() => start("replay")}>Replay</button></p>}
-    {lines.length === 0 && !running && <p className="empty">{last ? <>Ring last ran <When at={last.startedAt} now={story.now} />{last.decision ? <>: {last.decision.headline}</> : null}</> : "Ring has not run on this order yet."}</p>}
+    {lines.length === 0 && !running && !offline && <p className="empty">{last ? <>Ring last ran <When at={last.startedAt} now={story.now} />{last.decision ? <>: {last.decision.headline}</> : null}</> : "Ring has not run on this order yet."}</p>}
     {lines.length === 0 && running && <ul className="steps" aria-busy="true"><li className="step-line pending"><span className="spin" />Starting…</li></ul>}
     {lines.length > 0 && <ul className="steps" aria-live="polite">
       {lines.map((l, i) => <li key={i} className={`step-line kind-${l.kind}`}><LineView line={l} now={story.now} live={running} /></li>)}

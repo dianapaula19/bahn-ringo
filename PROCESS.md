@@ -50,7 +50,8 @@ How we worked with coding agents: what we asked for, what we checked, what we th
 7. **Long timelines.** 322 has 33 entries, with the ones that matter at the bottom. The timeline now shows the latest 10 and folds the rest behind "Show 23 earlier entries".
 8. **Trust page.** Four disabled dark "Let Ring do it" buttons read as broken. The button now appears only when the row can be promoted; the row text already says what is missing.
 9. **The Matrix box loop ran the background script without the shim**, so `server-only` would fail to resolve on the box. It now uses the same `--require ./scripts/ring-shim.cjs` as `npm run ring:background`.
-10. **The UI stubs.** They are deleted (`app/_stubs/`, the "Sample data" banner). The UI talks only to the real routes; a route error shows as an error, not as made-up data.
+10. **"Offline" said twice.** Without a key the Ring panel showed the offline note and a red error line with the same words, plus a misleading "Ring last ran" line for the failed attempt. It now says it once, with the Replay button.
+11. **The UI stubs.** They are deleted (`app/_stubs/`, the "Sample data" banner). The UI talks only to the real routes; a route error shows as an error, not as made-up data.
 
 ## 4. What we threw away
 
@@ -120,6 +121,8 @@ Gate opinions on the 4 pending proposals (unscored):
 Every order also asserts: the run finished, read before dial, no customer contact, never `verified`.
 
 **End to end in the browser** (integrator, headless Chrome clicking "Run Ring"): 516 finished in 48 s with one proposal and a stop card; 023 in 35 s with two proposals and a stop card; Replay on 593 streamed the recorded run. Approving both 023 proposals (record access, then the address update) executed both and moved 023 to quiet. With a synthetic newer event on 516, approval still came back `STALE` and changed nothing.
+
+**Fresh clone** (integrator): `git clone` of the `ring` branch into an empty folder, then the README steps with Compose v1 on other ports (Postgres 5448, RustFS 9019/9020) and no model key. `npm ci`, `db:push`, `db:seed` (100 orders), `attachments:seed` (58 files), `ring:check` 15/15 and `eval:reviewer` 3/10 all ran. The queue, story, trust and board pages served; a live run streamed "Ring is offline: no model key" and Replay streamed the recorded 010 run. The stack and its volumes were removed afterwards.
 
 ## 6. Known gaps
 
