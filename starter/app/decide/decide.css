@@ -90,3 +90,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   .dk-help dl > div { grid-template-columns: 80px minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .dk-bar span { transition: none; } }
+
+/* Who is waiting on what, in their own words, above the recorded facts. */
+.dk-voices { margin-bottom: 8px; }
+.dk-voices li { padding: 10px 14px; font-size: 14px; line-height: 1.45; }
+.dk-voices .fact-src { margin-top: 3px; }

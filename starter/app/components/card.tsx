@@ -34,8 +34,8 @@ export function Card({ card, role }: { card: BoardCard; role?: string | null }) 
         </div>
         {date && <div className={`card-line card-date tone-${date.tone}`}>
           <span className="card-date-label">{date.label}</span>
-          <span className="card-date-value num" title={date.end ? fmtRange(date.start, date.end, date.zone) : fmtDateTime(date.start, date.zone)}>{dateText(date.start, date.end, date.zone)}</span>
-          {date.note && <span className="card-date-note" title={date.note}>· {date.note}</span>}
+          {/* The relative note ("in 2 d", "slot passed") lives in the tooltip; on the card it only ever showed as "· i…". */}
+          <span className="card-date-value num" title={`${date.end ? fmtRange(date.start, date.end, date.zone) : fmtDateTime(date.start, date.zone)}${date.note ? ` · ${date.note}` : ""}`}>{dateText(date.start, date.end, date.zone)}</span>
         </div>}
       </div>
       {card.work.length > 0 && <div className="card-tray">

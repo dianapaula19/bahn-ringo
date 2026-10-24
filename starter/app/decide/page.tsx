@@ -10,13 +10,14 @@ import posthog from "posthog-js"
 import type { OrderStory, Proposal, QueueItem, ReviewDecision } from "@/lib/contract"
 import { withBase } from "@/lib/base"
 import { relativeTo } from "@/lib/present/time"
+import { fieldLabel } from "@/lib/present/labels"
 import { inNow, nextAction } from "@/lib/triage/next-action"
 import { similarGroups, similarKey } from "@/lib/triage/similar"
 import { DESK, loadQueue, loadStory, reviewProposal } from "../_lib/agent-api"
 import { AppFrame } from "../components/app-frame"
 import { Icon } from "../components/icons"
-import { CAST, RingoFace } from "../components/ringo"
-import { ACTION, Ago, FactChip, factLizard } from "../components/ring/bits"
+import { CAST, RingoFace, RoleTag } from "../components/ringo"
+import { ACTION, Ago, FactChip, When, entryRole, factLizard } from "../components/ring/bits"
 import { DecisionPanel, heroContext, plain, type OrderDetail } from "../components/ring/story"
 import "./decide.css"
 
@@ -300,14 +301,23 @@ function DueTag({ item, now }: { item: QueueItem; now: string }) {
   return <span className={`chip${rel.past && urgent ? " tone-danger" : rel.past ? " tone-warn" : ""} num`}>{rel.past ? `Overdue ${rel.text.replace(/ ago$/, "")}` : <>Due <Ago at={item.decideBy} now={now} /></>}</span>
 }
 
-/** The facts that matter: triage's chips (max 3, the ones behind the card first), each with level, source and time. */
+/** The facts that matter: the last words of the driver, customer or site in the past 2 h (who is waiting
+ *  on what, in their own words), then triage's chips minus the one that repeats the headline. Each has its source and time. */
 function Facts({ story }: { story: OrderStory }) {
   const kinds = new Map(story.timeline.map((e) => [e.ref.id, e.actorKind]))
-  const chips = story.triage.chips
+  const chips = story.triage.chips.filter((f) => f.claim !== story.triage.why)
+  const since = Date.parse(story.now) - 2 * 3600_000
+  const voices = (["driver", "customer", "site"] as const)
+    .map((k) => story.timeline.filter((e) => e.actorKind === k && Date.parse(e.at) >= since).at(-1))
+    .filter((e) => !!e).sort((a, b) => b.at.localeCompare(a.at))
   return <section className="dk-facts" aria-labelledby="dk-facts-h">
     <h3 id="dk-facts-h">What matters</h3>
+    {voices.length > 0 && <ul className="fact-list dk-voices">{voices.map((e) => <li key={e.ref.id}>
+      <p>&ldquo;{e.text}&rdquo;</p>
+      <p className="fact-src"><RoleTag role={entryRole(e.actorKind)} />{e.actor}{e.channel ? ` · ${e.channel.replace(/_/g, " ")}` : ""} · <a href={withBase(`/orders/${story.orderId}#src-${e.ref.id}`)}><When at={e.at} now={story.now} /></a></p>
+    </li>)}</ul>}
     {chips.length ? <ul className="fact-list">{chips.map((f) => <li key={f.id}><FactChip fact={f} now={story.now} who={factLizard(f, kinds)} /></li>)}</ul>
-      : <p className="empty">No facts recorded on this order yet. The records behind the card are linked above.</p>}
+      : !voices.length && <p className="empty">No facts recorded on this order yet. The records behind the card are linked above.</p>}
   </section>
 }
 
@@ -331,7 +341,7 @@ function BatchView({ proposals, stories, byId, excluded, results, busy, onToggle
           <span className="dk-batch-body">
             <span className="dk-batch-ref"><span className="mono">{q?.reference ?? p.orderId}</span> · {q?.vehicle}</span>
             <span className="dk-batch-sum">{p.summary}</span>
-            <span className="dk-batch-pay">{Object.entries(p.proposedPayload).map(([k, v]) => <span key={k}><b>{k.replace(/[_.]/g, " ").replace(/^\w/, (c) => c.toUpperCase())}:</b> {plain(v)}</span>)}</span>
+            <span className="dk-batch-pay">{Object.entries(p.proposedPayload).map(([k, v]) => <span key={k}><b>{fieldLabel(k)}:</b> {plain(v)}</span>)}</span>
             {p.onApprove && <span className="dk-batch-then">If you accept: {p.onApprove}</span>}
             <Evidence proposal={p} story={stories[p.orderId]?.story} />
           </span>

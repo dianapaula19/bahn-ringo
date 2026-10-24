@@ -28,7 +28,7 @@ export function AppFrame({ children, section, snapshotAt, board = false }: { chi
   return <div className={`app${board ? " app-board" : ""}`}>
     <SkipLink />
     <aside className="sidebar">
-      <Link href="/" className="wordmark" aria-label="Ringo, Bahn control room: home"><RingoFace size={44} />Ringo</Link>
+      <Link href="/" className="wordmark" aria-label="Ringo, Bahn control room: home"><RingoFace size={44} /><span className="wordmark-text">Ringo</span></Link>
       <nav className="sidebar-nav" aria-label="Main navigation">
         {GROUPS.map((group) => <div className="nav-group" key={group.label}>
           <div className="nav-label">{group.label}</div>
