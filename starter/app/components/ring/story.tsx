@@ -397,7 +397,7 @@ export function FactsPanel({ story }: { story: OrderStory }) {
 
 // ---------------------------------------------------------------- timeline + calls
 
-const RECENT = 5
+const RECENT = 4
 
 export function Timeline({ story }: { story: OrderStory }) {
   const [all, setAll] = useState(false)

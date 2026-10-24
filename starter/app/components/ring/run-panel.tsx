@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 import posthog from "posthog-js"
 import type { CallRecord, CallTurn, OrderStory, RunDetail, RunEvent, RunOutcome, RunSummary, ToolName } from "@/lib/contract"
-import { fmtDateTime } from "@/lib/present/time"
+import { dayKey, fmtClock, fmtDateTime } from "@/lib/present/time"
 import { DESK, loadRun, runRing } from "../../_lib/agent-api"
 import { Icon } from "../icons"
 import { withBase } from "@/lib/base"
@@ -276,9 +276,9 @@ function RunSteps({ runs, now }: { runs: RunSummary[]; now: string }) {
   const { steps, total, thinking } = detail ? runSteps(detail.events, detail.run) : { steps: [], total: 0, thinking: 0 }
   const lead = <>{run === list[0] ? "Ringo last ran" : "Ringo ran"} <When at={run.startedAt} now={now} />{run.trigger === "replay" && " (a recorded run)"}</>
   const head = <div className="run-steps-head">
-    <p>{lead}{steps.length > 0 && <> · {steps.some((x) => x.sim) ? "cheap work first, then the call, then stop" : "read first; no call needed, so he stopped"} · {dur(total)} in all{thinking >= 1000 && <>, {dur(thinking)} of it thinking between steps</>}</>} · <TraceLink runId={run.id} /></p>
-    {list.length > 1 && <label className="run-pick"><span>Run</span><select value={run.id} onChange={(e) => setRunId(e.target.value)}>
-      {list.map((r, i) => <option key={r.id} value={r.id}>{i === 0 ? "Latest" : `Earlier ${i}`}: {fmtDateTime(r.startedAt, null, false)}{r.decision ? ` · ${OUTCOME[r.decision.outcome]}` : ""}</option>)}</select></label>}
+    <p>{lead}{steps.length > 0 && <> · {steps.some((x) => x.sim) ? "cheap work first, then the call, then stop" : "read first; no call needed, so he stopped"} · {dur(total)} in all{thinking >= 1000 && <> ({dur(thinking)} thinking between steps)</>}</>} · <TraceLink runId={run.id} />
+    {list.length > 1 && <label className="run-pick"><span className="sr-only">Show the steps of</span><select value={run.id} onChange={(e) => setRunId(e.target.value)}>
+      {list.map((r, i) => <option key={r.id} value={r.id}>{i === 0 ? "Latest run" : "Earlier run"} {dayKey(r.startedAt) === dayKey(now) ? fmtClock(r.startedAt) : fmtDateTime(r.startedAt, null, false)}{r.decision ? ` · ${OUTCOME[r.decision.outcome]}` : ""}</option>)}</select></label>}</p>
   </div>
   if (error || (detail && !steps.length)) return <div className="run-steps-wrap">{head}{error && <p className="empty">Could not load the steps of that run.</p>}</div>
   if (!detail) return <div className="run-steps-wrap">{head}<ol className="run-steps" aria-busy="true" aria-label="Loading the run's steps"><li className="run-step skel" /><li className="run-step skel" /><li className="run-step skel" /></ol></div>
