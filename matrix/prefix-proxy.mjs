@@ -20,7 +20,7 @@ next.on("exit", (code) => process.exit(code ?? 1))
 for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, () => next.kill(sig))
 
 const server = http.createServer((req, res) => {
-  const path = req.url.startsWith(prefix) ? req.url : prefix + (req.url === "/" ? "" : req.url)
+  const path = req.url.startsWith(prefix) ? req.url : prefix + req.url // keep "/" -> "/apps/<slug>/" (trailingSlash build)
   const up = http.request({ host: "127.0.0.1", port: inner, method: req.method, path, headers: req.headers }, (r) => {
     res.writeHead(r.statusCode ?? 502, r.headers)
     r.pipe(res)
@@ -30,6 +30,6 @@ const server = http.createServer((req, res) => {
 })
 
 // Open our port only once Next answers, so Matrix's health check never sees a half-started app.
-const ready = () => http.get({ host: "127.0.0.1", port: inner, path: prefix }, (r) => { r.resume(); server.listen(port, "127.0.0.1") })
+const ready = () => http.get({ host: "127.0.0.1", port: inner, path: prefix + "/" }, (r) => { r.resume(); server.listen(port, "127.0.0.1") })
   .on("error", () => setTimeout(ready, 300))
 ready()
