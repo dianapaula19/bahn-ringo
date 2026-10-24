@@ -5,11 +5,12 @@ import { Icon } from "./icons"
 import { RingoFace } from "./ringo"
 import { SkipLink } from "./ui"
 
-export type Section = "queue" | "trust" | "board" | "inbox" | "customers" | "drivers" | "sites" | "map"
+export type Section = "queue" | "decide" | "trust" | "board" | "inbox" | "customers" | "drivers" | "sites" | "map"
 
 const GROUPS: { label: string; links: { section: Section; href: string; label: string; icon: string }[] }[] = [
   { label: "Work", links: [
     { section: "queue", href: "/", label: "Needs you", icon: "alert" },
+    { section: "decide", href: "/decide", label: "Decide", icon: "work" },
     { section: "board", href: "/board", label: "All orders", icon: "car" },
     { section: "inbox", href: "/inbox", label: "Inbox", icon: "inbox" },
     { section: "trust", href: "/trust", label: "What Ringo may do", icon: "key" },

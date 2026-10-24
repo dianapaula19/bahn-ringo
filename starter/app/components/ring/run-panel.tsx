@@ -12,7 +12,7 @@ import { CallView } from "./story"
 
 const DOING: Record<ToolName, string> = {
   read_order: "Reading the order", read_messages: "Reading messages and calls", read_docs: "Reading documents and site rules",
-  record_fact: "Writing down what it learned", place_call: "Calling the site", call_input: "On the call",
+  record_fact: "Writing down what he learned", place_call: "Calling the site", call_input: "On the call",
   send_driver_message: "Messaging the driver", propose_action: "Drafting a proposal", schedule_callback: "Scheduling a callback", stop_with_decision: "Wrapping up",
 }
 
@@ -53,7 +53,11 @@ function fold(lines: Line[], e: RunEvent): Line[] {
   }
 }
 
-export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => void }) {
+/** `heroRun`: the hero above shows the page's one "Run Ringo" button, so this panel hides its own; each new
+ *  `runRequest` (a counter the hero bumps) starts a run here. `onRunning` tells the hero while a run is live. */
+export function RunPanel({ story, onDone, heroRun = false, runRequest = 0, onRunning }: {
+  story: OrderStory; onDone: () => void; heroRun?: boolean; runRequest?: number; onRunning?: (running: boolean) => void
+}) {
   const [lines, setLines] = useState<Line[]>([])
   const [running, setRunning] = useState(false)
   const [replaying, setReplaying] = useState(false)
@@ -63,6 +67,15 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
   const end = useRef<HTMLLIElement | null>(null)
 
   useEffect(() => () => abort.current?.abort(), [])
+  useEffect(() => { onRunning?.(running) }, [running, onRunning])
+  const panel = useRef<HTMLElement | null>(null)
+  const asked = useRef(runRequest)
+  useEffect(() => {
+    if (runRequest === asked.current) return
+    asked.current = runRequest
+    panel.current?.scrollIntoView({ block: "start", behavior: "smooth" })
+    if (!running) start("operator")
+  })
   useEffect(() => { end.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }) }, [lines.length])
   // Escape stops watching a run or replay (the run itself still finishes on the server).
   useEffect(() => {
@@ -106,12 +119,12 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
   // The run ended with something for a person to review.
   const proposed = !running && lines.some((l) => l.kind === "event" && l.event.type === "proposal")
 
-  return <section className="ring-panel" aria-labelledby="ring-h">
+  return <section className="ring-panel" aria-labelledby="ring-h" ref={panel}>
     <div className="sec-head"><RingoFace size={40} /><h2 id="ring-h">Ringo</h2>
       <span className="note">Reads first, then rings the site or asks the driver. Never the customer.</span></div>
     <div className="ring-controls">
-      <button type="button" className="btn primary" disabled={running || busyElsewhere} onClick={() => start("operator")}><Icon name="bot" size={15} /> {running && replaying ? "Replaying…" : running || busyElsewhere ? "Ringo is working…" : "Run Ringo"}</button>
-      <button type="button" className="btn" disabled={running} onClick={() => start("replay")}>Watch a recorded run</button>
+      {!heroRun && <button type="button" className="btn primary" disabled={running || busyElsewhere} onClick={() => start("operator")}><Icon name="bot" size={15} /> {running && replaying ? "Replaying…" : running || busyElsewhere ? "Ringo is working…" : "Run Ringo"}</button>}
+      <button type="button" className="btn" disabled={running} onClick={() => start("replay")}>{running && replaying ? "Replaying…" : "Watch a recorded run"}</button>
       {running && <button type="button" className="btn" onClick={stop}>Stop watching</button>}
     </div>
     <form className="ring-chat" onSubmit={(e) => { e.preventDefault(); const t = message.trim(); if (t && !running && !busyElsewhere) { setMessage(""); start("operator", t) } }}>
@@ -122,7 +135,7 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
     </form>
 
     {offline && <p className="result tone-warn" role="status">Ringo is offline right now (no model key). You can still watch a recorded run. <button type="button" className="link-btn" onClick={() => start("replay")}>Replay</button></p>}
-    {lines.length === 0 && busyElsewhere && <p className="empty" role="status">Ringo is working on this order now (started <When at={last.startedAt} now={story.now} />). Reload in a moment to see what it found.</p>}
+    {lines.length === 0 && busyElsewhere && <p className="empty" role="status">Ringo is working on this order now (started <When at={last.startedAt} now={story.now} />). Reload in a moment to see what he found.</p>}
     {lines.length === 0 && !running && !busyElsewhere && !offline && <p className="empty">{last ? <>Ringo last ran <When at={last.startedAt} now={story.now} />{last.decision ? <>: {last.decision.headline}</> : null}</> : "Ringo has not run on this order yet."}</p>}
     {lines.length === 0 && running && <ul className="steps" aria-busy="true"><li className="step-line pending"><span className="spin" />Starting…</li></ul>}
     {lines.length > 0 && <ul className="steps" aria-live="polite">
@@ -153,7 +166,7 @@ function LineView({ line: l, now, live, acted }: { line: Line; now: string; live
       const tech = e.message.startsWith("Ringo stopped: ") ? e.message.slice(15) : null
       if (!tech) return <p className="tone-danger"><Icon name="alert" size={14} />{e.message}</p>
       return <div className="run-failed"><p className="tone-danger"><Icon name="alert" size={14} />
-        {tech.startsWith("Model error") ? "Ringo couldn't reach its model." : "Ringo hit a problem and stopped."} {acted ? "What it did before that is listed above." : "Nothing changed."} Try again or work it by hand.</p>
+        {tech.startsWith("Model error") ? "Ringo couldn't reach his model." : "Ringo hit a problem and stopped."} {acted ? "What he did before that is listed above." : "Nothing changed."} Try again or work it by hand.</p>
         <details className="more"><summary><Icon name="chevron" size={12} />Technical details</summary><p className="tech">{tech}</p></details></div>
     }
     default: return null

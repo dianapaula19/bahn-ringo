@@ -6,14 +6,12 @@ import type { OrderStory } from "@/lib/contract"
 import { loadStory } from "../../_lib/agent-api"
 import { AppFrame } from "../../components/app-frame"
 import { Icon } from "../../components/icons"
-import type { Detail } from "../../components/order-detail"
+import type { OrderDetail } from "../../components/ring/story"
 import { When } from "../../components/ring/bits"
 import { RunPanel } from "../../components/ring/run-panel"
-import { DecisionPanel, FactsPanel, Timeline, type HeroContext } from "../../components/ring/story"
+import { DecisionPanel, FactsPanel, Timeline, heroCanRun, heroContext } from "../../components/ring/story"
 import { withBase } from "@/lib/base"
 
-// The order API also returns the assigned drivers; RecordView does not carry them.
-type OrderDetail = Detail & { drivers?: { id: string; displayName: string }[] }
 
 export default function OrderStoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -35,11 +33,9 @@ export default function OrderStoryPage({ params }: { params: Promise<{ id: strin
   const h = detail?.view.header
   const reference = story?.reference ?? h?.reference ?? null
   useEffect(() => { if (reference) document.title = `${reference} · ${h?.vehicle?.title ?? "Order"} · Ringo` }, [reference, h])
-  const ctx = useMemo<HeroContext | null>(() => detail && {
-    customer: h ? { id: h.customer.id, name: h.customer.name } : null,
-    driver: detail.drivers?.[0] ? { id: detail.drivers[0].id, name: detail.drivers[0].displayName } : null,
-    tasks: detail.view.workItems.filter((w) => w.status === "OPEN" || w.status === "NEEDS_EXTERNAL_INPUT").map((w) => ({ id: w.id, nextAction: w.nextAction, dueAt: w.dueAt })),
-  }, [detail, h])
+  const ctx = useMemo(() => heroContext(detail), [detail])
+  const [runRequest, setRunRequest] = useState(0)
+  const [running, setRunning] = useState(false)
   const callbacks = story?.callbacks.filter((j) => j.status === "scheduled") ?? []
 
   return <AppFrame section="queue" snapshotAt={detail?.view.snapshotAt ?? null}><main className="page story-page">
@@ -53,9 +49,9 @@ export default function OrderStoryPage({ params }: { params: Promise<{ id: strin
         {h && <p className="story-meta">{h.customer.name} · {h.from.city} <Icon name="arrow" size={13} /> {h.to.city}
           <Link className="link-quiet" href={`/orders/${id}/record`}>Full record</Link></p>}
       </header>
-      <DecisionPanel story={story} ctx={ctx} onChanged={() => refresh()} />
+      <DecisionPanel story={story} ctx={ctx} onChanged={() => refresh()} onRun={() => setRunRequest((n) => n + 1)} running={running} />
       {callbacks.length > 0 && <p className="callbacks"><Icon name="waiting" size={14} />{callbacks.map((j) => <span key={j.id}>Ringo calls back <When at={j.dueAt} now={story.now} />: {j.reason}</span>)}</p>}
-      <div id="ringo"><RunPanel story={story} onDone={() => refresh()} /></div>
+      <div id="ringo"><RunPanel story={story} onDone={() => refresh()} heroRun={heroCanRun(story) || running} runRequest={runRequest} onRunning={setRunning} /></div>
       <FactsPanel story={story} />
       <Timeline story={story} />
     </>}
