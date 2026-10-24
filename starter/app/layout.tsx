@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Car Delivery Control Room starter",
-  description: "A fictional operations dataset and a simple read-only starting point.",
+  title: "Ring — Bahn control room",
+  description: "The orders that need a person, and why. Ring checks pickup readiness by phone. Fictional data; calls and drivers are simulated.",
 }
 
 export const viewport: Viewport = { themeColor: "#fffef7", width: "device-width", initialScale: 1 }

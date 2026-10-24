@@ -74,7 +74,7 @@ export default function NeedsYou() {
       <Icon name="check" size={22} />
       <div><p className="calm-title">Nothing needs you.</p><p className="calm-sub">{moving} orders moving. We will show an order here the moment a person is needed.</p></div>
     </div>}
-    {queue && queue.needsYou.length > 0 && <Rows items={queue.needsYou} now={queue.now} label="Orders that need a person" />}
+    {queue && queue.needsYou.length > 0 && <NeedsYouGroups items={queue.needsYou} now={queue.now} />}
 
     {queue && <section className="sec" aria-labelledby="ring-h">
       <div className="sec-head"><h2 id="ring-h">Ring is on it</h2><span className="count num">{queue.ring.length || ""}</span>
@@ -92,7 +92,17 @@ export default function NeedsYou() {
   </main></AppFrame>
 }
 
-function Rows({ items, now, label }: { items: QueueItem[]; now: string; label: string }) {
+// Most urgent first: safety and high-severity cards on top, routine follow-ups below. Rank order is kept inside each group.
+function NeedsYouGroups({ items, now }: { items: QueueItem[]; now: string }) {
+  const urgent = items.filter((q) => q.severity === "critical" || q.severity === "high")
+  const later = items.filter((q) => !urgent.includes(q))
+  return <>
+    {urgent.length > 0 && <><h2 className="q-group">Now · {urgent.length}</h2><Rows items={urgent} now={now} label="Orders that need a person now" person /></>}
+    {later.length > 0 && <><h2 className="q-group">When you can · {later.length}</h2><Rows items={later} now={now} label="Routine follow-ups" person /></>}
+  </>
+}
+
+function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: string; label: string; person?: boolean }) {
   const [shown, setShown] = useState(PAGE)
   return <>
     <ul className="q-list" aria-label={label}>
@@ -101,9 +111,9 @@ function Rows({ items, now, label }: { items: QueueItem[]; now: string; label: s
         return <li key={q.orderId}><Link data-row className={`q-row sev-${q.severity}`} href={`/orders/${q.orderId}`}>
           <span className="q-sev" aria-label={`Severity ${q.severity}`} />
           <span className="q-id"><span className="mono q-ref">{q.reference}</span><span className="q-vehicle">{q.vehicle}</span></span>
-          <span className="q-why">{q.why}</span>
-          <span className={`q-status tone-${status.tone}`}>{status.text}</span>
-          <Due at={q.decideBy} now={now} />
+          <span className="q-why" title={q.why}>{q.why}</span>
+          <span className={`q-status${status.tone === "accent" ? " tone-accent" : ""}`}>{status.text}</span>
+          <Due at={q.decideBy} now={now} person={person} />
         </Link></li>
       })}
     </ul>
@@ -111,10 +121,11 @@ function Rows({ items, now, label }: { items: QueueItem[]; now: string; label: s
   </>
 }
 
-function Due({ at, now }: { at: string | null; now: string }) {
+// Only an overdue card that needs a person is red; Ring's and waiting rows stay calm.
+function Due({ at, now, person }: { at: string | null; now: string; person: boolean }) {
   const rel = relativeTo(at, now)
   if (!at || !rel) return <span className="q-due" />
-  return <span className={`q-due${rel.past ? " tone-danger" : ""}`}>{rel.past ? <>Overdue by {rel.text.replace(/ ago$/, "")}</> : <>Decide <Ago at={at} now={now} /></>}</span>
+  return <span className={`q-due${rel.past && person ? " tone-danger" : ""}`}>{rel.past ? <>Overdue by {rel.text.replace(/ ago$/, "")}</> : <>Decide <Ago at={at} now={now} /></>}</span>
 }
 
 function HandoverStrip({ now }: { now: string | null }) {

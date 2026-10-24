@@ -30,7 +30,7 @@ export default function OrderStoryPage({ params }: { params: Promise<{ id: strin
 
   const h = detail?.view.header
   const reference = story?.reference ?? h?.reference ?? null
-  useEffect(() => { if (reference) document.title = `${reference} · ${h?.vehicle?.title ?? "Order"} · Control Room` }, [reference, h])
+  useEffect(() => { if (reference) document.title = `${reference} · ${h?.vehicle?.title ?? "Order"} · Ring` }, [reference, h])
   const callbacks = story?.callbacks.filter((j) => j.status === "scheduled") ?? []
 
   return <AppFrame section="queue" snapshotAt={detail?.view.snapshotAt ?? null}><main className="page story-page">

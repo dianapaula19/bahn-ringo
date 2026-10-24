@@ -48,13 +48,13 @@ export default function TrustPage() {
             <p className="trust-name">{ACTION[r.actionType]}{r.locked && <span className="chip tone-neutral" title={r.lockedReason ?? "Locked"}><Icon name="key" size={12} />Locked</span>}</p>
             <p className="trust-sub">{r.locked ? (r.lockedReason ?? "Always needs a person.")
               : g.mode === "ask" ? (r.promotable ? "Clean record: ready to hand over to Ring." : "Needs five accepted-as-is reviews in a row before Ring can do it alone.")
-              : <>Set <When at={r.updatedAt} now={ledger.now} /></>}</p>
+              : r.updatedAt === ledger.now ? "Default setting." : <>Set <When at={r.updatedAt} now={ledger.now} /></>}</p>
           </div>
-          <dl className="trust-counts">
+          {r.approvedUnchanged + r.edited + r.rejected === 0 ? <span className="trust-none">No reviews yet</span> : <dl className="trust-counts">
             <div><dt>Accepted as is</dt><dd className="num">{r.approvedUnchanged}</dd></div>
             <div><dt>Edited</dt><dd className="num">{r.edited}</dd></div>
             <div><dt>Rejected</dt><dd className="num">{r.rejected}</dd></div>
-          </dl>
+          </dl>}
           <div className="trust-act">
             {!r.locked && r.mode === "ask" && r.promotable && <button type="button" className="btn primary" disabled={busy === r.actionType} onClick={() => change(r, "auto")}>Let Ring do it</button>}
             {!r.locked && r.mode === "auto" && <button type="button" className="btn" disabled={busy === r.actionType} onClick={() => change(r, "ask")}>Ask me first</button>}

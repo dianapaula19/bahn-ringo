@@ -38,14 +38,14 @@ export const MODE: Record<TrustMode, { label: string; tone: Tone }> = {
 }
 
 const STATUS: Record<TriageReason, { text: string; tone: Tone }> = {
-  SAFETY: { text: "A person owns this", tone: "danger" },
-  FAILED_ACTION: { text: "Something failed, check before retrying", tone: "danger" },
-  AUTHORITY_BLOCKED: { text: "Ring stopped: only the customer can clear it", tone: "warn" },
-  DECISION_WAITING: { text: "Ring is waiting for your decision", tone: "accent" },
-  RECORDED_PROPOSAL: { text: "A recorded proposal waits for review", tone: "warn" },
+  SAFETY: { text: "Safety: a person owns it", tone: "danger" },
+  FAILED_ACTION: { text: "Failed: check first", tone: "danger" },
+  AUTHORITY_BLOCKED: { text: "Customer must clear it", tone: "warn" },
+  DECISION_WAITING: { text: "Ring needs your decision", tone: "accent" },
+  RECORDED_PROPOSAL: { text: "Proposal to review", tone: "warn" },
   DRIVER_WAITING: { text: "Driver is waiting", tone: "warn" },
-  CUSTOMER_CONTACT: { text: "Needs a person to contact the customer", tone: "warn" },
-  DUE_SOON: { text: "Due soon, Ring can't do it", tone: "warn" },
+  CUSTOMER_CONTACT: { text: "Customer contact needed", tone: "warn" },
+  DUE_SOON: { text: "A person must act", tone: "warn" },
   RING_CAN_CALL: { text: "Ring can call", tone: "accent" },
   RING_WORKING: { text: "Ring is working", tone: "accent" },
   WAITING_EXTERNAL: { text: "Waiting on a reply", tone: "neutral" },
