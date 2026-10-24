@@ -1,16 +1,21 @@
 // Self-checks for triage, the Reviewer gate and the evidence ladder (node:test).
 //   npm run ring:check      (needs the seeded DB on :5438; Ring rows are ignored)
 import assert from "node:assert/strict"
+import { randomUUID } from "node:crypto"
 import { after, before, describe, test } from "node:test"
 import type { Fact } from "@/lib/contract"
+import { inArray, or } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { RULES, type GateContext } from "@/lib/agent/caselaw"
-import { SNAPSHOT } from "@/lib/agent/clock"
+import { SNAPSHOT, simNow } from "@/lib/agent/clock"
 import { checkFact, type SourceInfo } from "@/lib/agent/facts"
 import { checkSpeech, runGate } from "@/lib/agent/gate"
+import { propose, review, type ProposeInput } from "@/lib/agent/proposals"
 import { triageAll } from "@/lib/agent/story"
 import { emptyRing, type RingOrderState } from "@/lib/agent/store"
 import type { Bundle } from "@/lib/present/bundle"
+import { loadOrder } from "@/lib/present/load"
+import { ringEvents, ringProposals } from "@/lib/ring-schema"
 import { ringEligibility, triage } from "./triage"
 
 const NOW = SNAPSHOT
@@ -43,6 +48,12 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     }
   })
   test("009 missing identity needs a person to contact the customer", () => assert.equal(t("ord-00009").reason, "CUSTOMER_CONTACT"))
+  test("a driver row quotes the driver's own ask; an acknowledgement needs no answer", () => {
+    const r = t("ord-00413")
+    assert.equal(r.reason, "DRIVER_WAITING"); assert.match(r.why, /who confirms Tuesday's keys/)
+    assert.notEqual(t("ord-00419").reason, "DRIVER_WAITING") // "Understood ... no cost to submit" on a cancelled collection
+  })
+  test("a high alert nobody has acknowledged needs a person", () => assert.equal(t("ord-00702").bucket, "needs_you"))
   test("every non-quiet result names its source rows", () => {
     for (const id of bundles.keys()) { const r = t(id); if (r.bucket !== "quiet") assert.ok(r.sources.length > 0, id) }
   })
@@ -104,5 +115,40 @@ describe("evidence ladder", () => {
     const ok = checkFact("ord-1", refute, msg("site_contact", "2026-10-21T08:24:00Z"), [old])
     assert.ok("fact" in ok && ok.old?.level === "refuted")
     assert.ok("error" in checkFact("ord-1", refute, msg("site_contact", "2026-10-18T08:24:00Z"), [old]))
+  })
+})
+
+// CL-00 recheck before write. Uses a quiet order and removes its own rows afterwards.
+describe("recheck before write", () => {
+  const ORDER = "ord-00004"
+  const made: string[] = []
+  after(async () => {
+    if (!made.length) return
+    await db.delete(ringEvents).where(or(inArray(ringEvents.proposalId, made), inArray(ringEvents.id, made)))
+    await db.delete(ringProposals).where(inArray(ringProposals.id, made))
+  })
+  const input = (actionType: ProposeInput["actionType"]): ProposeInput => ({ command: actionType, actionType, targetType: "order", targetId: ORDER,
+    payload: { note: "self-check" }, rationale: "self-check", summary: "self-check", evidenceRefs: [], onApprove: "Done.", onReject: "Nothing changes." })
+  async function make(runId: string, actionType: ProposeInput["actionType"]) {
+    const r = await propose((await loadOrder(ORDER))!.bundle, runId, input(actionType))
+    assert.ok("proposal" in r, JSON.stringify(r)); made.push(r.proposal.id); return r.proposal.id
+  }
+  async function approve(id: string) {
+    const { body } = await review(id, { decision: "APPROVED", note: null, reviewerId: "ops-readiness" })
+    assert.ok("execution" in body, JSON.stringify(body)); return body.execution?.status
+  }
+
+  test("approving two sibling proposals from one run executes both (no false STALE)", async () => {
+    const run = `run-check-${randomUUID()}`
+    const first = await make(run, "pickup.hold"), second = await make(run, "slot.change")
+    assert.equal(await approve(first), "SUCCEEDED")
+    assert.equal(await approve(second), "SUCCEEDED")
+  })
+  test("any other newer event still makes the approval STALE", async () => {
+    const id = await make(`run-check-${randomUUID()}`, "pickup.hold")
+    const evt = `revt-check-${randomUUID()}`; made.push(evt)
+    await db.insert(ringEvents).values({ id: evt, orderId: ORDER, at: new Date(Date.parse(await simNow()) + 60_000).toISOString(), command: "self_check.newer",
+      actorType: "operator", actorId: "self-check", proposalId: null, changes: {}, sourceRefs: [] })
+    assert.equal(await approve(id), "STALE")
   })
 })
