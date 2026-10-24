@@ -5,6 +5,7 @@ import type {
 
 import { withBase } from "@/lib/base"
 import type { LearnedDecision, LearnedDecisionResponse, LearnedResponse, ReviewWithSuggestion } from "@/lib/agent/learn/types"
+import type { Claim } from "@/lib/triage/claim"
 
 export const DESK: Desk = "ops-readiness"
 
@@ -35,6 +36,14 @@ export const loadHandover = (since: string | null, signal?: AbortSignal) =>
 
 export const reviewProposal = (id: string, req: ReviewRequest) =>
   post<ReviewWithSuggestion>(`/api/agent/proposals/${encodeURIComponent(id)}/review`, req)
+
+export const claimOrder = (orderId: string, note: string, minutes: number) =>
+  post<{ claim: Claim } | { error: string }>(`/api/agent/orders/${encodeURIComponent(orderId)}/claim`, { by: DESK, note, minutes })
+export async function releaseClaim(orderId: string): Promise<boolean> {
+  try { return (await fetch(withBase(`/api/agent/orders/${encodeURIComponent(orderId)}/claim`), { method: "DELETE" })).ok } catch { return false }
+}
+export const recordRecovery = (orderId: string, choice: "roadside" | "tow", note: string) =>
+  post<{ then: string } | { error: string }>(`/api/agent/orders/${encodeURIComponent(orderId)}/recovery`, { choice, note, operatorId: DESK })
 
 export const loadLearned = (signal?: AbortSignal) => get<LearnedResponse>("/api/agent/learned", signal)
 export const decideLearned = (id: string, action: LearnedDecision["action"], text?: string) =>

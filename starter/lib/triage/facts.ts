@@ -1,6 +1,6 @@
 // Dataset facts: derived from structured rows only (CONTRACT §3). Facts read
 // from message text come only from Ringo's record_fact.
-import type { EvidenceLevel, Fact } from "@/lib/contract"
+import type { EvidenceLevel, Fact, Triage } from "@/lib/contract"
 import { effectiveLevel } from "@/lib/agent/facts"
 import type { RingOrderState } from "@/lib/agent/store"
 import { rows, str, type Bundle } from "@/lib/present/bundle"
@@ -11,8 +11,18 @@ const STATED_BY: Record<string, string> = {
   MANAGED_SITE_PROFILE: "Site profile", SITE_CONTACT: "Site contact", CUSTOMER_ORDER_INPUT: "Customer order input",
 }
 const iso = (v: unknown) => (typeof v === "string" ? new Date(v).toISOString() : null)
+const PRE_PICKUP = ["NEW", "WAITING_FOR_PICKUP"]
 
-export function datasetFacts(bundle: Bundle): Fact[] {
+/** The record's own status word ("Contact confirmed") under a fact, unless it claims more than the fact's level:
+ *  a "confirmed" line under a claimed or quoted fact reads as a contradiction, so it is left out. */
+function statusNote(what: string, status: unknown, level: EvidenceLevel): string | null {
+  const st = String(status ?? "").toLowerCase().replace(/_/g, " ")
+  if (!st) return null
+  if (/\b(confirmed|verified)\b/.test(st) && !/\bun/.test(st) && level !== "observed" && level !== "verified") return null
+  return `${what} ${st}`
+}
+
+export function datasetFacts(bundle: Bundle, now?: string): Fact[] {
   const out: Fact[] = []
   const add = (sourceId: string, subject: string, claim: string, level: EvidenceLevel, sourceKind: Fact["sourceKind"], at: string | null, by: string, note: string | null = null) => {
     if (!at) return
@@ -27,8 +37,8 @@ export function datasetFacts(bundle: Bundle): Fact[] {
     const contact = str(d.contact_name)
       ? `${side === "pickup" ? "Pickup" : "Delivery"} contact is ${d.contact_name} (${d.contact_role ?? "contact"})${d.contact_handle ? "" : ", no direct handle on file"}.`
       : `No named ${side} contact is on file.`
-    add(ep.id, `${side}.contact`, contact, level, "endpoint_detail", at, by, `Contact ${String(d.contact_status ?? "").toLowerCase()}`)
-    if (str(d.access_instruction)) add(ep.id, `${side}.access_route`, String(d.access_instruction), level, "endpoint_detail", at, by, `Access ${String(d.access_status ?? "").toLowerCase().replace(/_/g, " ")}`)
+    add(ep.id, `${side}.contact`, contact, level, "endpoint_detail", at, by, statusNote("Contact", d.contact_status, level))
+    if (str(d.access_instruction)) add(ep.id, `${side}.access_route`, String(d.access_instruction), level, "endpoint_detail", at, by, statusNote("Access", d.access_status, level))
   }
   for (const c of rows(bundle, "endpoint_claims")) {
     const d = c.details
@@ -40,7 +50,10 @@ export function datasetFacts(bundle: Bundle): Fact[] {
     if (d.is_selected !== true) continue
     const subject = d.purpose === "SELECTED_PICKUP_SLOT" ? "pickup.slot" : d.purpose === "CUSTOMER_DELIVERY_PROMISE" ? "delivery.promise" : `window.${String(d.purpose).toLowerCase()}`
     const what = d.purpose === "CUSTOMER_DELIVERY_PROMISE" ? "Delivery promise" : "Selected pickup slot"
-    add(w.id, subject, `${what}: ${fmtRange(str(d.start_at), str(d.end_at), str(d.timezone))}.`, "reserved", "time_window", iso(d.stated_at) ?? iso(bundle.order.createdAt), d.source === "CUSTOMER" ? "Customer" : "Operations")
+    // A window that has ended is history, not a reservation: the pickup is done, or the slot went by.
+    const past = !!now && str(d.end_at) && Date.parse(String(d.end_at)) < Date.parse(now)
+    const gone = subject === "pickup.slot" ? (PRE_PICKUP.includes(bundle.order.status) ? "Slot has passed" : "Pickup done") : "Window has passed"
+    add(w.id, subject, `${what}: ${fmtRange(str(d.start_at), str(d.end_at), str(d.timezone))}.`, past ? "stale" : "reserved", "time_window", iso(d.stated_at) ?? iso(bundle.order.createdAt), d.source === "CUSTOMER" ? "Customer" : "Operations", past ? gone : null)
   }
   for (const a of rows(bundle, "work_assignments")) {
     const d = a.details
@@ -77,9 +90,24 @@ function alertNote(severity: string, status: string, owner: string | null): stri
 
 /** Dataset + ring facts for one order, with supersession and ageing applied at `now`. */
 export function orderFacts(bundle: Bundle, ring: RingOrderState, now: string): Fact[] {
-  const ds = datasetFacts(bundle).map((f) => {
+  // An alert that an approved Ringo change answered is no longer the current story (its row stays open in the dataset).
+  // An approved access record answers the "site access unconfirmed" alert even when the proposal did not name it.
+  const done = ring.proposals.filter((p) => p.status === "EXECUTED")
+  const settled = new Set([...done.flatMap((p) => (p.alertId ? [p.alertId] : [])),
+    ...(done.some((p) => p.actionType === "endpoint.record_access") ? bundle.alerts.filter((a) => a.signal === "SITE_ACCESS_UNCONFIRMED").map((a) => a.id) : [])])
+  const ds = datasetFacts(bundle, now).map((f) => {
     const s = ring.datasetSupersede[f.id]
-    return s ? { ...f, level: s.level, supersededByFactId: s.factId } : f
+    if (s) return { ...f, level: s.level, supersededByFactId: s.factId }
+    return f.sourceKind === "alert" && settled.has(f.sourceId) ? { ...f, level: "stale" as const, note: "Answered by the approved change" } : f
   })
   return [...ds, ...ring.facts].map((f) => ({ ...f, level: effectiveLevel(f, now) }))
+}
+
+/** "What we know" in decision order: facts behind the card's reason first, then open alerts, then facts for the
+ *  order's stage (pickup before collection, the road and delivery after), then the rest. Newest first inside each. */
+export function rankFacts(facts: Fact[], t: Pick<Triage, "sources">, status: string): Fact[] {
+  const behind = new Set(t.sources.map((s) => s.id))
+  const stage = PRE_PICKUP.includes(status) ? /^(pickup|claim|driver)\./ : /^(car|delivery|driver|proof)\./
+  const tier = (f: Fact) => (behind.has(f.sourceId) ? 0 : f.subject.startsWith("alert.") ? 1 : stage.test(f.subject) ? 2 : 3)
+  return [...facts].sort((x, y) => tier(x) - tier(y) || y.at.localeCompare(x.at))
 }

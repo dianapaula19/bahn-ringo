@@ -31,6 +31,8 @@ const VERDICT = {
 const rank = (r: Result) => (r.verdict === "fail" ? 0 : r.verdict === "void" ? 1 : 2) * 2 + Number(r.scenarioId.startsWith("happy"))
 const ORDER = (a: Result, b: Result) => rank(a) - rank(b) || a.title.localeCompare(b.title)
 const scored = (r: Run) => r.passed + r.failed
+const REPEAT = 3
+type Repeat = { passed: number; runs: number; misses: string[] }
 
 /** The latest leave-one-out report scripts/eval-reviewer.ts wrote (eval/gate-leave_one_out-*.json). */
 async function gateScore(): Promise<EvalReport | null> {
@@ -54,13 +56,23 @@ async function load() {
   const rerun = new Map<string, { verdict: string; at: string; note: string | null }>()
   if (later.length) for (const x of (await db.select().from(ringEvalResults).where(inArray(ringEvalResults.evalRunId, later.map((r) => r.id)))).sort((a, b) => a.at.localeCompare(b.at)))
     rerun.set(x.scenarioId, { verdict: x.verdict, at: x.at, note: later.find((r) => r.id === x.evalRunId)?.note ?? null })
+  // The same ten scenarios run again: k of n per scenario over the last REPEAT full runs, misses kept.
+  const recent = runs.filter((r) => r.status === "done" && scored(r) > 0).slice(0, REPEAT)
+  const repeat = new Map<string, Repeat>()
+  if (recent.length) for (const x of await db.select().from(ringEvalResults).where(inArray(ringEvalResults.evalRunId, recent.map((r) => r.id)))) {
+    if (x.verdict === "void") continue
+    const k = repeat.get(x.scenarioId) ?? { passed: 0, runs: 0, misses: [] }
+    k.runs++; if (x.verdict === "pass") k.passed++; else k.misses.push(...(x.reasons as string[]))
+    repeat.set(x.scenarioId, k)
+  }
   const refs = results.length ? await db.select({ id: orders.id, reference: orders.reference }).from(orders).where(inArray(orders.id, results.map((r) => r.orderId))) : []
-  return { runs, latest, results, refs: new Map(refs.map((o) => [o.id, o.reference])), running: all[0]?.status === "running" ? all[0] : null, partial: all.length - runs.length, rerun, gate: await gateScore() }
+  return { runs, latest, results, refs: new Map(refs.map((o) => [o.id, o.reference])), running: all[0]?.status === "running" ? all[0] : null, partial: all.length - runs.length, rerun, gate: await gateScore(), recent, repeat }
 }
 
 export default async function EvalsPage() {
-  const { runs, latest, results, refs, running, partial, rerun, gate } = await load()
-  const history = runs.filter((r) => r.status === "done" && scored(r) > 0).reverse()
+  const { latest, results, refs, running, partial, rerun, gate, recent, repeat } = await load()
+  const sum = recent.reduce((a, r) => ({ passed: a.passed + r.passed, scored: a.scored + scored(r) }), { passed: 0, scored: 0 })
+  const steady = [...repeat.values()].filter((k) => k.passed === k.runs).length
   return <AppFrame><main className="page">
     <div className="trust-intro"><RingoFace size={64} /><div>
       <h1 className="page-title small">How we test Ringo</h1>
@@ -77,9 +89,9 @@ export default async function EvalsPage() {
           <p className="tile-hint">{fmtDateTime(latest.endedAt ?? latest.startedAt, ZONE)}{latest.voided ? ` · ${latest.voided} didn't play out, not counted` : ""}</p>
         </div>
         <div className="tile">
-          <p className="tile-label">Pass rate, run by run</p>
-          <Spark runs={history} />
-          <p className="tile-hint">{history.length === 1 ? "One full run so far." : `Last ${history.length} full runs.`}{partial ? ` ${partial} partial ${partial === 1 ? "run" : "runs"} left out.` : ""}</p>
+          <p className="tile-label">Same suite, run {recent.length === 1 ? "once" : `${recent.length} times`}</p>
+          <p className="ev-big num">{sum.passed}<span> of {sum.scored} passed</span></p>
+          <p className="tile-hint">{steady} of {repeat.size} scenarios passed every time. One run is one sample: the model can choose differently on the same case.{partial ? ` ${partial} partial ${partial === 1 ? "run" : "runs"} left out.` : ""}</p>
         </div>
         <div className="tile">
           <p className="tile-label">Reviewer gate, honest score</p>
@@ -93,7 +105,7 @@ export default async function EvalsPage() {
       <section className="sec" aria-labelledby="ev-results">
         <div className="sec-head"><h2 id="ev-results">Scenario by scenario</h2><span className="count num">{results.length}</span>
           <span className="note">{latest.note ? `${latest.note} · ` : ""}model {latest.model}</span></div>
-        {results.length === 0 ? <p className="empty">This run has no results.</p> : <ul className="ev-cards">{results.map((r) => <Card key={r.id} r={r} reference={refs.get(r.orderId) ?? r.orderId} rerun={rerun.get(r.scenarioId)} />)}</ul>}
+        {results.length === 0 ? <p className="empty">This run has no results.</p> : <ul className="ev-cards">{results.map((r) => <Card key={r.id} r={r} reference={refs.get(r.orderId) ?? r.orderId} rerun={rerun.get(r.scenarioId)} repeat={recent.length > 1 ? repeat.get(r.scenarioId) : undefined} />)}</ul>}
       </section>
     </>}
 
@@ -104,7 +116,7 @@ export default async function EvalsPage() {
   </main></AppFrame>
 }
 
-function Card({ r, reference, rerun }: { r: Result; reference: string; rerun?: { verdict: string; at: string; note: string | null } }) {
+function Card({ r, reference, rerun, repeat }: { r: Result; reference: string; rerun?: { verdict: string; at: string; note: string | null }; repeat?: Repeat }) {
   const v = VERDICT[r.verdict as keyof typeof VERDICT] ?? VERDICT.void
   const checks = r.checks as CheckRow[]
   const reasons = r.reasons as string[]
@@ -113,7 +125,9 @@ function Card({ r, reference, rerun }: { r: Result; reference: string; rerun?: {
       <h3>{r.title}</h3>
       <span className={`chip ${v.tone}`}><span className="chip-dot" />{v.label}</span>
     </div>
-    <p className="ev-meta">{r.scenarioId.startsWith("happy") ? "Everyday case" : "Red team"} · <Link className="ref-link" href={`/orders/${r.orderId}`}>{reference}</Link> · {Math.max(1, Math.round(r.durationMs / 1000))} s</p>
+    <p className="ev-meta">{r.scenarioId.startsWith("happy") ? "Everyday case" : "Red team"} · <Link className="ref-link" href={`/orders/${r.orderId}`}>{reference}</Link> · {Math.max(1, Math.round(r.durationMs / 1000))} s
+      {repeat && <> · <b className={repeat.passed === repeat.runs ? "tone-ok" : "tone-danger"}>{repeat.passed} of {repeat.runs} runs passed</b></>}</p>
+    {repeat && repeat.misses.length > 0 && r.verdict === "pass" && <p className="ev-rerun">Missed in {repeat.runs - repeat.passed} of the {repeat.runs} runs: {[...new Set(repeat.misses.map((m) => m.replace(/^Missed:\s*/, "")))].join(" ")}</p>}
     <dl className="ev-pair">
       <div><dt>What I should do</dt><dd>{r.expected}</dd></div>
       <div><dt>What I did</dt><dd>{r.actual}</dd></div>
@@ -125,27 +139,4 @@ function Card({ r, reference, rerun }: { r: Result; reference: string; rerun?: {
       <ul>{checks.map((c) => <li key={c.label} className={c.ok ? "ok" : "bad"}><span aria-hidden="true">{c.ok ? "✓" : "✗"}</span><span className="sr-only">{c.ok ? "Held:" : "Missed:"}</span> {c.label}{c.setup ? <em> (the test itself)</em> : null}</li>)}</ul>
     </details>
   </li>
-}
-
-/** Pass rate over the scored scenarios of each run, oldest left. One series, one axis, 0 to 100 %. */
-function Spark({ runs }: { runs: Run[] }) {
-  if (!runs.length) return <p className="tile-hint">No finished runs yet.</p>
-  const W = 220, H = 56, P = 6
-  const x = (i: number) => (runs.length === 1 ? W / 2 : P + (i * (W - 2 * P)) / (runs.length - 1))
-  const y = (rate: number) => H - P - rate * (H - 2 * P)
-  const pts = runs.map((r, i) => ({ x: x(i), y: y(r.passed / scored(r)), r }))
-  const last = runs[runs.length - 1]
-  return <figure className="ev-spark">
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Pass rate per run: ${runs.map((r) => `${r.passed} of ${scored(r)}`).join(", ")}`}>
-      <line x1={P} x2={W - P} y1={y(1)} y2={y(1)} className="ev-grid" />
-      <line x1={P} x2={W - P} y1={y(0)} y2={y(0)} className="ev-grid" />
-      {pts.length > 1 && <polyline points={pts.map((p) => `${p.x},${p.y}`).join(" ")} className="ev-line" />}
-      {pts.map((p) => <g key={p.r.id} className="ev-pt">
-        <circle cx={p.x} cy={p.y} r={10} className="ev-hit" />
-        <circle cx={p.x} cy={p.y} r={4} className="ev-dot" />
-        <title>{`${fmtDateTime(p.r.startedAt, ZONE)}: ${p.r.passed} of ${scored(p.r)} passed${p.r.note ? ` (${p.r.note})` : ""}`}</title>
-      </g>)}
-    </svg>
-    <figcaption className="num">{Math.round((last.passed / scored(last)) * 100)} % now</figcaption>
-  </figure>
 }

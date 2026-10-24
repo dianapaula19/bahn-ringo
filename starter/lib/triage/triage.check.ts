@@ -17,7 +17,9 @@ import type { Bundle } from "@/lib/present/bundle"
 import { loadOrder } from "@/lib/present/load"
 import { fmtDateTime, fmtRange } from "@/lib/present/time"
 import { ringEvents, ringProposals } from "@/lib/ring-schema"
-import { inNow, nextAction } from "./next-action"
+import { inNow, nextAction, unanswered } from "./next-action"
+import { activeClaim, type Claim } from "./claim"
+import { orderFacts, rankFacts } from "./facts"
 import { similarGroups } from "./similar"
 import { ringEligibility, triage } from "./triage"
 
@@ -75,7 +77,8 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     assert.equal(next("ord-00593"), "Answer driver")
     assert.equal(next("ord-00516"), "Run Ringo")
     assert.equal(nextAction({ reason: "DUE_SOON", why: "Site, 11:10 EEST: “Who collects?”", oneDecision: null, sources: [] }), "Call site")
-    assert.equal(nextAction({ reason: "DUE_SOON", why: "A trade-in receipt shares a branch.", oneDecision: null, sources: [] }), null)
+    assert.equal(nextAction({ reason: "DUE_SOON", why: "A trade-in receipt shares a branch.", oneDecision: null, sources: [] }), "Check release")
+    assert.equal(nextAction({ reason: "DUE_SOON", why: "Something odd.", oneDecision: null, sources: [] }), null)
     assert.equal(nextAction({ reason: "WAITING_EXTERNAL", why: "", oneDecision: null, sources: [] }), null)
   })
   test("a synthetic scale copy triages like its original (only when scripts/scale-seed.ts has run)", () => {
@@ -94,13 +97,54 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     }
     assert.equal(fmtDateTime("2026-10-21T08:24:00Z", "Europe/Helsinki", false), fresh.format(new Date("2026-10-21T08:24:00Z")).replace(",", ""))
   })
+  test("every Needs-you row has a next-step chip; a row with no due time says so (judges, round 3)", () => {
+    for (const id of bundles.keys()) {
+      const r = t(id)
+      if (r.bucket === "needs_you") assert.ok(nextAction(r), `${id} ${r.reason}: no chip for “${r.why}”`)
+    }
+    // The UI prints "No deadline" for a null decideBy; these are the rows that have none, on purpose.
+    const none = [...bundles.keys()].filter((id) => t(id).bucket === "needs_you" && !t(id).decideBy).sort()
+    assert.deepEqual(none, ["ord-00055", "ord-00201"])
+  })
+  test("a waiting driver's own words set the deadline; an alert's cutoff counts when no task does", () => {
+    const r = t("ord-00593")
+    assert.equal(r.decideBy, "2026-10-21T08:27:00.000Z") // "I can wait another 30 minutes" at 07:57
+    assert.match(r.why, /11:27 EEST \(said 10:57 EEST\)/)
+    assert.equal(t("ord-00603").decideBy, "2026-10-21T12:00:00.000Z") // ferry check-in cutoff
+    assert.equal(t("ord-00702").decideBy, "2026-10-21T11:00:00.000Z") // delivery promise ends
+  })
+  test("322: the customer's recorded roadside-or-tow choice turns the card into 'book it'", () => {
+    const chose = { ...emptyRing(), events: [{ id: "revt-x", orderId: "ord-00322", at: "2026-10-21T09:10:00.000Z", command: "recovery.choice", actorType: "operator", actorId: "ops-readiness", proposalId: null, changes: { choice: "tow", note: "Customer on the phone 09:08" }, sourceRefs: [] }] }
+    const r = t("ord-00322", chose)
+    assert.equal(r.reason, "SAFETY")
+    assert.match(r.oneDecision ?? "", /^Customer chose a tow \(recorded 12:10 EEST by ops-readiness\)\. Book the tow \(it needs approval as a cost\)/)
+    assert.equal(nextAction(r), "Book recovery")
+  })
+  test("the hero's Unanswered line: the newest driver message with no reply after it", () => {
+    const entries = (id: string) => bundles.get(id)!.messages.map((m) => ({ actorKind: (m.authorType === "site_contact" ? "site" : m.authorType) as never, actor: m.authorType, at: m.authoredAt, text: m.body, ref: { table: "messages", id: m.id } }))
+    assert.match(unanswered(entries("ord-00322"))?.text ?? "", /who is collecting the car/) // 08:58, nobody answered
+    assert.match(unanswered(entries("ord-00593"))?.text ?? "", /wait another 30 minutes/)
+    const answered = [...entries("ord-00322"), { actorKind: "operator" as never, actor: "op", at: "2026-10-21T09:01:00.000Z", text: "A tow is on its way.", ref: { table: "messages", id: "m-x" } }]
+    assert.equal(unanswered(answered), null)
+    const claimOnly = [...entries("ord-00322"), { actorKind: "operator" as never, actor: "op", at: "2026-10-21T09:01:00.000Z", text: "I'll handle it.", ref: { table: "ring_claims", id: "c-x" } }]
+    assert.ok(unanswered(claimOnly)) // taking the order is not a reply to the driver
+  })
+  test("What we know: 322 leads with the safety alert; its past pickup slot is history, not 'Reserved'", () => {
+    const b = bundles.get("ord-00322")!
+    const facts = rankFacts(orderFacts(b, emptyRing(), NOW), t("ord-00322"), b.order.status)
+    assert.equal(facts[0].subject, "alert.safety_stop")
+    const slot = facts.find((f) => f.subject === "pickup.slot")!
+    assert.equal(slot.level, "stale"); assert.equal(slot.note, "Pickup done")
+    // a record's "confirmed" status is not printed under a claimed fact
+    assert.ok(!facts.some((f) => (f.level === "claimed" || f.level === "quoted") && /\bconfirmed\b/.test(f.note ?? "") && !/unconfirmed/.test(f.note ?? "")))
+  })
   test("Now on the demo data: 322, 458, 593 are Now; 413 (due Monday) and 055 (medium) are not", () => {
     for (const id of ["ord-00322", "ord-00458", "ord-00593"]) assert.equal(inNow(t(id), NOW), true, id)
     for (const id of ["ord-00413", "ord-00055"]) assert.equal(inNow(t(id), NOW), false, id)
   })
 })
 
-describe("Now: safety, or critical/high that is overdue or due within 2 h", () => {
+describe("Now: safety, anything overdue, or critical/high due within 2 h", () => {
   const at = (min: number) => new Date(Date.parse(NOW) + min * 60_000).toISOString()
   const row = (reason: string, severity: string, decideBy: string | null) => ({ reason, severity, decideBy }) as Parameters<typeof inNow>[0]
   test("the rule's edges", () => {
@@ -109,7 +153,18 @@ describe("Now: safety, or critical/high that is overdue or due within 2 h", () =
     assert.equal(inNow(row("DUE_SOON", "high", at(120)), NOW), true)      // exactly 2 h
     assert.equal(inNow(row("DUE_SOON", "high", at(121)), NOW), false)     // just past the window
     assert.equal(inNow(row("DRIVER_WAITING", "high", null), NOW), false)  // no due time: when you can
-    assert.equal(inNow(row("DUE_SOON", "medium", at(-600)), NOW), false)  // overdue but routine
+    assert.equal(inNow(row("DUE_SOON", "medium", at(-600)), NOW), true)   // overdue is Now at any severity ("When you can" never says Overdue)
+    assert.equal(inNow(row("DUE_SOON", "medium", at(60)), NOW), false)    // routine and not yet due
+  })
+})
+
+describe("I'll handle it: a claim holds until its recheck time, a hand-back, or something new", () => {
+  const c: Claim = { id: "claim-x", orderId: "ord-1", by: "ops-readiness", note: null, at: "2026-10-21T09:14:00.000Z", recheckAt: "2026-10-21T09:44:00.000Z", releasedAt: null }
+  test("the rule's edges", () => {
+    assert.equal(activeClaim([c], "2026-10-21T08:58:00.000Z", "2026-10-21T09:20:00.000Z")?.id, "claim-x")
+    assert.equal(activeClaim([c], "2026-10-21T08:58:00.000Z", "2026-10-21T09:44:00.000Z"), null) // recheck time reached: back to the queue
+    assert.equal(activeClaim([c], "2026-10-21T09:30:00.000Z", "2026-10-21T09:31:00.000Z"), null) // a new event after the claim
+    assert.equal(activeClaim([{ ...c, releasedAt: "2026-10-21T09:20:00.000Z" }], null, "2026-10-21T09:21:00.000Z"), null) // handed back
   })
 })
 

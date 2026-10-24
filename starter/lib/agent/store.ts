@@ -5,7 +5,8 @@ import { db } from "@/lib/db"
 import type {
   CallRecord, CallbackJob, DriverMessage, Fact, Proposal, RunSummary, SourceRef,
 } from "@/lib/contract"
-import { ringCalls, ringDriverMessages, ringEvents, ringFacts, ringJobs, ringMeta, ringProposals, ringRuns } from "@/lib/ring-schema"
+import { ringCalls, ringClaims, ringDriverMessages, ringEvents, ringFacts, ringJobs, ringMeta, ringProposals, ringRuns } from "@/lib/ring-schema"
+import type { Claim } from "@/lib/triage/claim"
 
 const iso = (v: string | null) => (v ? new Date(v).toISOString() : null)
 
@@ -61,18 +62,18 @@ const toEvent = (r: typeof ringEvents.$inferSelect): RingEvent => ({
 /** Everything Ringo has recorded about one order. All lists oldest first. */
 export type RingOrderState = {
   runs: RunSummary[]; calls: CallRecord[]; driverMessages: DriverMessage[]; facts: Fact[]
-  proposals: Proposal[]; events: RingEvent[]; jobs: CallbackJob[]
+  proposals: Proposal[]; events: RingEvent[]; jobs: CallbackJob[]; claims: Claim[]
   /** Dataset fact id → the ring fact id that superseded it. */
   datasetSupersede: Record<string, { factId: string; level: "refuted" | "stale" }>
 }
 
 export const emptyRing = (): RingOrderState => ({
-  runs: [], calls: [], driverMessages: [], facts: [], proposals: [], events: [], jobs: [], datasetSupersede: {},
+  runs: [], calls: [], driverMessages: [], facts: [], proposals: [], events: [], jobs: [], claims: [], datasetSupersede: {},
 })
 
 export async function loadRing(orderId?: string): Promise<Map<string, RingOrderState>> {
   const where = <T extends { orderId: unknown }>(t: T) => (orderId ? eq(t.orderId as never, orderId) : undefined)
-  const [runs, calls, dms, facts, props, events, jobs, meta] = await Promise.all([
+  const [runs, calls, dms, facts, props, events, jobs, meta, claims] = await Promise.all([
     db.select().from(ringRuns).where(where(ringRuns)).orderBy(asc(ringRuns.startedAt)),
     db.select().from(ringCalls).where(where(ringCalls)).orderBy(asc(ringCalls.startedAt)),
     db.select().from(ringDriverMessages).where(where(ringDriverMessages)).orderBy(asc(ringDriverMessages.at)),
@@ -81,6 +82,7 @@ export async function loadRing(orderId?: string): Promise<Map<string, RingOrderS
     db.select().from(ringEvents).where(where(ringEvents)).orderBy(asc(ringEvents.at)),
     db.select().from(ringJobs).where(where(ringJobs)).orderBy(asc(ringJobs.dueAt)),
     db.select().from(ringMeta),
+    db.select().from(ringClaims).where(where(ringClaims)).orderBy(asc(ringClaims.at)),
   ])
   const out = new Map<string, RingOrderState>()
   const get = (id: string) => { let s = out.get(id); if (!s) out.set(id, (s = emptyRing())); return s }
@@ -91,6 +93,7 @@ export async function loadRing(orderId?: string): Promise<Map<string, RingOrderS
   for (const r of props) get(r.orderId).proposals.push(toProposal(r))
   for (const r of events) get(r.orderId).events.push(toEvent(r))
   for (const r of jobs) get(r.orderId).jobs.push(toJob(r))
+  for (const r of claims) get(r.orderId).claims.push({ id: r.id, orderId: r.orderId, by: r.by, note: r.note, at: iso(r.at)!, recheckAt: iso(r.recheckAt)!, releasedAt: iso(r.releasedAt) })
   for (const m of meta) {
     if (!m.key.startsWith("supersede:")) continue
     const v = m.value as { orderId: string; factId: string; level: "refuted" | "stale" }

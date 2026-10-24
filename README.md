@@ -30,7 +30,7 @@ How we built it with coding agents, what we checked and threw away, and the eval
 You need Node.js 24 or newer, Docker, and, for live Ringo runs, an Anthropic API key.
 
 ```sh
-git clone <this repo> ring && cd ring/starter
+git clone https://github.com/dianapaula19/bahn-ringo.git && cd bahn-ringo/starter
 cp .env.example .env
 echo "ANTHROPIC_API_KEY=<your key>" > .env.local   # optional, see below; .env.local is gitignored
 npm ci
@@ -43,8 +43,16 @@ docker-compose up -d && docker-compose ps
 npm run db:push            # creates the starter tables and Ringo's ring_* tables
 npm run db:seed
 npm run attachments:seed
+npm run demo:seed          # optional: the recorded runs and test results the video shows (no key needed)
 npm run dev                # http://localhost:3000
 ```
+
+**After `npm run demo:seed`** (no model key, nothing is invented):
+- Needs you holds Ringo's recorded proposals for CD-420516, CD-420010, CD-420023 and CD-420593, waiting for you to accept, edit or reject them (on the order or in Decide). They come from five real recorded runs (`starter/lib/agent/fixtures/*.ndjson`), stored with trigger "replay". Each order's timeline shows the simulated calls.
+- CD-420458 shows Ringo's recorded "seller hold, a person decides" stop. CD-420322 is the safety card; Ringo never runs on it.
+- `/evals` shows the three recorded scenario-suite runs from 24 Oct (`starter/eval/suite-2026-10-24-r3.json`, 29 of 30 passed, the miss included) and the Reviewer gate's honest leave-one-out score (3 of 10).
+- No review, correction or learned rule is seeded: approve 516 yourself to see the approved state, and a learned-rule suggestion only appears after you correct Ringo the same way twice.
+- Without `demo:seed` the app starts empty: "Ringo has not run" on every order and an empty `/evals`, until you run Ringo (with a key) or watch a recorded run.
 
 - **Ports.** Postgres is on 5438 and RustFS on 9009/9010. If a port is taken, change it in `starter/compose.yaml` and in the matching line of `starter/.env`.
 - **The model key.** It is read from `starter/.env.local`, never printed and never committed. The model is `ANTHROPIC_MODEL`, default `claude-sonnet-5-5`. Without a key the app still works: triage, the queue, the stories, reviews and trust need no model, and Ringo shows "offline" with **Watch a recorded run**, which replays a real recorded run for the five demo orders.
@@ -59,6 +67,7 @@ npm run typecheck && npm run build
 npm run ring:check                 # node:test self-check: triage, gate, evidence ladder (no model)
 npm run eval:reviewer              # Reviewer gate, leave-one-out;  -- --all for the leaky upper bound
 npm run eval:ring                  # Ringo live on the 5 demo orders, 38 assertions (needs the key; clears their Ringo rows)
+npm run eval:suite                 # ten scenarios, live (needs the key); run it on a separate eval database
 npm run ring:run -- ord-00516      # one live run in the terminal
 npm run ring:record                # rebuild the replay fixtures from stored runs
 ```

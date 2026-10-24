@@ -239,3 +239,15 @@ export const ringTurns = pgTable("ring_turns", {
   toolUses: integer("tool_uses"),
   error: text("error"),
 })
+
+// Round 3: "I'll handle it". A person takes an order off the shared queue until `recheck_at`, or until
+// something new happens on it. Not a change to the order; nothing is sent. Wiped by reset and clearOrder.
+export const ringClaims = pgTable("ring_claims", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id").notNull(),
+  by: text("by").notNull(),
+  note: text("note"),
+  at: ts("at").notNull(),
+  recheckAt: ts("recheck_at").notNull(),
+  releasedAt: ts("released_at"),
+})

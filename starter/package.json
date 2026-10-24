@@ -19,7 +19,8 @@
     "eval:learned": "tsx --require ./scripts/ring-shim.cjs scripts/eval-learned.ts",
     "eval:ring": "tsx --require ./scripts/ring-shim.cjs scripts/eval-ring.ts",
     "eval:suite": "tsx --require ./scripts/ring-shim.cjs scripts/eval-suite.ts",
-    "ring:record": "tsx --require ./scripts/ring-shim.cjs scripts/ring-record.ts"
+    "ring:record": "tsx --require ./scripts/ring-shim.cjs scripts/ring-record.ts",
+    "demo:seed": "tsx --require ./scripts/ring-shim.cjs scripts/ring-demo-seed.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

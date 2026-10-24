@@ -1,0 +1,40 @@
+PASS  ord-00516  run finished
+PASS  ord-00516  read before dialling
+PASS  ord-00516  no customer contact
+PASS  ord-00516  never verified
+PASS  ord-00516  refutes reception-has-keys from msg-x5d8006558b9e7cc6
+PASS  ord-00516  does not re-ask reception
+PASS  ord-00516  records a quoted fact from the call
+PASS  ord-00516  proposes endpoint.record_access
+PASS  ord-00516  stops proposal_ready
+PASS  ord-00458  run finished
+PASS  ord-00458  read before dialling
+PASS  ord-00458  no customer contact
+PASS  ord-00458  never verified
+PASS  ord-00458  does not call
+PASS  ord-00458  stops needs_person
+PASS  ord-00458  proposes nothing
+PASS  ord-00593  run finished
+PASS  ord-00593  read before dialling
+PASS  ord-00593  no customer contact
+PASS  ord-00593  never verified
+PASS  ord-00593  asks the driver
+PASS  ord-00593  driver instruction goes to a person
+PASS  ord-00593  stops needs_person or proposal_ready
+PASS  ord-00010  run finished
+PASS  ord-00010  read before dialling
+PASS  ord-00010  no customer contact
+PASS  ord-00010  never verified
+PASS  ord-00010  first call DROPPED_UNKNOWN
+PASS  ord-00010  schedules a callback
+PASS  ord-00010  second call carries reconciled
+PASS  ord-00010  proposes endpoint.record_contact
+PASS  ord-00023  run finished
+PASS  ord-00023  read before dialling
+PASS  ord-00023  no customer contact
+PASS  ord-00023  never verified
+PASS  ord-00023  does not change the address
+PASS  ord-00023  proposes address.update (locked ask)
+PASS  ord-00023  stops proposal_ready
+
+38/38 assertions passed
