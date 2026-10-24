@@ -3,11 +3,12 @@
 import Link from "next/link"
 import { useEffect, useState, type ReactNode } from "react"
 import posthog from "posthog-js"
-import type { CallRecord, Fact, OrderStory, Proposal, ReviewDecision, ReviewResponse, StoryEntry } from "@/lib/contract"
+import type { CallRecord, Fact, OrderStory, Proposal, ReviewDecision, StoryEntry } from "@/lib/contract"
+import type { LearnedRule, ReviewWithSuggestion } from "@/lib/agent/learn/types"
 import { DESK, reviewProposal } from "../../_lib/agent-api"
 import { Icon } from "../icons"
 import { ACTION, FactChip, LIZARD, MODE, Simulated, When, factLizard } from "./bits"
-import { LizardFace } from "../ringo"
+import { LizardFace, RingoFace } from "../ringo"
 
 // ---------------------------------------------------------------- plain-words payloads
 
@@ -80,8 +81,13 @@ function runRingo() {
 const RunButton = ({ primary }: { primary: boolean }) =>
   <button type="button" className={`btn${primary ? " primary" : ""}`} onClick={runRingo}><Icon name="bot" size={15} /> Run Ringo</button>
 
+const ORDINAL: Record<number, string> = { 2: "Second", 3: "Third" }
+type Reviewed = { text: string; tone: string; suggestion: LearnedRule | null }
+
 export function DecisionPanel({ story, ctx, onChanged }: { story: OrderStory; ctx: HeroContext | null; onChanged: () => void }) {
   const { triage, decision } = story
+  // A reviewed card leaves the list on refresh, so its result (and Ringo's rule suggestion) is kept here.
+  const [reviewed, setReviewed] = useState<Reviewed | null>(null)
   const ringPending = story.proposals.filter((p) => p.origin === "ring" && p.status === "PENDING_REVIEW")
   const earlier = story.proposals.filter((p) => p.origin === "dataset" && p.status === "PENDING_REVIEW")
   const next = nextStep(story, ctx, ringPending.length > 0)
@@ -117,7 +123,12 @@ export function DecisionPanel({ story, ctx, onChanged }: { story: OrderStory; ct
       })}
       {canRun && triage.bucket !== "ring" && <RunButton primary={!links.length} />}
     </div>}
-    {ringPending.map((p) => <ProposalCard key={p.id} proposal={p} story={story} onChanged={onChanged} />)}
+    {ringPending.map((p) => <ProposalCard key={p.id} proposal={p} story={story} onChanged={onChanged} onReviewed={setReviewed} />)}
+    {reviewed && <p className={`result tone-${reviewed.tone}`} role="status">{reviewed.text}</p>}
+    {reviewed?.suggestion && <div className="learn-banner" role="status">
+      <RingoFace size={28} />
+      <p>{ORDINAL[reviewed.suggestion.citations.length] ?? `${reviewed.suggestion.citations.length}th`} time you&apos;ve fixed me the same way. I wrote it up as a rule for you to look at. <Link href="/trust#suggested">See my suggestion</Link></p>
+    </div>}
     {triage.overtaken.length > 0 && <ul className="overtaken">{triage.overtaken.map((o) => <li key={o.ref.id}><s>{o.label}</s> overtaken by a later signal at <When at={o.overtakenAt} now={story.now} /></li>)}</ul>}
     {(earlier.length > 0 || (decision?.did.length ?? 0) > 0) && <div className="decision-more">
       {decision && decision.did.length > 0 && <details className="more"><summary><Icon name="chevron" size={12} />What Ringo did</summary><ul className="decision-did">{decision.did.map((d, i) => <li key={i}>{d}</li>)}</ul></details>}
@@ -126,7 +137,7 @@ export function DecisionPanel({ story, ctx, onChanged }: { story: OrderStory; ct
   </section>
 }
 
-export function ProposalCard({ proposal: p, story, onChanged }: { proposal: Proposal; story: OrderStory; onChanged: () => void }) {
+export function ProposalCard({ proposal: p, story, onChanged, onReviewed }: { proposal: Proposal; story: OrderStory; onChanged: () => void; onReviewed?: (r: Reviewed) => void }) {
   const [mode, setMode] = useState<"idle" | "edit" | "reject">("idle")
   const [note, setNote] = useState("")
   const [draft, setDraft] = useState<Record<string, unknown>>(p.proposedPayload)
@@ -139,12 +150,13 @@ export function ProposalCard({ proposal: p, story, onChanged }: { proposal: Prop
   async function send(decision: ReviewDecision) {
     if (decision !== "APPROVED" && !note.trim()) return
     setBusy(true)
-    const r: ReviewResponse = await reviewProposal(p.id, { decision, note: note.trim() || null, finalPayload: decision === "EDITED" ? draft : undefined, reviewerId: DESK })
+    const r: ReviewWithSuggestion = await reviewProposal(p.id, { decision, note: note.trim() || null, finalPayload: decision === "EDITED" ? draft : undefined, reviewerId: DESK })
     setBusy(false)
     if ("error" in r) { setResult({ text: r.error, tone: "danger" }); return }
-    if (r.execution?.status === "STALE") setResult({ text: "The order changed after Ringo wrote this, so nothing was changed. Run Ringo again so it re-reads first.", tone: "warn" })
-    else if (r.execution?.status === "FAILED") setResult({ text: `It did not go through: ${r.execution.error ?? "unknown error"}. Check before trying again.`, tone: "danger" })
-    else setResult({ text: r.next, tone: "ok" })
+    const done = r.execution?.status === "STALE" ? { text: "The order changed after Ringo wrote this, so nothing was changed. Run Ringo again so it re-reads first.", tone: "warn" }
+      : r.execution?.status === "FAILED" ? { text: `It did not go through: ${r.execution.error ?? "unknown error"}. Check before trying again.`, tone: "danger" }
+      : { text: r.next, tone: "ok" }
+    if (onReviewed) onReviewed({ ...done, suggestion: r.suggestion ?? null }); else setResult(done)
     posthog.capture("proposal_reviewed", {
       action_type: p.actionType,
       decision,
