@@ -15,6 +15,7 @@ import { triageAll } from "@/lib/agent/story"
 import { emptyRing, type RingOrderState } from "@/lib/agent/store"
 import type { Bundle } from "@/lib/present/bundle"
 import { loadOrder } from "@/lib/present/load"
+import { fmtDateTime, fmtRange } from "@/lib/present/time"
 import { ringEvents, ringProposals } from "@/lib/ring-schema"
 import { nextAction } from "./next-action"
 import { ringEligibility, triage } from "./triage"
@@ -75,6 +76,22 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     assert.equal(nextAction({ reason: "DUE_SOON", why: "Site, 08:10 UTC: “Who collects?”", oneDecision: null, sources: [] }), "Call site")
     assert.equal(nextAction({ reason: "DUE_SOON", why: "A trade-in receipt shares a branch.", oneDecision: null, sources: [] }), null)
     assert.equal(nextAction({ reason: "WAITING_EXTERNAL", why: "", oneDecision: null, sources: [] }), null)
+  })
+  test("a synthetic scale copy triages like its original (only when scripts/scale-seed.ts has run)", () => {
+    for (const id of bundles.keys()) {
+      const of = /^(.*)-s\d$/.exec(id)?.[1]
+      if (!of) continue
+      const [a, b] = [t(of), t(id)]
+      assert.deepEqual([b.bucket, b.reason, b.severity, b.decideBy, b.sources.length], [a.bucket, a.reason, a.severity, a.decideBy, a.sources.length], id)
+    }
+  })
+  test("cached date formatters give the same text, and a bad zone still falls back to UTC", () => {
+    const fresh = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Helsinki", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    for (let i = 0; i < 2; i++) {
+      assert.equal(fmtRange("2026-10-26T07:00:00Z", "2026-10-26T10:00:00Z", "Europe/Helsinki"), "26 Oct 09:00–12:00 EET")
+      assert.equal(fmtDateTime("2026-10-21T08:24:00Z", "Not/AZone"), "21 Oct 08:24 UTC")
+    }
+    assert.equal(fmtDateTime("2026-10-21T08:24:00Z", "Europe/Helsinki", false), fresh.format(new Date("2026-10-21T08:24:00Z")).replace(",", ""))
   })
 })
 
