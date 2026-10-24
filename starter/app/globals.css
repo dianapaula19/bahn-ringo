@@ -953,3 +953,15 @@ details.more > :not(summary) { margin-top: 8px; }
 @media (max-width: 480px) { .playbook-note { grid-template-columns: minmax(0, 1fr); gap: 4px; } .playbook-actions { margin-top: 4px; } }
 @media (prefers-reduced-motion: reduce) { .rung.now .rung-dot { animation: none; } .turn { transition: none; } }
 .playbook .sec-head h2 { white-space: nowrap; }
+/* Round 3: a row someone took ("I'll handle it"), and the same line in the order hero. */
+.q-claim { font-size: 12.5px; font-weight: 500; color: var(--green-ink); }
+.decision-unanswered { margin-top: 10px; max-width: 70ch; font-size: 14px; line-height: 1.45; color: var(--ink); }
+.decision-unanswered b { font-weight: 600; color: var(--red-ink); }
+.decision-claim { display: block; margin-top: 10px; font-size: 14px; }
+.recovery-form { margin-top: 14px; max-width: 60ch; }
+.recovery-form .actions { margin-top: 8px; }
+.claim-box { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--hair); }
+.claim-note { flex: 1 1 220px; min-width: 0; padding: 8px 10px; border: 1px solid var(--hair); border-radius: 8px; background: var(--birch); font: inherit; font-size: 14px; color: var(--ink); }
+.claim-back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.claim-back select { padding: 7px 8px; border: 1px solid var(--hair); border-radius: 8px; background: var(--birch); font: inherit; font-size: 13.5px; color: var(--ink); }
+.claim-hint { flex-basis: 100%; font-size: 12.5px; color: var(--muted); }

@@ -2,12 +2,14 @@
 
 // Decision mode: the Needs you queue one card at a time, keyboard first. Every Accept / Edit / Reject goes through
 // the same review API as the order page and is recorded per proposal. Cards with no Ringo proposal show the one
-// decision and the links to do it; "I'll handle it" only moves this screen on (nothing is written).
+// decision and the links to do it; "I'll handle it" writes a claim (ring_claims): the order moves to Taken on the
+// queue until its recheck time or until something new happens on it.
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import posthog from "posthog-js"
 import type { OrderStory, Proposal, QueueItem, ReviewDecision } from "@/lib/contract"
+import type { Claim, WithClaim } from "@/lib/triage/claim"
 import { withBase } from "@/lib/base"
 import { relativeTo } from "@/lib/present/time"
 import { inNow, nextAction } from "@/lib/triage/next-action"
@@ -21,10 +23,9 @@ import { DecisionPanel, heroContext, plain, type OrderDetail } from "../componen
 import "./decide.css"
 
 type Done = { how: ReviewDecision | "TAKEN"; stale?: boolean }
-type Loaded = { story: OrderStory; detail: OrderDetail | null }
+type Loaded = { story: OrderStory & WithClaim; detail: OrderDetail | null }
 type Status = { text: string; tone: "ok" | "warn" | "danger" | "neutral" }
 
-const TAKEN_KEY = "ring.decide.taken"
 const AT_KEY = "ring.decide.at"
 const store = {
   get: (k: string) => { try { return sessionStorage.getItem(k) } catch { return null } },
@@ -66,11 +67,10 @@ export default function DecidePage() {
     const c = new AbortController()
     loadQueue(c.signal).then((q) => {
       const list = [...q.needsYou.filter((x) => inNow(x, q.now)), ...q.needsYou.filter((x) => !inNow(x, q.now))]
-      const ids = list.map((x) => x.orderId)
-      const taken = new Set<string>(JSON.parse(store.get(TAKEN_KEY) ?? "[]") as string[])
+      // Orders someone has taken are not in the pass; they come back by themselves at their recheck time.
+      const ids = list.filter((x) => !(x as QueueItem & WithClaim).claim).map((x) => x.orderId)
       const d: Record<string, Done> = {}
-      for (const id of ids) if (taken.has(id)) d[id] = { how: "TAKEN" }
-      const left = ids.filter((id) => !d[id])
+      const left = ids
       setItems(list); setNow(q.now); setOrder(ids); setDone(d); setIdx(Math.max(0, left.indexOf(store.get(AT_KEY) ?? "")))
       // Stories of every card with a Ringo proposal, so similar ones can be offered together.
       for (const x of list) if (x.pendingProposalIds.some((p) => !p.startsWith("agent-"))) fetchOne(x.orderId)
@@ -88,8 +88,7 @@ export default function DecidePage() {
   const decided = total - left.length
 
   useEffect(() => { if (id) store.set(AT_KEY, id) }, [id])
-  // A finished pass forgets what you took by hand, so the next visit starts from today's queue.
-  useEffect(() => { if (items && total && !left.length) { store.set(TAKEN_KEY, "[]"); store.set(AT_KEY, "") } }, [items, total, left.length])
+  useEffect(() => { if (items && total && !left.length) store.set(AT_KEY, "") }, [items, total, left.length])
   // The current card and the next one load ahead.
   useEffect(() => { for (const x of [id, left[at + 1]]) if (x && !loaded[x] && !loadError[x]) fetchOne(x) })
   // A new card takes focus, so a screen reader reads it and the keys act on it.
@@ -103,12 +102,11 @@ export default function DecidePage() {
     setDone((m) => ({ ...m, [orderId]: d })); setStatus(s)
   }
 
-  function take() {
-    if (!id) return
-    const ref = byId.get(id)?.reference
-    const taken = new Set<string>(JSON.parse(store.get(TAKEN_KEY) ?? "[]") as string[]); taken.add(id)
-    store.set(TAKEN_KEY, JSON.stringify([...taken]))
-    finish(id, { how: "TAKEN" }, { text: `${ref} is yours. Noted on this screen only: it stays in Needs you until its records change.`, tone: "neutral" })
+  // A / the card's "I'll handle it" both submit the claim form on the card (DecisionPanel's ClaimBox).
+  function take() { card.current?.querySelector<HTMLButtonElement>("[data-claim]:not(:disabled)")?.click() }
+  function claimed(orderId: string, c: Claim) {
+    const ref = byId.get(orderId)?.reference
+    finish(orderId, { how: "TAKEN" }, { text: `${ref} is yours until ${c.recheckAt.slice(11, 16)} UTC. It sits in Taken on the queue and comes back by itself then, or sooner if something new happens.`, tone: "ok" })
   }
 
   function move(step: number) { if (left.length) setIdx((at + step + left.length) % left.length) }
@@ -258,13 +256,12 @@ export default function DecidePage() {
         {!cur && !loadError[id] && <div aria-busy="true"><div className="q-skel tall" /><p className="empty">Opening {q.reference}…</p></div>}
         {loadError[id] && <p className="result tone-danger" role="alert">{loadError[id]}. <button type="button" className="link-btn" onClick={() => { setLoadError((m) => { const n = { ...m }; delete n[id]; return n }) }}>Try again</button></p>}
         {cur && <>
-          <DecisionPanel story={cur.story} ctx={heroContext(cur.detail)} onChanged={() => reviewed(id)} orderHref={`/orders/${id}`} />
+          <DecisionPanel story={cur.story} ctx={heroContext(cur.detail)} onChanged={() => reviewed(id)} orderHref={`/orders/${id}`} keys onClaimed={(c) => claimed(id, c)} />
           <Facts story={cur.story} />
         </>}
       </article>
 
       <nav className="dk-nav" aria-label="Decide">
-        {cur && !pending.length && <button type="button" className="btn" onClick={take}><Icon name="check" size={14} />I&apos;ll handle it <kbd>A</kbd></button>}
         <button type="button" className="btn" onClick={skip}>Skip <kbd>S</kbd></button>
         <Link className="btn" href={`/orders/${id}`}>Open<span className="dk-wide"> the order</span> <kbd>O</kbd></Link>
         <span className="dk-nav-step">
@@ -287,7 +284,7 @@ export default function DecidePage() {
         <div><dt><kbd>O</kbd></dt><dd>Open the full order</dd></div>
         <div><dt><kbd>Esc</kbd></dt><dd>Back to the queue</dd></div>
       </dl>
-      <p className="dk-help-note">Every accept, edit and reject is recorded on its proposal, the same as on the order page. &ldquo;I&apos;ll handle it&rdquo; writes nothing.</p>
+      <p className="dk-help-note">Every accept, edit and reject is recorded on its proposal, the same as on the order page. &ldquo;I&apos;ll handle it&rdquo; records that you have it and when it comes back to the queue; nothing is sent to anyone.</p>
       <form method="dialog"><button className="btn primary" autoFocus>Close</button></form>
     </dialog>
   </main></AppFrame>
@@ -374,7 +371,7 @@ function AllDone({ total, done, reviewed, empty }: { total: number; done: Record
       <p className="calm-title">{empty ? "Nothing needs you." : "All decided."} Quiet on the lot.</p>
       {!empty && <p className="calm-sub">{[
         reviewed > 0 && `${reviewed} of my ${reviewed === 1 ? "proposal" : "proposals"} reviewed, each one recorded${stale ? ` (${stale} came back stale: nothing changed there)` : ""}`,
-        taken > 0 && `${taken} you're handling by hand; they leave Needs you once their records change`,
+        taken > 0 && `${taken} you took; they wait in Taken and come back at their recheck time`,
       ].filter(Boolean).join(". ")}{total ? "." : ""}</p>}
       <p className="dk-done-actions"><Link href="/" className="btn">Back to the queue</Link></p>
     </div>

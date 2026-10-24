@@ -5,7 +5,9 @@ import { useEffect, useState, type ReactNode } from "react"
 import posthog from "posthog-js"
 import type { CallRecord, Fact, OrderStory, Proposal, ReviewDecision, StoryEntry } from "@/lib/contract"
 import type { LearnedRule, ReviewWithSuggestion } from "@/lib/agent/learn/types"
-import { DESK, reviewProposal } from "../../_lib/agent-api"
+import { DESK, claimOrder, recordRecovery, releaseClaim, reviewProposal } from "../../_lib/agent-api"
+import { RECHECK_MINUTES, type Claim, type WithClaim } from "@/lib/triage/claim"
+import { unanswered } from "@/lib/triage/next-action"
 import { Icon } from "../icons"
 import { ACTION, FactChip, LIZARD, MODE, Simulated, When, factLizard } from "./bits"
 import { LizardFace, RingoFace } from "../ringo"
@@ -122,8 +124,10 @@ type Reviewed = { text: string; tone: string; suggestion: LearnedRule | null }
 
 /** `onRun` starts Ringo's panel on the order page; without it (decide mode) the hero shows no Run button.
  *  `orderHref` makes in-page links (#src-…) point at the order page when the hero is shown elsewhere. */
-export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, orderHref = "" }: {
-  story: OrderStory; ctx: HeroContext | null; onChanged: () => void; onRun?: () => void; running?: boolean; orderHref?: string
+export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, orderHref = "", onClaimed, keys = false }: {
+  story: OrderStory & WithClaim; ctx: HeroContext | null; onChanged: () => void; onRun?: () => void; running?: boolean; orderHref?: string
+  /** Decide mode moves on to the next card once a person takes this one. */
+  onClaimed?: (c: Claim) => void; keys?: boolean
 }) {
   const { triage, decision } = story
   // A reviewed card leaves the list on refresh, so its result (and Ringo's rule suggestion) is kept here.
@@ -139,32 +143,43 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
   // With a stop decision, Ringo's headline says what he found; the proposal card below says what he asks.
   // Once his proposals are reviewed, what he found still beats the dataset's older "waiting on…" line.
   const settled = decision?.outcome === "proposal_ready" && story.proposals.some((p) => p.origin === "ring" && p.status !== "PENDING_REVIEW")
-  const problem = decision && (decision.outcome === "needs_person" || ringPending.length || settled) ? decision.headline : recorded?.rationale || triage.why
+  // Once a person has reviewed Ringo's proposal, his "…update ready" headline is history: say what was decided.
+  const lastReviewed = settled ? story.proposals.filter((p) => p.origin === "ring" && p.review).sort((x, y) => x.review!.reviewedAt.localeCompare(y.review!.reviewedAt)).pop() : undefined
+  const problem = lastReviewed && !ringPending.length ? `${REVIEWED[lastReviewed.review!.decision]}: ${lastReviewed.summary.replace(/\.$/, "")}.`
+    : decision && (decision.outcome === "needs_person" || ringPending.length || settled) ? decision.headline : recorded?.rationale || triage.why
+  const waiting = unanswered(story.timeline)
+  const quoted = waiting && !triage.sources.some((s) => s.id === waiting.ref.id) ? waiting : null
+  const chooseRecovery = triage.reason === "SAFETY" && /roadside or tow/i.test(triage.oneDecision ?? "")
+  const canClaim = triage.bucket === "needs_you" && !ringPending.length
   const msg = triage.sources.find((s) => s.table === "messages" && story.timeline.some((e) => e.ref.id === s.id))
   const say = next?.text ?? ""
   const links = [
     ctx?.driver && /\b(answer|ask|tell|call|message)\b[^.]*\bdriver\b/i.test(say) && { href: `/drivers/${ctx.driver.id}`, label: ctx.driver.name, role: "Driver" },
-    ctx?.customer && /\b(contact|ask|tell|call|decide with|confirm with)\b[^.]*\bcustomer\b/i.test(say) && { href: `/customers/${ctx.customer.id}`, label: ctx.customer.name, role: "Customer" },
+    ctx?.customer && /\b(contact|ask|tell|call|decide with|confirm with)\b[^.]*\bcustomer\b/i.test(say) && { href: `/customers/${ctx.customer.id}`, label: `Call ${ctx.customer.name}`, role: "Customer" },
     msg && { href: `${orderHref}#src-${msg.id}`, label: "Read the message", role: "" },
   ].filter((l): l is { href: string; label: string; role: string } => !!l)
 
   return <section className={`decision d-${tone}`} aria-labelledby="decision-h">
     <h2 className="sr-only" id="decision-h">{triage.bucket === "needs_you" ? "Why this needs you" : "Where this stands"}</h2>
     <p className="decision-text">{problem}</p>
+    {quoted && <p className="decision-unanswered"><b>Unanswered:</b> {quoted.actor}{quoted.ref.table === "ring_driver_messages" && <> <Simulated /></>}, <When at={quoted.at} now={story.now} />: <a href={withBase(`${orderHref}#src-${quoted.ref.id}`)}>&ldquo;{quoted.text.length > 160 ? `${quoted.text.slice(0, 159).trimEnd()}…` : quoted.text}&rdquo;</a></p>}
+    {story.claim && <p className="decision-claim q-claim">{story.claim.by === DESK ? "You have it" : `${story.claim.by} has it`} · <When at={story.claim.at} now={story.now} /> · back in the queue at <When at={story.claim.recheckAt} now={story.now} />{story.claim.note && <> · {story.claim.note}</>}</p>}
     {next ? <div className="decision-next">
       <p><b>Next:</b> {next.text}</p>
       {next.context && <p className="decision-context">{next.context}</p>}
       {next.source && <p className="decision-src">{next.source}</p>}
     </div> : triage.bucket !== "needs_you" && <p className="decision-next">Nothing waits on you.</p>}
+    {chooseRecovery && <RecoveryChoice orderId={story.orderId} onDone={onChanged} />}
     {(canRun || links.length > 0) && <div className="actions decision-actions">
       {canRun && triage.bucket === "ring" && runButton(true)}
       {links.map((l, i) => {
-        const cls = `btn${i === 0 && triage.bucket !== "ring" ? " primary" : ""}`
+        const cls = `btn${i === 0 && triage.bucket !== "ring" && !chooseRecovery ? " primary" : ""}`
         return l.href.includes("#") ? <a key={l.href} className={cls} href={l.href.startsWith("#") ? l.href : withBase(l.href)}>{l.label}</a>
           : <Link key={l.href} className={cls} href={l.href}><span className="btn-role">{l.role}</span>{l.label}<Icon name="arrow" size={13} /></Link>
       })}
       {canRun && triage.bucket !== "ring" && runButton(!links.length)}
     </div>}
+    {canClaim && <ClaimBox orderId={story.orderId} claim={story.claim ?? null} now={story.now} keys={keys} onDone={(c) => { onChanged(); if (c) onClaimed?.(c) }} />}
     {ringPending.map((p) => <ProposalCard key={p.id} proposal={p} story={story} onChanged={onChanged} onReviewed={setReviewed} />)}
     {reviewed && <p className={`result tone-${reviewed.tone}`} role="status">{reviewed.text}</p>}
     {reviewed?.suggestion && <div className="learn-banner" role="status">
@@ -177,6 +192,72 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
       {earlier.map((p) => <details key={p.id} className="more"><summary><Icon name="chevron" size={12} />Earlier proposal ({blocked(p) ? "blocked by reviewer check" : "recorded, read-only"})</summary><ProposalCard proposal={p} story={story} onChanged={onChanged} /></details>)}
     </div>}
   </section>
+}
+
+const REVIEWED: Record<ReviewDecision, string> = { APPROVED: "You accepted Ringo's proposal", EDITED: "You accepted Ringo's proposal with changes", REJECTED: "You rejected Ringo's proposal" }
+
+/** The customer's roadside-or-tow answer, as a person heard it. A note is required (who said it, when).
+ *  Recording it books nothing: the next step becomes booking the recovery, which needs approval as a cost. */
+function RecoveryChoice({ orderId, onDone }: { orderId: string; onDone: () => void }) {
+  const [choice, setChoice] = useState<"roadside" | "tow" | null>(null)
+  const [note, setNote] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ text: string; tone: string } | null>(null)
+  async function send() {
+    if (!choice || !note.trim()) return
+    setBusy(true)
+    const r = await recordRecovery(orderId, choice, note.trim())
+    setBusy(false)
+    if ("error" in r) { setResult({ text: r.error, tone: "danger" }); return }
+    setResult({ text: `Recorded. Then: ${r.then}`, tone: "ok" }); setChoice(null); setNote(""); onDone()
+  }
+  return <div className="recovery">
+    {!choice && <div className="actions decision-actions">
+      <button type="button" className="btn primary" onClick={() => setChoice("roadside")}>Customer chose roadside</button>
+      <button type="button" className="btn primary" onClick={() => setChoice("tow")}>Customer chose tow</button>
+    </div>}
+    {!choice && <p className="decision-src">Then: book it (it needs approval as a cost) and tell the driver who is coming.</p>}
+    {choice && <div className="recovery-form">
+      <label className="field"><span>Customer chose {choice === "tow" ? "a tow" : "roadside assistance"}. Who told you, and when? (required)</span>
+        <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} autoFocus /></label>
+      <div className="actions">
+        <button type="button" className="btn primary" data-submit disabled={busy || !note.trim()} onClick={send}>{busy ? "Recording…" : "Record the choice"}</button>
+        <button type="button" className="btn" data-cancel onClick={() => { setChoice(null); setNote("") }}>Cancel</button>
+      </div>
+    </div>}
+    {result && <p className={`result tone-${result.tone}`} role="status">{result.text}</p>}
+  </div>
+}
+
+/** "I'll handle it": takes the order off the shared queue until the recheck time (or until something new happens). */
+function ClaimBox({ orderId, claim, now, keys, onDone }: { orderId: string; claim: Claim | null; now: string; keys: boolean; onDone: (c: Claim | null) => void }) {
+  const [note, setNote] = useState("")
+  const [minutes, setMinutes] = useState(30)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+  async function take() {
+    setBusy(true); setError("")
+    const r = await claimOrder(orderId, note, minutes)
+    setBusy(false)
+    if ("error" in r) { setError(r.error); return }
+    setNote(""); onDone(r.claim)
+  }
+  async function giveBack() {
+    setBusy(true)
+    const ok = await releaseClaim(orderId)
+    setBusy(false)
+    if (!ok) setError("Could not hand it back. Try again."); else onDone(null)
+  }
+  if (claim) return <div className="claim-box"><button type="button" className="btn small" disabled={busy} onClick={giveBack}>Hand it back to the queue</button>
+    {error && <p className="result tone-danger" role="alert">{error}</p>}</div>
+  return <form className="claim-box" onSubmit={(e) => { e.preventDefault(); take() }}>
+    <input className="claim-note" aria-label="What you will do (optional)" placeholder="What you'll do (optional)" maxLength={140} value={note} onChange={(e) => setNote(e.target.value)} />
+    <label className="claim-back"><span>Back in</span>
+      <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>{RECHECK_MINUTES.map((m) => <option key={m} value={m}>{m < 60 ? `${m} min` : `${m / 60} h`}</option>)}</select></label>
+    <button type="submit" className="btn" data-claim disabled={busy}><Icon name="check" size={14} />{busy ? "Taking it…" : "I'll handle it"}{keys && <> <kbd>A</kbd></>}</button>
+    <p className="claim-hint">Takes it off everyone&apos;s queue until <When at={new Date(Date.parse(now) + minutes * 60_000).toISOString()} now={now} />, or sooner if something new happens. Nothing is sent.</p>
+    {error && <p className="result tone-danger" role="alert">{error}</p>}
+  </form>
 }
 
 export function ProposalCard({ proposal: p, story, onChanged, onReviewed }: { proposal: Proposal; story: OrderStory; onChanged: () => void; onReviewed?: (r: Reviewed) => void }) {

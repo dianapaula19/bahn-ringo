@@ -5,7 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import type { Handover, QueueItem, QueueResponse } from "@/lib/contract"
 import { relativeTo } from "@/lib/present/time"
 import { withBase } from "@/lib/base"
-import { loadHandover, loadQueue } from "./_lib/agent-api"
+import { DESK, loadHandover, loadQueue } from "./_lib/agent-api"
+import type { Claim, WithClaim } from "@/lib/triage/claim"
+import type { HandoverCounts } from "@/lib/agent/handover"
 import { AppFrame } from "./components/app-frame"
 import { Icon } from "./components/icons"
 import { CAST, LizardFace } from "./components/ringo"
@@ -73,13 +75,14 @@ export default function NeedsYou() {
   }, [loaded])
 
   const moving = queue ? queue.total - queue.needsYou.length : 0
+  const free = queue?.needsYou.filter((q) => !claimOf(q)) ?? [] // taken rows are not in the decide pass
 
   return <AppFrame section="queue" snapshotAt={queue?.snapshotAt ?? null}><main className="page queue-page">
     <ShiftReport queue={queue} />
     <header className="queue-head">
       <div className="queue-title">
         <h1 id="needs-h">Needs you{queue && queue.needsYou.length > 0 && <span className="queue-count num">{queue.needsYou.length}</span>}</h1>
-        {queue && queue.needsYou.length > 0 && <Link href="/decide" className="btn primary decide-start">Start deciding ({queue.needsYou.length})<Icon name="arrow" size={14} /></Link>}
+        {queue && free.length > 0 && <Link href="/decide" className="btn primary decide-start">Start deciding ({free.length})<Icon name="arrow" size={14} /></Link>}
       </div>
       <p className="queue-sub">{queue
         ? <>Checked <When at={queue.now} now={queue.now} /> · {queue.total} orders<span className="kbd-hint"> · j / k to move, Enter to open</span></>
@@ -97,11 +100,7 @@ export default function NeedsYou() {
     </div>}
     {queue && queue.needsYou.length > 0 && <NeedsYouGroups items={queue.needsYou} now={queue.now} />}
 
-    {queue && <section className="sec" aria-labelledby="ring-h">
-      <div className="sec-head"><h2 id="ring-h">Ringo is on it</h2><span className="count num">{queue.ring.length || ""}</span>
-        <span className="note">He can phone these. Open one to start him.</span></div>
-      {queue.ring.length ? <Rows items={queue.ring} now={queue.now} label="Orders Ringo can work" /> : <p className="empty">Nothing for Ringo right now.</p>}
-    </section>}
+    {queue && <RingoGroups items={queue.ring} now={queue.now} />}
 
     {queue && <details className="fine">
       <summary><Icon name="chevron" size={13} className="chev" />Everything else is fine<span className="fine-count num">{queue.waiting.length + queue.quietCount}</span></summary>
@@ -114,13 +113,39 @@ export default function NeedsYou() {
 }
 
 // Now: safety, or critical/high that is overdue or due within 2 h (lib/triage/next-action.ts). Rank order is kept inside each group.
+// Taken: someone said "I'll handle it". The row comes back on its own at the recheck time or when something new happens.
+const claimOf = (q: QueueItem) => (q as QueueItem & WithClaim).claim ?? null
 function NeedsYouGroups({ items, now }: { items: QueueItem[]; now: string }) {
-  const urgent = items.filter((q) => inNow(q, now))
-  const later = items.filter((q) => !urgent.includes(q))
+  const taken = items.filter((q) => claimOf(q))
+  const open = items.filter((q) => !claimOf(q))
+  const urgent = open.filter((q) => inNow(q, now))
+  const later = open.filter((q) => !urgent.includes(q))
   return <>
     {urgent.length > 0 && <><h2 className="q-group" id="now">Now · {urgent.length}</h2><Rows items={urgent} now={now} label="Orders that need a person now" person /></>}
     {later.length > 0 && <><h2 className="q-group">When you can · {later.length}</h2><Rows items={later} now={now} label="Follow-ups" /></>}
+    {taken.length > 0 && <><h2 className="q-group">Taken · {taken.length}</h2><Rows items={taken} now={now} label="Orders a person is handling" /></>}
   </>
+}
+
+// "Ringo is on it" only for what he is doing now (a live run or a booked callback); the rest he could phone.
+function RingoGroups({ items, now }: { items: QueueItem[]; now: string }) {
+  const working = items.filter((q) => q.reason === "RING_WORKING")
+  const can = items.filter((q) => q.reason !== "RING_WORKING")
+  return <>
+    {working.length > 0 && <section className="sec" aria-labelledby="ring-on-h">
+      <div className="sec-head"><h2 id="ring-on-h">Ringo is on it</h2><span className="count num">{working.length}</span><span className="note">Running now, or calling back at a set time.</span></div>
+      <Rows items={working} now={now} label="Orders Ringo is working" />
+    </section>}
+    <section className="sec" aria-labelledby="ring-h">
+      <div className="sec-head"><h2 id="ring-h">Ringo can phone these</h2><span className="count num">{can.length || ""}</span>
+        <span className="note">He has not started. Open one and run him.</span></div>
+      {can.length ? <Rows items={can} now={now} label="Orders Ringo can work" /> : <p className="empty">Nothing for Ringo to phone right now.</p>}
+    </section>
+  </>
+}
+
+function ClaimLine({ claim, now }: { claim: Claim; now: string }) {
+  return <span className="q-claim">{claim.by === DESK ? "You have it" : `${claim.by} has it`} · <When at={claim.at} now={now} /> · back at <When at={claim.recheckAt} now={now} />{claim.note && <> · {claim.note}</>}</span>
 }
 
 // Past LONG rows a group shows its first LONG and a "by next step" filter, so 1,000 orders still read at
@@ -152,9 +177,10 @@ function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: 
           <span className="q-main">
             <span className="q-why" title={q.why}>{q.reason === "SAFETY" && <span className="sr-only">Safety: </span>}{q.why}</span>
             <span className="q-meta"><span className="mono">{q.reference}</span> · {q.vehicle}</span>
+            {claimOf(q) && <ClaimLine claim={claimOf(q)!} now={now} />}
           </span>
           {next ? <span className="q-next">{next}</span> : <span aria-hidden="true" />}
-          <Due at={q.decideBy} now={now} person={person} />
+          <Due at={q.decideBy} now={now} person={person} needsYou={q.bucket === "needs_you"} />
         </Link></li>
       })}
     </ul>
@@ -165,9 +191,9 @@ function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: 
 const OTHER = "Other"
 
 // Only an overdue card in Now is red; "When you can", Ringo's and waiting rows stay calm.
-function Due({ at, now, person }: { at: string | null; now: string; person: boolean }) {
+function Due({ at, now, person, needsYou }: { at: string | null; now: string; person: boolean; needsYou: boolean }) {
   const rel = relativeTo(at, now)
-  if (!at || !rel) return <span className="q-due" />
+  if (!at || !rel) return <span className="q-due">{needsYou ? "No deadline" : ""}</span>
   return <span className={`q-due num${rel.past && person ? " tone-danger" : ""}`}>{rel.past ? <>Overdue {rel.text.replace(/ ago$/, "")}</> : <>Due <Ago at={at} now={now} /></>}</span>
 }
 
@@ -194,10 +220,14 @@ function ShiftReport({ queue }: { queue: QueueResponse | null }) {
   }, [since])
 
   const lines = handover?.sentences ?? []
-  const orders = new Set(lines.map((s) => s.orderId).filter(Boolean)).size
+  // Counts come from the source rows (server), so the Scribe rewording a line never moves them.
+  const counts = (handover as (Handover & HandoverCounts) | null)?.counts
+  const updates = counts?.updates ?? lines.length
+  const orders = counts?.orders ?? new Set(lines.map((s) => s.orderId).filter(Boolean)).size
   const now = queue?.now ?? null
-  const urgent = queue ? queue.needsYou.filter((q) => inNow(q, queue.now)).length : 0
-  const top = queue?.needsYou[0]
+  const free = queue?.needsYou.filter((q) => !claimOf(q)) ?? []
+  const urgent = queue ? free.filter((q) => inNow(q, queue.now)).length : 0
+  const top = free[0]
   const ready = !!queue && (!!handover || error)
 
   return <section className="shift" aria-labelledby="shift-h">
@@ -207,9 +237,9 @@ function ShiftReport({ queue }: { queue: QueueResponse | null }) {
       <div className="bubble" aria-busy={!ready}>
         {!ready ? <div className="handover-skel"><span /><span /></div> : <>
           <p>{error ? "I couldn't load what happened while you were out. The queue below is current."
-            : lines.length ? <>Here&apos;s the lot since <When at={handover!.since} now={now} />: {lines.length} {lines.length === 1 ? "update" : "updates"} on {orders} {orders === 1 ? "order" : "orders"}.</>
+            : updates ? <>Here&apos;s the lot since <When at={handover!.since} now={now} />: {updates} {updates === 1 ? "update" : "updates"} on {orders} {orders === 1 ? "order" : "orders"}.</>
               : <>Nothing new since <When at={handover!.since} now={now} />.</>}</p>
-          <p>{top ? <><a href="#needs-h">{queue!.needsYou.length} need you</a>{urgent > 0 && <>, <a href="#now">{urgent} right now</a></>}. Start with the {top.vehicle}.</> : "Nothing needs you. Enjoy the coffee."}</p>
+          <p>{top ? <><a href="#needs-h">{queue!.needsYou.length} need you</a>{urgent > 0 && <>, <a href="#now">{urgent} right now</a></>}. Start with the {top.vehicle}.</> : queue!.needsYou.length ? "Everything that needs you is taken. I'll put each back when its time is up." : "Nothing needs you. Enjoy the coffee."}</p>
           {queue!.ring.length > 0 && <p><a href="#ring-h">{queue!.ring.length === 1 ? "One" : queue!.ring.length} I can phone myself</a>. Open {queue!.ring.length === 1 ? "it" : "one"} and say the word.</p>}
         </>}
       </div>

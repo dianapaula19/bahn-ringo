@@ -35,17 +35,43 @@ export function ringEligibility(b: Bundle): { ok: boolean; reason: string | null
   return { ok: true, reason: null }
 }
 
-// The open task's due time when there is one; a pickup slot that already passed on a moving car is not a deadline.
-function decideBy(b: Bundle): string | null {
+/** "I can wait another 30 minutes" → the time the driver said they leave. Only the driver's newest message counts. */
+const WAIT = /\bwait(?: here)?(?: for)?(?: another| up to)? (\d{1,3}) (?:more )?min/i
+export function driverWaitUntil(b: Bundle): { until: string; said: string; messageId: string } | null {
+  const last = b.messages.filter((m) => m.authorType === "driver").sort((x, y) => x.authoredAt.localeCompare(y.authoredAt)).pop()
+  const n = last && WAIT.exec(last.body)
+  return n ? { until: new Date(Date.parse(last.authoredAt) + Number(n[1]) * 60_000).toISOString(), said: last.authoredAt, messageId: last.id } : null
+}
+
+/** The cutoff behind an open alert that has one: the ferry check-in for a ferry risk, the promise end for a promise at risk. */
+function alertCutoffs(b: Bundle): string[] {
+  const out: string[] = []
+  for (const a of openAlerts(b)) {
+    if (a.signal.startsWith("FERRY_")) for (const r of rows(b, "travel_reservations"))
+      if (r.details.status === "BOOKED" && r.details.assignment_id === a.details.assignment_id && str(r.details.check_in_cutoff_at)) out.push(String(r.details.check_in_cutoff_at))
+    if (a.signal.startsWith("DELIVERY_PROMISE_")) for (const t of rows(b, "time_windows"))
+      if (t.details.is_selected === true && t.details.purpose === "CUSTOMER_DELIVERY_PROMISE" && str(t.details.end_at)) out.push(String(t.details.end_at))
+  }
+  return out
+}
+
+const earliest = (times: string[]) => times.map((t) => new Date(t).toISOString()).sort()[0] ?? null
+
+// Hard deadlines first: open task due times, the time a waiting driver said they leave, an alert's cutoff.
+// Only without one: the selected pickup slot start (before pickup) and the promise deadline.
+// A pickup slot that already passed on a moving car is not a deadline.
+export function decideBy(b: Bundle): string | null {
+  const hard = [...openItems(b).flatMap((w) => (str(w.details.due_at) ? [String(w.details.due_at)] : [])), ...alertCutoffs(b)]
+  const wait = driverWaitUntil(b)
+  if (wait && RING_STATUSES.includes(b.order.status)) hard.push(wait.until)
+  if (hard.length) return earliest(hard)
   const times: string[] = []
-  for (const w of openItems(b)) if (str(w.details.due_at)) times.push(String(w.details.due_at))
-  if (times.length) return times.map((t) => new Date(t).toISOString()).sort()[0]
   for (const t of rows(b, "time_windows")) {
     if (t.details.is_selected !== true) continue
     if (t.details.purpose === "SELECTED_PICKUP_SLOT" && RING_STATUSES.includes(b.order.status) && str(t.details.start_at)) times.push(String(t.details.start_at))
     if (str(t.details.commitment_deadline_at)) times.push(String(t.details.commitment_deadline_at))
   }
-  return times.map((t) => new Date(t).toISOString()).sort()[0] ?? null
+  return earliest(times)
 }
 
 /** "Attempt to book the next-day crossing failed at 07:10 UTC: provider timed out without a confirmation reference." */
@@ -61,7 +87,16 @@ const alertText = (summary: string) => summary.replace(/;\s*source is a conversa
 
 type Hit = { reason: TriageReason; why: string; sources: SourceRef[]; severity?: Sev; oneDecision?: string | null }
 
-function safetyDecision(b: Bundle, incident: RelatedRow | undefined): string {
+/** What a person recorded on a safety card: the customer's roadside-or-tow choice (ring_events "recovery.choice"). */
+export const RECOVERY_THEN: Record<string, string> = {
+  roadside: "Book roadside assistance (it needs approval as a cost) and tell the driver who is coming.",
+  tow: "Book the tow (it needs approval as a cost) and tell the driver who is coming.",
+}
+
+function safetyDecision(b: Bundle, incident: RelatedRow | undefined, ring: RingOrderState): string {
+  const chose = ring.events.filter((e) => e.command === "recovery.choice").pop()
+  const choice = chose && String(chose.changes.choice)
+  if (choice && RECOVERY_THEN[choice]) return `Customer chose ${choice === "tow" ? "a tow" : "roadside assistance"} (recorded ${hhmm(chose.at)} by ${chose.actorId}). ${RECOVERY_THEN[choice]}`
   const msgs = [...b.messages].sort((x, y) => x.authoredAt.localeCompare(y.authoredAt))
   const safe = msgs.filter((m) => m.authorType === "driver" && /\bsafe\b/i.test(m.body)).pop()
   const cust = msgs.filter((m) => m.authorType === "customer").pop()
@@ -100,6 +135,12 @@ function unansweredDriver(b: Bundle, now: string) {
   return null
 }
 
+function waitLine(b: Bundle, now: string): string | null {
+  const w = driverWaitUntil(b)
+  if (!w) return null
+  return `${w.until > now ? "Driver leaves at" : "Driver could wait until"} ${hhmm(w.until)} UTC (said ${hhmm(w.said)}).`
+}
+
 function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const alerts = openAlerts(b), incidents = openIncidents(b), items = openItems(b)
   const dsProps = rows(b, "agent_proposals")
@@ -110,8 +151,9 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   if (crit || warn) return {
     reason: "SAFETY", severity: "critical",
     why: crit?.summary ?? "Open vehicle warning on the road. A person owns this.",
-    sources: [...(crit ? [ref("alerts", crit.id)] : []), ...(warn ? [ref("incidents", warn.id)] : [])],
-    oneDecision: safetyDecision(b, warn),
+    sources: [...ring.events.filter((e) => e.command === "recovery.choice").slice(-1).map((e) => ref("ring_events", e.id)),
+      ...(crit ? [ref("alerts", crit.id)] : []), ...(warn ? [ref("incidents", warn.id)] : [])],
+    oneDecision: safetyDecision(b, warn, ring),
   }
   // 2 FAILED_ACTION
   const failed = [...dsProps.filter((p) => p.details.status === "FAILED").map((p) => ref("agent_proposals", p.id)),
@@ -147,8 +189,9 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const driverMsg = unansweredDriver(b, now)
   if (empty || driverMsg) return {
     reason: "DRIVER_WAITING", severity: "high",
-    why: empty ? "Driver is at the pickup but the car is not there. They cannot wait much longer." : `Driver, ${hhmm(driverMsg!.authoredAt)} UTC: “${quoteShort(driverMsg!.body)}”`,
-    sources: [...(empty ? [ref("incidents", empty.id)] : []), ...(driverMsg ? [ref("messages", driverMsg.id)] : [])],
+    why: empty ? `Driver is at the pickup but the car is not there. ${waitLine(b, now) ?? "They cannot wait much longer."}` : `Driver, ${hhmm(driverMsg!.authoredAt)} UTC: “${quoteShort(driverMsg!.body)}”`,
+    sources: [...(empty ? [ref("incidents", empty.id)] : []), ...(driverMsg ? [ref("messages", driverMsg.id)] : []),
+      ...(empty && !driverMsg && driverWaitUntil(b) ? [ref("messages", driverWaitUntil(b)!.messageId)] : [])],
   }
   // 6 RECORDED_PROPOSAL
   const dsPending = dsProps.filter((p) => p.details.status === "PENDING_REVIEW")
@@ -228,7 +271,7 @@ function overtaken(b: Bundle): Triage["overtaken"] {
 
 function chips(facts: Fact[], sources: SourceRef[]): Fact[] {
   const ids = new Set(sources.map((s) => s.id))
-  return facts.filter((f) => !f.supersededByFactId || f.level === "refuted")
+  return facts.filter((f) => (!f.supersededByFactId || f.level === "refuted") && f.level !== "stale")
     .sort((x, y) => Number(ids.has(y.sourceId)) - Number(ids.has(x.sourceId)) || Number(y.origin === "ring") - Number(x.origin === "ring")
       || LEVEL_RANK[y.level] - LEVEL_RANK[x.level] || y.at.localeCompare(x.at))
     .slice(0, 3)

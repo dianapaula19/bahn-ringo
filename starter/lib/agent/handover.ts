@@ -35,7 +35,9 @@ async function items(since: string): Promise<Item[]> {
   const out: Item[] = [
     ...evs.map((e) => ({ id: e.id, table: "operational_events", at: iso(e.recordedAt), orderId: e.orderId, text: `${R(e.orderId)}: ${humanize(e.command)}${e.details.actor_type ? ` by ${e.details.actor_id ?? e.details.actor_type}` : ""}` })),
     ...msgs.filter((m) => m.details.visibility !== "INTERNAL").map((m) => ({ id: m.id, table: "messages", at: iso(m.authoredAt), orderId: m.orderId, text: `${R(m.orderId)}: ${m.authorType} via ${String(m.details.channel ?? "").replace(/_/g, " ")}: "${m.body.slice(0, 220)}"` })),
-    ...revs.map((e) => ({ id: e.id, table: "ring_events", at: iso(e.at), orderId: e.orderId, text: `${R(e.orderId)}: ${humanize(e.command)} committed by ${e.actorId} (simulated)` })),
+    ...revs.map((e) => ({ id: e.id, table: "ring_events", at: iso(e.at), orderId: e.orderId, text: e.command === "recovery.choice"
+      ? `${R(e.orderId)}: ${e.actorId} recorded the customer's choice: ${(e.changes as { choice?: string }).choice === "tow" ? "tow" : "roadside assistance"}`
+      : `${R(e.orderId)}: ${humanize(e.command)} committed by ${e.actorId} (simulated)` })),
     ...runs.filter((r) => r.decision).map((r) => ({ id: r.id, table: "ring_runs", at: iso(r.endedAt ?? r.startedAt), orderId: r.orderId, text: handoverLine(R(r.orderId), r.decision as StopDecision) })),
     ...calls.filter((c) => c.outcome).map((c) => ({ id: c.id, table: "ring_calls", at: iso(c.startedAt), orderId: c.orderId, text: `${R(c.orderId)}: Ringo called ${c.siteId} (simulated), outcome ${String(c.outcome).toLowerCase().replace(/_/g, " ")}` })),
     ...props.filter((p) => p.review && (p.review as { reviewedAt: string }).reviewedAt >= since).map((p) => {
@@ -88,24 +90,32 @@ export async function validate(drafts: { text: string; sourceIds: string[]; orde
   return { sentences, dropped: drafts.length - sentences.length }
 }
 
+/** The strip's headline numbers. Counted from the source rows, never from the Scribe's sentences, so they
+ *  only move when something new happens (the Scribe may merge or drop lines; that changes the wording only). */
+export type HandoverCounts = { counts: { updates: number; orders: number } }
+
 const cache = new Map<string, Handover>()
 const writing = new Map<string, Promise<void>>()
 
-export async function handover(sinceArg: string | null, wait = false): Promise<Handover> {
+export async function handover(sinceArg: string | null, wait = false): Promise<Handover & HandoverCounts> {
   const now = await simNow()
   const since = sinceArg && !Number.isNaN(Date.parse(sinceArg)) ? new Date(sinceArg).toISOString() : new Date(Date.parse(SNAPSHOT) - 3 * 3600_000).toISOString()
-  const list = (await items(since)).filter((i) => i.at <= now).slice(-40)
-  const key = `${since}|${list.length}|${list[list.length - 1]?.id ?? ""}`
+  const all = (await items(since)).filter((i) => i.at <= now)
+  const counts = { updates: all.length, orders: new Set(all.map((i) => i.orderId)).size }
+  const list = all.slice(-40) // what the Scribe reads
+  // Keyed on the items, not on `since`: a reload with a newer "last seen" but nothing new reuses the same
+  // Scribe text instead of paying for another call. One Scribe call per new state of the floor, at most.
+  const key = `${list[0]?.id ?? ""}|${list.length}|${list[list.length - 1]?.id ?? ""}`
   const hit = cache.get(key)
-  if (hit) return { ...hit, now }
+  if (hit) return { ...hit, now, since, counts }
   // The Scribe takes seconds; never hold the page on it. Answer with the template now and let the
   // Scribe fill the cache for the next load (the strip asks once more when it got the template).
   if (!writing.has(key)) writing.set(key, scribe(list).then(async (drafted) => {
     if (drafted) cache.set(key, { now, since, ...(await validate(drafted)), writer: "scribe" })
   }).catch(() => {}))
-  if (wait) { await writing.get(key); const done = cache.get(key); if (done) return { ...done, now } }
+  if (wait) { await writing.get(key); const done = cache.get(key); if (done) return { ...done, now, since, counts } }
   const drafts = list.slice(-12).reverse().map((i) => ({ text: `${hhmm(i.at)}: ${i.text}`, sourceIds: [i.id], orderId: i.orderId }))
-  return { now, since, ...(await validate(drafts)), writer: "template" }
+  return { now, since, ...(await validate(drafts)), writer: "template", counts }
 }
 
 export const handoverText = (h: Handover) =>
