@@ -8,6 +8,7 @@ import { AppFrame } from "../components/app-frame"
 import { Icon } from "../components/icons"
 import { CastLineup, RingoFace } from "../components/ringo"
 import { ACTION, MODE, When } from "../components/ring/bits"
+import { SavingsSection } from "../components/savings"
 
 const GROUPS: { mode: TrustMode; title: string; note: string }[] = [
   { mode: "auto", title: "Ringo does these on its own", note: "Asking and looking. Nothing on the order changes." },
@@ -85,6 +86,7 @@ export default function TrustPage() {
         </li>)}</ul>}
       </section>
     })}
+    <SavingsSection />
   </main></AppFrame>
 }
 

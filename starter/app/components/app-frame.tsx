@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import { fmtDateTime } from "@/lib/present/time"
 import { Icon } from "./icons"
 import { RingoFace } from "./ringo"
+import { SavingsLine } from "./savings"
 import { SkipLink } from "./ui"
 
 export type Section = "queue" | "trust" | "board" | "inbox" | "customers" | "drivers" | "sites" | "map"
@@ -35,7 +36,7 @@ export function AppFrame({ children, section, snapshotAt, board = false }: { chi
           </Link>)}
         </div>)}
       </nav>
-      <div className="sidebar-foot">{snapshotAt && <>Snapshot {fmtDateTime(snapshotAt)}<br /></>}Fictional data · calls and drivers simulated<br /><Link href="/trust#crew" className="foot-link">Meet the crew</Link></div>
+      <div className="sidebar-foot"><SavingsLine />{snapshotAt && <>Snapshot {fmtDateTime(snapshotAt)}<br /></>}Fictional data · calls and drivers simulated<br /><Link href="/trust#crew" className="foot-link">Meet the crew</Link></div>
     </aside>
     <div className="main" id="main" tabIndex={-1}>{children}</div>
   </div>
