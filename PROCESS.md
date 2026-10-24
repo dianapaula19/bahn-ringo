@@ -375,6 +375,26 @@ Asked for: when a person edits or rejects one of Ringo's proposals, keep the dif
 - **Threw away.** An LLM judge for "did Ringo behave": the point is checks a person can read. Exact wording checks on the stop headline (the model words it differently every run); the checks look at outcomes and proposals instead. Scripting the persona's lines in `phone.ts` to make the lie deterministic: it would have meant editing the phone sim, so the persona plays it from `knows` and the setup check catches it when it doesn't.
 - **Left.** The checks on wording (reception, backup "booked", "take the other car") are regexes and can be fooled by a phrasing they don't expect. One sample per run: a pass is not a guarantee. Scenarios on the same order run one after another, so the order page only keeps the last one's rows.
 
+## 6l. Time saved and the technical trace (25 Oct, lane ENGINE)
+
+**What we built**
+- **Time Ringo saved.** One line in the sidebar foot ("Today Ringo saved ~19 min of phone and desk time · 2 calls. Details") and a "Time Ringo saved" section at the bottom of /trust. The formula is on screen: *saved = time on the line + hold time + reads × 2 min + driver messages × 3 min + facts written × 1 min*. Line time is measured from the simulated calls (`ring_calls` start to end, sim clock); hold time comes from the phone tree's hold nodes that the transcript passed through (the sim announces a hold, it doesn't sit it out). The per-step minutes are labelled **estimate**, and a person can change them on /trust (stored in `ring_meta`, validated to 0 to 60 min). "Today" is the Helsinki day on the sim clock. The formula is pure code in `starter/lib/savings.ts` with a self-check (`npx tsx lib/savings.check.ts`, 3 tests). Data comes from `GET/POST /engine/savings`.
+- **Technical trace** at `/engine`, not in the main nav: reached from "Technical trace" next to "Ringo last ran …" in the run panel. For the last 30 live runs, collapsed by default (`?run=<id>` opens one): every model turn (model, latency, input / cached / output tokens, stop reason, tool uses), every tool call (latency, ok or refused, summary; the input folds open), the site and driver simulators' model calls nested under the tool that made them, reviewer-gate decisions with rule ids, errors and the stop. Monospace only on this page. It says whether PostHog LLM analytics is on (and links to it) or off.
+- **Instrumentation.** `recordModelCall()` in `lib/agent/llm.ts` wraps the existing PostHog capture and, inside a run, also writes a `ring_turns` row; Ringo's turns and the simulators' replies both go through it. `ring_steps.wall_at` stores the real clock per step, so tool latency is measured, not guessed. A failed trace write never changes the run.
+
+**What we checked**
+- Two live runs (516 and 010) through the real `POST /api/agent/orders/:id/run` route: 516 ended `proposal_ready` (12 Ringo turns + 4 site-sim calls, 40 s), 010 ended `waiting` after the scripted drop. All 21 model calls landed in `ring_turns`; the trace showed the 4 site-sim calls under the right `call_input` rows. The saved count was 2 calls, 19 s on the line, 50 s on hold (35 s stock-control hold + 15 s transfer), 6 reads and 6 facts: ~19 min.
+- Editing the estimate in the browser (reads 2 → 3 min) moved both the /trust total and the sidebar line to ~25 min without a reload; a bad value (−3) answers 400 and nothing is stored.
+- Empty state (no runs today) and loading state of the savings section, by answering the route in the browser; the trace page's empty state is one sentence in Ringo's voice.
+- A production build with `NEXT_BASE_PATH=/apps/bahn-ring`: run panel → trace → sidebar "Details" → /trust#savings, no 4xx; the POST goes through the trailing-slash redirect. Screenshots at 1440 and 390, no horizontal scroll. `typecheck`, `ring:check` 20/20, `build`.
+
+**Thrown away**
+- A new `RunEvent` type for model turns: `contract.ts` is frozen and the run panel would have had to learn to skip it. Turns live in their own table and are joined by wall time.
+- Pinning each turn to a step `seq`: the simulators' calls don't know it. Wall-time windows nest them under their tool for free.
+- A dollar cost per run: prices change and would be a second number to maintain. Tokens are shown; cost is PostHog's job.
+- An orange "estimate" chip (it read as a warning); it is a sand chip now.
+- Not checked: the PostHog link (`eu.posthog.com/llm-analytics/traces`, derived from the ingest host) was not opened, because this lane does not contact outside services. The trace page has no /evals link because there is no /evals page in this branch. The sidebar line is hidden on phones, like the rest of the sidebar foot; /trust has the full count.
+
 ## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, and so on) are unverified. Serving under `/apps/<slug>` works in a local production build with the base path; whether the gateway keeps or strips the prefix on a real box is not checked.

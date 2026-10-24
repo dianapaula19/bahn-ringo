@@ -2,6 +2,8 @@
 // (starter/.env.local, loaded by Next and by scripts/ring-shim.cjs). It is never logged or returned.
 import AnthropicClient from "@anthropic-ai/sdk"
 import { PostHog } from "posthog-node"
+import { db } from "@/lib/db"
+import { ringTurns } from "@/lib/ring-schema"
 
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5"
 
@@ -30,9 +32,14 @@ export function anthropic(): AnthropicClient | null {
   return client ?? null
 }
 
+type ModelResult = {
+  model?: string; stop_reason?: string | null; content?: { type: string }[]
+  usage?: { input_tokens?: number | null; output_tokens?: number | null; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null } | null
+}
+
 // @posthog/ai only wraps `messages`, not `beta.messages`, and its posthog* request fields make the API
 // answer 400. So Ringo reports each model call itself: model, tokens, latency, errors (no prompt content).
-export function captureAiGeneration(context: AiTraceContext | null, name: string, startedAt: number, result: { model?: string; usage?: { input_tokens?: number; output_tokens?: number } | null } | null, error?: unknown) {
+export function captureAiGeneration(context: AiTraceContext | null, name: string, startedAt: number, result: ModelResult | null, error?: unknown) {
   if (!posthog || !context) return
   posthog.capture({
     distinctId: `ai-${context.sessionId}`,
@@ -51,6 +58,24 @@ export function captureAiGeneration(context: AiTraceContext | null, name: string
       ...(error ? { $ai_error: error instanceof Error ? error.name : "Error" } : {}),
     },
   })
+}
+
+/** Report one model call to PostHog and, inside a run (session id = run id), keep its timing and
+ *  tokens in ring_turns for the engineering trace (/engine). A failed write never changes the run. */
+export async function recordModelCall(context: AiTraceContext | null, name: string, startedAt: number, result: ModelResult | null, error?: unknown) {
+  captureAiGeneration(context, name, startedAt, result, error)
+  if (!context?.sessionId.startsWith("run-")) return
+  const u = result?.usage
+  try {
+    await db.insert(ringTurns).values({
+      id: `turn-${crypto.randomUUID()}`, runId: context.sessionId, name, model: result?.model ?? MODEL,
+      startedAt: new Date(startedAt).toISOString(), latencyMs: Date.now() - startedAt,
+      inputTokens: u?.input_tokens ?? null, outputTokens: u?.output_tokens ?? null,
+      cacheReadTokens: u?.cache_read_input_tokens ?? null, cacheWriteTokens: u?.cache_creation_input_tokens ?? null,
+      stopReason: result?.stop_reason ?? null, toolUses: result?.content ? result.content.filter((b) => b.type === "tool_use").length : null,
+      error: error ? (error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 300) : "Error") : null,
+    })
+  } catch { /* the trace is best effort */ }
 }
 
 export function captureAiToolSpan(context: AiTraceContext | null, name: string, input: unknown, output: unknown, startedAt: number, isError = false) {
@@ -96,9 +121,9 @@ export async function shortReply(system: string, user: string, effort: "low" | "
       thinking: { type: "adaptive" }, output_config: { effort },
       system, messages: [{ role: "user", content: user }],
     } as AnthropicClient.Beta.MessageCreateParamsNonStreaming)
-    captureAiGeneration(context, "short_reply", startedAt, message)
+    await recordModelCall(context, "short_reply", startedAt, message)
   } catch (e) {
-    captureAiGeneration(context, "short_reply", startedAt, null, e)
+    await recordModelCall(context, "short_reply", startedAt, null, e)
     throw e
   }
   if (message.stop_reason === "refusal") return null

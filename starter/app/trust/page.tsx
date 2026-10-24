@@ -11,6 +11,7 @@ import { Icon } from "../components/icons"
 import { CastLineup, RingoFace } from "../components/ringo"
 import { ACTION, MODE, When } from "../components/ring/bits"
 import { LearnedRules, Suggestions } from "./learned"
+import { SavingsSection } from "../components/savings"
 
 const GROUPS: { mode: TrustMode; title: string; note: string }[] = [
   { mode: "auto", title: "Ringo does these on his own", note: "Asking and looking. Nothing on the order changes." },
@@ -100,6 +101,7 @@ export default function TrustPage() {
     {learnError ? <section className="sec"><p className="board-error" role="alert">Rules Ringo learned from you: {learnError}.</p></section>
       : !learned ? <section className="sec" aria-busy="true"><div className="q-skel" /></section>
       : <LearnedRules rules={learned.rules} now={learned.now} onChanged={() => refresh()} />}
+    <SavingsSection />
     <footer className="sec note-text"><Link href="/evals" className="foot-link">How we test Ringo</Link>: ten scripted situations, scored on what Ringo actually did.</footer>
   </main></AppFrame>
 }

@@ -1,0 +1,25 @@
+/* Time Ringo saved (app/components/savings.tsx). Palette and type from globals.css. */
+.savings-line { margin: 0 0 10px; color: var(--muted); }
+.savings-card { padding: 18px 20px; border-radius: var(--radius-lg); background: var(--birch); box-shadow: var(--shadow-card); }
+.savings-ringo { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--brown); }
+.savings-total { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin-top: 14px; }
+.savings-big { font-family: var(--font-display); font-weight: 600; font-size: 30px; letter-spacing: -0.02em; color: var(--ink); }
+.savings-sub { font-size: 13.5px; color: var(--muted); }
+.savings-parts { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--hair-soft); }
+.savings-parts > div { display: grid; grid-template-columns: 230px 1fr; gap: 12px; font-size: 13.5px; }
+.savings-parts dt { color: var(--muted); }
+.savings-parts dd { color: var(--ink); font-variant-numeric: tabular-nums; }
+.savings-kind { margin-left: 6px; font-size: 11.5px; color: var(--subtle); }
+.savings-kind.estimate { padding: 1px 7px; border-radius: 999px; background: var(--hair-soft); color: var(--brown); }
+.savings-formula { margin-top: 14px; font-size: 12.5px; line-height: 1.55; color: var(--muted); max-width: 72ch; }
+.savings-edit { margin-top: 12px; }
+.savings-edit form { display: grid; gap: 10px; max-width: 520px; }
+.savings-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13.5px; color: var(--brown); }
+.savings-input { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--muted); }
+.savings-input input { width: 72px; min-height: 36px; padding: 0 8px; border: 1px solid var(--hair); border-radius: var(--radius); background: var(--birch); font: inherit; font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
+.savings-input input:focus { outline: none; border-color: var(--ink); }
+.savings-actions { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
+@media (max-width: 720px) {
+  .savings-card { padding: 16px; }
+  .savings-parts > div { grid-template-columns: 1fr; gap: 2px; }
+}

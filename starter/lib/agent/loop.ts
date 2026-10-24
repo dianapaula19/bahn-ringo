@@ -11,7 +11,7 @@ import { loadOrder } from "@/lib/present/load"
 import { ringRuns, ringSteps } from "@/lib/ring-schema"
 import { ringEligibility } from "@/lib/triage/triage"
 import { newId, simNow } from "./clock"
-import { anthropic, BETAS, captureAiGeneration, captureAiToolSpan, flushAiObservability, MODEL, newAiTrace } from "./llm"
+import { anthropic, BETAS, captureAiToolSpan, flushAiObservability, MODEL, newAiTrace, recordModelCall } from "./llm"
 import { LIMITS, runTool, TOOLS, type RunCtx, type ToolOutcome } from "./tools"
 
 export const SYSTEM = `You are Ringo, the pickup readiness agent in a car delivery control room. Your job on one order: find out whether the car can be collected (who has the keys, where the handover is, who releases it, which papers are needed), write down what you learn as graded facts, and then either finish or bring a person one clear decision.
@@ -93,7 +93,7 @@ export async function runRing(input: {
   await db.insert(ringRuns).values({ id: runId, orderId: input.orderId, trigger: input.trigger, status: "running", model: MODEL, operatorMessage: input.message ?? null, startedAt })
   let seq = 0
   const emit = async (e: RunEvent) => {
-    await db.insert(ringSteps).values({ runId, seq: seq++, event: e })
+    await db.insert(ringSteps).values({ runId, seq: seq++, event: e, wallAt: new Date().toISOString() })
     await onEvent(e)
   }
   const ctx: RunCtx = { runId, orderId: input.orderId, loaded, emit, reads: { order: null, messages: null, docs: null }, playbooks: new Map(), liveCallId: null, proposeAttempts: 0, toolCalls: 0, did: [], stopped: null, ai: null }
@@ -151,8 +151,8 @@ async function loop(client: Anthropic, ctx: RunCtx, input: { orderId: string; tr
       tools: TOOLS as Anthropic.Beta.BetaTool[], tool_choice: { type: "auto" },
       thinking: { type: "adaptive" }, output_config: { effort: "medium" }, messages,
     } as Anthropic.Beta.MessageCreateParamsStreaming)
-    const msg = await stream.finalMessage().catch((e) => { captureAiGeneration(ctx.ai, "ringo_turn", turnStartedAt, null, e); throw e })
-    captureAiGeneration(ctx.ai, "ringo_turn", turnStartedAt, msg)
+    const msg = await stream.finalMessage().catch(async (e) => { await recordModelCall(ctx.ai, "ringo_turn", turnStartedAt, null, e); throw e })
+    await recordModelCall(ctx.ai, "ringo_turn", turnStartedAt, msg)
     if (msg.stop_reason === "refusal") {
       ctx.stopped = forcedStop("Ringo could not continue on this order. A person should take over.", ctx.did, "Work the order by hand.")
       return
