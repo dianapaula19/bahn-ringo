@@ -9,6 +9,7 @@ import type { LearnedRule, ReviewWithSuggestion } from "@/lib/agent/learn/types"
 import { DESK, claimOrder, recordRecovery, releaseClaim, reviewProposal } from "../../_lib/agent-api"
 import { RECHECK_MINUTES, type Claim, type WithClaim } from "@/lib/triage/claim"
 import { unanswered } from "@/lib/triage/next-action"
+import { currentFacts } from "@/lib/triage/relevance"
 import { Icon } from "../icons"
 import { ACTION, FactChip, MODE, Simulated, When, entryRole, factLizard } from "./bits"
 import { RingoFace, RoleTag } from "../ringo"
@@ -347,7 +348,7 @@ export function FactsPanel({ story }: { story: OrderStory }) {
   const overtaken = new Set(story.triage.overtaken.map((o) => o.ref.id))
   const kinds = new Map(story.timeline.map((e) => [e.ref.id, e.actorKind]))
   const linked = new Set(kinds.keys())
-  const current = facts.filter((f) => !f.supersededByFactId && f.level !== "refuted" && f.level !== "stale" && !overtaken.has(f.sourceId))
+  const current = currentFacts(facts, overtaken) // already in decision order (rankFacts), the same list Decide leads with
   const old = facts.filter((f) => !current.includes(f))
   const [all, setAll] = useState(false)
   const [oldOpen, setOldOpen] = useState(false)

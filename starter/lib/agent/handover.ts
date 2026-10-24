@@ -7,7 +7,7 @@ import type Anthropic from "@anthropic-ai/sdk"
 import { db } from "@/lib/db"
 import type { Handover, HandoverSentence, RunOutcome, SourceRef, StopDecision } from "@/lib/contract"
 import { humanize } from "@/lib/present/labels"
-import { fmtClockZone } from "@/lib/present/time"
+import { fmtClock } from "@/lib/present/time"
 import { messages, operationalEvents, orders } from "@/lib/schema"
 import { ringCalls, ringEvents, ringProposals, ringRuns } from "@/lib/ring-schema"
 import { SNAPSHOT, simNow } from "./clock"
@@ -16,7 +16,7 @@ import { anthropic, BETAS, captureAiGeneration, flushAiObservability, MODEL, new
 
 type Item = { id: string; table: string; at: string; orderId: string; text: string }
 const iso = (v: Date | string) => new Date(v).toISOString()
-const hhmm = (v: string) => fmtClockZone(v) // "11:22 EEST", the desk's zone
+const hhmm = (v: string) => fmtClock(v) // "11:22", the desk's clock (Helsinki); the screen says the zone once
 const STOPPED: Record<RunOutcome, string> = { needs_person: "Ringo needs a person", proposal_ready: "Ringo has a proposal for you", waiting: "Ringo is waiting", done: "Ringo is done", failed: "" }
 const handoverLine = (ref: string, d: StopDecision) => `${ref}: ${STOPPED[d.outcome] ? `${STOPPED[d.outcome]}: ` : ""}${d.headline}`
 

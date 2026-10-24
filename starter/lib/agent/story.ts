@@ -5,7 +5,7 @@ import { messages as messagesTable } from "@/lib/schema"
 import type { Bundle, MessageRow } from "@/lib/present/bundle"
 import { describeEvent } from "@/lib/present/events"
 import { humanize } from "@/lib/present/labels"
-import { fmtClockZone } from "@/lib/present/time"
+import { fmtClock } from "@/lib/present/time"
 import { loadBoardBundles, loadOrder } from "@/lib/present/load"
 import { orderFacts } from "@/lib/triage/facts"
 import { rankAll, ringEligibility, triage } from "@/lib/triage/triage"
@@ -102,13 +102,19 @@ export async function buildStory(orderId: string): Promise<(OrderStory & WithCla
   for (const e of ring.events) timeline.push({ at: e.at, actor: e.actorType === "agent" ? "Ringo" : humanize(e.actorId), actorKind: e.actorType === "agent" ? "ring" : "operator",
     text: e.command === "recovery.choice" ? `Recorded the customer's choice: ${e.changes.choice === "tow" ? "tow" : "roadside assistance"}. “${String(e.changes.note ?? "")}”` : `${humanize(e.command)} recorded (simulated)`,
     ref: { table: "ring_events", id: e.id }, factIds: factsBySource(e.id), channel: null, simulated: e.command !== "recovery.choice" })
-  for (const c of ring.claims) timeline.push({ at: c.at, actor: humanize(c.by), actorKind: "operator", text: `I'll handle it. Back in the queue at ${fmtClockZone(c.recheckAt)}${c.note ? `: ${c.note}` : "."}`, ref: { table: "ring_claims", id: c.id }, factIds: [], channel: null, simulated: false })
+  for (const c of ring.claims) timeline.push({ at: c.at, actor: humanize(c.by), actorKind: "operator", text: `I'll handle it. Back in the queue at ${fmtClock(c.recheckAt)}${c.note ? `: ${c.note}` : "."}`, ref: { table: "ring_claims", id: c.id }, factIds: [], channel: null, simulated: false })
   for (const r of ring.runs) if (r.decision && r.endedAt) timeline.push({ at: r.endedAt, actor: "Ringo", actorKind: "ring", text: r.decision.headline, ref: { table: "ring_runs", id: r.id }, factIds: r.decision.found, channel: null, simulated: false })
   timeline.sort((x, y) => x.at.localeCompare(y.at))
   const eligible = ringEligibility(b)
   const lastDecision = [...ring.runs].reverse().find((r) => r.decision && r.decision.outcome !== "failed")?.decision ?? null
+  const pending = ring.proposals.filter((p) => p.status === "PENDING_REVIEW")
+  // Rank by the decision the hero shows: Ringo's stop and his open proposals, plus what they cite.
+  const focus = {
+    text: [lastDecision?.headline ?? "", lastDecision?.oneDecision ?? "", ...pending.map((p) => p.summary)],
+    cited: [...pending.flatMap((p) => p.evidenceRefs.map((r) => r.id)), ...(lastDecision?.found ?? [])],
+  }
   return {
-    now, orderId, reference: b.order.reference, triage: t, facts: rankFacts(facts, t, b.order.status), timeline,
+    now, orderId, reference: b.order.reference, triage: t, facts: rankFacts(facts, t, b.order.status, focus), timeline,
     proposals: [...datasetProposals(b, now), ...ring.proposals], runs: ring.runs, calls: ring.calls, driverMessages: ring.driverMessages,
     callbacks: ring.jobs, decision: lastDecision, ringEligible: eligible.ok, ringIneligibleReason: eligible.reason,
     claim: activeClaim(ring.claims, lastActivity(b, ring), now),

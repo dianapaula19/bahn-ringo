@@ -10,6 +10,7 @@ import { rows, type Bundle } from "@/lib/present/bundle"
 import type { OrderLoad } from "@/lib/present/load"
 import { ringDriverMessages, ringFacts, ringJobs, ringMeta } from "@/lib/ring-schema"
 import { orderFacts } from "@/lib/triage/facts"
+import { fmtClock } from "@/lib/present/time"
 import { pickupSiteId, triage } from "@/lib/triage/triage"
 import { newId, simNow } from "./clock"
 import { type AiTraceContext } from "./llm"
@@ -96,7 +97,8 @@ export const TOOLS: Anthropic.Tool[] = ([
   name, description, input_schema, ...(LOOSE.includes(name) ? {} : { strict: true }),
 } as unknown as Anthropic.Tool))
 
-const hhmm = (iso: string | null | undefined) => (iso ? `${iso.slice(11, 16)} UTC` : "?")
+// Helsinki clock, no zone name: every screen that shows these says "Helsinki time" once.
+const hhmm = (iso: string | null | undefined) => (iso ? fmtClock(iso) : "?")
 const b = (ctx: RunCtx): Bundle => ctx.loaded.bundle
 const site = (ctx: RunCtx, id: string | null) => (id ? b(ctx).sites.get(id) ?? null : null)
 

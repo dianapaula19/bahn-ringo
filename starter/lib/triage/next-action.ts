@@ -19,15 +19,15 @@ export function nextAction(t: Input): string | null {
     case "DRIVER_WAITING": return "Answer driver"
     case "RECORDED_PROPOSAL": return "Review proposal"
     case "CUSTOMER_CONTACT": return "Confirm with customer"
-    case "DUE_SOON": return dueSoon(t.why)
+    case "DUE_SOON": return dueSoonStep(t.why)
     case "RING_CAN_CALL": return "Run Ringo"
     default: return null
   }
 }
 
 // ponytail: keyword match on the task summary; a work-item kind → action table if these start misfiring.
-function dueSoon(why: string): string | null {
-  const quoted = /^(Driver|Site|Customer), \d\d:\d\d [A-Z+\d-]+:/.exec(why)?.[1]
+function dueSoonStep(why: string): string | null {
+  const quoted = /^(Driver|Site|Customer), \d\d:\d\d(?: [A-Z+\d-]+)?:/.exec(why)?.[1]
   if (quoted) return quoted === "Driver" ? "Answer driver" : quoted === "Site" ? "Call site" : "Reply to customer"
   if (/\b(photo|proof|handover record)/i.test(why)) return "Check proof"
   if (/\b(customer|buyer)\b/i.test(why)) return "Confirm with customer"
@@ -40,15 +40,30 @@ function dueSoon(why: string): string | null {
 }
 
 const NOW_WINDOW = 2 * 3600_000
+const SOON_WINDOW = 30 * 60_000
 
-/** The queue's "Now" group: safety always, anything overdue, and critical/high severity due within 2 h.
- *  Everything else in Needs you is "When you can" (still needs a person, just not this minute). */
+/** The queue's "Now" group: safety always, anything overdue or due within 30 min (any severity), and
+ *  critical/high severity due within 2 h. Everything else in Needs you is "When you can". */
 export function inNow(t: Pick<Triage, "reason" | "severity" | "decideBy">, now: string): boolean {
   if (t.reason === "SAFETY") return true
   if (!t.decideBy) return false
   const left = Date.parse(t.decideBy) - Date.parse(now)
-  // Anything overdue is Now: "When you can" never holds a row that says "Overdue".
-  return left <= 0 || ((t.severity === "critical" || t.severity === "high") && left <= NOW_WINDOW)
+  // "When you can" never holds a row that says "Overdue" or "Due in 10 min".
+  return left <= SOON_WINDOW || ((t.severity === "critical" || t.severity === "high") && left <= NOW_WINDOW)
+}
+
+/** Due within 30 min and not yet overdue: the row's quiet "due soon" marker. */
+export function dueSoon(t: Pick<Triage, "decideBy">, now: string): boolean {
+  if (!t.decideBy) return false
+  const left = Date.parse(t.decideBy) - Date.parse(now)
+  return left >= 0 && left <= SOON_WINDOW
+}
+
+/** Now's order: a safety row (someone on the road) leads; then by deadline, overdue first (oldest deadline first),
+ *  then the soonest; a row without a deadline goes last. Ties keep rank order (the sort is stable). */
+export function byDeadline<T extends Pick<Triage, "reason" | "decideBy">>(rows: T[]): T[] {
+  const key = (t: T) => t.reason === "SAFETY" ? -Infinity : t.decideBy ? Date.parse(t.decideBy) : Infinity
+  return [...rows].sort((a, b) => key(a) - key(b))
 }
 
 /** The newest inbound driver line with no reply after it (from an operator, an agent or Ringo), for the hero's

@@ -5,7 +5,7 @@ import { LEVEL_RANK } from "@/lib/agent/facts"
 import type { RingOrderState } from "@/lib/agent/store"
 import { rows, str, strings, type Bundle, type RelatedRow } from "@/lib/present/bundle"
 import { orderFacts } from "./facts"
-import { fmtClockZone } from "@/lib/present/time"
+import { fmtClock } from "@/lib/present/time"
 
 export const RING_KINDS = ["PICKUP_CONTACT_HANDLE_REQUIRED", "PICKUP_ACCESS_CHECK_REQUIRED", "KEY_HOLDER_STOCK_CHECK"]
 const RING_STATUSES = ["NEW", "WAITING_FOR_PICKUP"]
@@ -15,8 +15,8 @@ const SEV = { critical: 0, high: 1, medium: 2, low: 3 } as const
 type Sev = keyof typeof SEV
 
 const ref = (table: string, id: string): SourceRef => ({ table, id })
-// "11:22 EEST": the operator's clock with its zone name, so the queue and the slots read in one zone.
-const hhmm = (iso: string) => fmtClockZone(iso)
+// "11:22": the desk's clock (Helsinki). The screens say "Helsinki time" once per section, so no zone name per line.
+const hhmm = (iso: string) => fmtClock(iso)
 const openItems = (b: Bundle) => rows(b, "work_items").filter((w) => w.details.status === "OPEN" || w.details.status === "NEEDS_EXTERNAL_INPUT")
 const openAlerts = (b: Bundle) => b.alerts.filter((a) => a.status === "OPEN" || a.status === "ACKNOWLEDGED")
 const openIncidents = (b: Bundle) => rows(b, "incidents").filter((i) => !i.details.resolved_at)

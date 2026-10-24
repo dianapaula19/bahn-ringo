@@ -586,6 +586,7 @@ details.more > :not(summary) { margin-top: 8px; }
 .is-safety .q-next { background: var(--birch); }
 .q-due { grid-area: due; font-size: 12.5px; color: var(--muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .q-due.tone-danger { color: var(--red-ink); font-weight: 650; }
+.q-soon { display: block; font-size: 11px; font-weight: 600; color: var(--orange-ink); margin-top: 1px; }
 .calm { display: flex; gap: 14px; align-items: flex-start; margin-top: 18px; padding: 28px 24px; border-radius: var(--radius-lg); background: var(--green-bg); color: var(--green-ink); }
 .calm-title { font-size: 20px; font-weight: 600; color: var(--ink); }
 .calm-sub { margin-top: 4px; font-size: 14px; color: var(--brown); }
