@@ -69,7 +69,7 @@ export async function buildStory(orderId: string): Promise<OrderStory | null> {
   for (const a of b.alerts) timeline.push({ at: a.triggeredAt, actor: "Monitoring", actorKind: "system", text: a.summary, ref: { table: "alerts", id: a.id }, factIds: factsBySource(a.id), channel: null, simulated: false })
   for (const e of b.events) {
     const h = describeEvent(e, b)
-    timeline.push({ at: e.recordedAt, actor: h.actor ?? "System", actorKind: e.details.actor_type === "operator" ? "operator" : e.details.actor_type === "agent" ? "agent" : "system", text: h.detail ? `${h.text} (${h.detail})` : h.text, ref: { table: "operational_events", id: e.id }, factIds: factsBySource(e.id), channel: null, simulated: false })
+    timeline.push({ at: e.recordedAt, actor: h.actor ?? "System", actorKind: h.actor ? ACTOR_KIND[String(e.details.actor_type)] ?? "system" : "system", text: h.detail ? `${h.text} (${h.detail})` : h.text, ref: { table: "operational_events", id: e.id }, factIds: factsBySource(e.id), channel: null, simulated: false })
   }
   const siteName = (id: string) => b.sites.get(id)?.name ?? id
   for (const c of ring.calls) timeline.push({

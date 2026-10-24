@@ -1,8 +1,9 @@
 "use client"
 
-import type { ActionType, EvidenceLevel, Fact, QueueItem, TriageReason, TrustMode } from "@/lib/contract"
+import type { ActionType, EvidenceLevel, Fact, QueueItem, StoryEntry, TriageReason, TrustMode } from "@/lib/contract"
 import { dayKey, fmtClock, fmtDateTime, fmtLong, relativeTo } from "@/lib/present/time"
 import type { Tone } from "@/lib/present/types"
+import { LizardFace, type Lizard } from "../ringo"
 
 export const LEVEL: Record<EvidenceLevel, { label: string; tone: Tone; hint: string }> = {
   claimed: { label: "Claimed", tone: "neutral", hint: "Someone said it. Nobody has checked." },
@@ -78,15 +79,29 @@ const KIND: Partial<Record<Fact["sourceKind"], string>> = {
   travel_reservation: "booking", tracking: "driver app", proof: "proof", document: "document", event: "order event", ring_call: "Ringo call", ring_driver_message: "driver chat",
 }
 
+/** Which lizard speaks for a timeline entry. Bahn people, monitoring and system events get none. */
+export const LIZARD: Partial<Record<StoryEntry["actorKind"], Lizard>> = { ring: "ringo", driver: "driver", customer: "customer", site: "dealer" }
+
+/** Which lizard stands behind a fact's source. Messages take their author's role from the timeline;
+ *  a Ringo call is what the site said, so the dealer; dataset records go by who stated them. */
+export function factLizard(fact: Fact, entryKind: Map<string, StoryEntry["actorKind"]>): Lizard | null {
+  if (fact.sourceKind === "ring_call") return "dealer"
+  const kind = entryKind.get(fact.sourceId)
+  if ((fact.sourceKind === "message" || fact.sourceKind === "ring_driver_message") && kind) return LIZARD[kind] ?? null
+  if (/^customer/i.test(fact.by)) return "customer"
+  if (/^site (profile|contact)/i.test(fact.by)) return "dealer"
+  return null
+}
+
 /** A fact with its level, who said it, from which record, and when. Superseded facts are struck through.
  *  When the source is on the timeline (`linked`), the source names links to it. */
-export function FactChip({ fact, now, linked, old: forceOld }: { fact: Fact; now?: string | null; linked?: Set<string>; old?: boolean }) {
+export function FactChip({ fact, now, linked, old: forceOld, who }: { fact: Fact; now?: string | null; linked?: Set<string>; old?: boolean; who?: Lizard | null }) {
   const old = forceOld || fact.level === "refuted" || fact.level === "stale" || !!fact.supersededByFactId
   const kind = KIND[fact.sourceKind] ?? "record"
   return <span className={`fact-chip${old ? " old" : ""}`}>
     <Level level={fact.level} />
     <span className="fact-claim">{fact.claim}</span>
-    <span className="fact-src" title={`Source: ${fact.sourceId}`}>{fact.by} · {linked?.has(fact.sourceId) ? <a href={`#src-${fact.sourceId}`}>{kind}</a> : kind} · <When at={fact.at} now={now} /></span>
+    <span className="fact-src" title={`Source: ${fact.sourceId}`}>{who !== undefined && <LizardFace who={who} />}{fact.by} · {linked?.has(fact.sourceId) ? <a href={`#src-${fact.sourceId}`}>{kind}</a> : kind} · <When at={fact.at} now={now} /></span>
   </span>
 }
 

@@ -5,7 +5,8 @@ import posthog from "posthog-js"
 import type { CallRecord, Fact, OrderStory, Proposal, ReviewDecision, ReviewResponse, StoryEntry } from "@/lib/contract"
 import { DESK, reviewProposal } from "../../_lib/agent-api"
 import { Icon } from "../icons"
-import { ACTION, FactChip, MODE, Simulated, When } from "./bits"
+import { ACTION, FactChip, LIZARD, MODE, Simulated, When, factLizard } from "./bits"
+import { LizardFace } from "../ringo"
 
 // ---------------------------------------------------------------- plain-words payloads
 
@@ -121,15 +122,16 @@ export function ProposalCard({ proposal: p, story, onChanged }: { proposal: Prop
 export function FactsPanel({ story }: { story: OrderStory }) {
   const { facts, now } = story
   const overtaken = new Set(story.triage.overtaken.map((o) => o.ref.id))
-  const linked = new Set(story.timeline.map((e) => e.ref.id))
+  const kinds = new Map(story.timeline.map((e) => [e.ref.id, e.actorKind]))
+  const linked = new Set(kinds.keys())
   const current = facts.filter((f) => !f.supersededByFactId && f.level !== "refuted" && f.level !== "stale" && !overtaken.has(f.sourceId))
   const old = facts.filter((f) => !current.includes(f))
   return <section className="sec" aria-labelledby="facts-h">
     <div className="sec-head"><h2 id="facts-h">What we know</h2><span className="note">How sure we are, who said it, the record it comes from, and when.</span></div>
     {facts.length === 0 && <p className="empty">No facts recorded on this order yet.</p>}
-    <ul className="fact-list">{current.map((f) => <li key={f.id}><FactChip fact={f} now={now} linked={linked} /></li>)}</ul>
+    <ul className="fact-list">{current.map((f) => <li key={f.id}><FactChip fact={f} now={now} linked={linked} who={factLizard(f, kinds)} /></li>)}</ul>
     {old.length > 0 && <details className="more"><summary><Icon name="chevron" size={12} />{old.length} no longer true or out of date</summary>
-      <ul className="fact-list">{old.map((f) => <li key={f.id}><FactChip fact={f} now={now} linked={linked} old /></li>)}</ul></details>}
+      <ul className="fact-list">{old.map((f) => <li key={f.id}><FactChip fact={f} now={now} linked={linked} who={factLizard(f, kinds)} old /></li>)}</ul></details>}
   </section>
 }
 
@@ -163,6 +165,7 @@ function TimelineEntry({ entry: e, now, facts, call }: { entry: StoryEntry; now:
   const [open, setOpen] = useState(false)
   return <li className={`tl-item kind-${e.actorKind}`} id={`src-${e.ref.id}`}>
     <span className="tl-time"><When at={e.at} now={now} /></span>
+    <LizardFace who={LIZARD[e.actorKind] ?? null} />
     <div className="tl-body">
       <p className="tl-who"><b>{e.actor}</b>{e.channel && <span className="tl-channel">{e.channel.replace(/_/g, " ")}</span>}{e.simulated && <Simulated />}</p>
       <p className="tl-text">{e.text}</p>

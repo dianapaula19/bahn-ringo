@@ -8,6 +8,7 @@ import { withBase } from "@/lib/base"
 import { loadHandover, loadQueue } from "./_lib/agent-api"
 import { AppFrame } from "./components/app-frame"
 import { Icon } from "./components/icons"
+import { CAST } from "./components/ringo"
 import { Ago, When, agentStatus } from "./components/ring/bits"
 
 const PAGE = 50
@@ -84,8 +85,9 @@ export default function NeedsYou() {
     {!queue && !error && <ul className="q-list" aria-busy="true" aria-label="Loading">{[0, 1, 2, 3, 4].map((i) => <li key={i} className="q-skel" />)}</ul>}
 
     {queue && queue.needsYou.length === 0 && <div className="calm">
-      {/* eslint-disable-next-line @next/next/no-img-element -- a static svg needs no optimiser */}
-      <img className="calm-ringo" src={withBase("/ringo.svg")} alt="Ringo" width={125} height={140} />
+      <div className="calm-cast" role="img" aria-label="Ringo with a pickup site, a customer and a driver">{(["ringo", "dealer", "customer", "driver"] as const).map((who) =>
+        // eslint-disable-next-line @next/next/no-img-element -- a static svg needs no optimiser
+        <img key={who} src={withBase(CAST[who].src)} alt="" width={107} height={120} />)}</div>
       <div><p className="calm-title">Nothing needs you.</p><p className="calm-sub">Quiet on the lot. {moving} orders moving; one shows up here the moment a person is needed.</p></div>
     </div>}
     {queue && queue.needsYou.length > 0 && <NeedsYouGroups items={queue.needsYou} now={queue.now} />}

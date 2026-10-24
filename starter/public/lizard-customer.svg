@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 240" role="img" aria-labelledby="t">
+  <title id="t">Customer: a lizard buyer in a navy blazer and glasses, with a tablet and lanyard</title>
+  <defs></defs>
+  <path d="M62 200 C20 205 8 175 26 160 C36 152 48 160 42 170" fill="none" stroke="#4f9a4a" stroke-width="13" stroke-linecap="round"/>
+  <rect x="72" y="200" width="20" height="30" rx="6" fill="#3a3f4a"/>
+  <rect x="108" y="200" width="20" height="30" rx="6" fill="#3a3f4a"/>
+  <ellipse cx="80" cy="231" rx="16" ry="6" fill="#1c1f26"/>
+  <ellipse cx="120" cy="231" rx="16" ry="6" fill="#1c1f26"/>
+  <path d="M56 120 Q100 104 144 120 L152 206 Q100 216 48 206 Z" fill="#25395e" stroke="#17243d" stroke-width="2"/>
+  <path d="M86 116 L100 170 L114 116 Z" fill="#fbf6ea"/>
+  <path d="M86 114 L70 122 L96 176 L100 168 Z" fill="#17243d"/>
+  <path d="M114 114 L130 122 L104 176 L100 168 Z" fill="#17243d"/>
+  <path d="M97 118 L103 118 L106 160 L100 168 L94 160 Z" fill="#8a3a4a"/>
+  <!-- lanyard + badge -->
+  <path d="M84 116 L96 160 M116 116 L104 160" stroke="#e05720" stroke-width="3" stroke-linecap="round"/>
+  <rect x="91" y="158" width="18" height="22" rx="2.5" fill="#fbf6ea" stroke="#17243d" stroke-width="1.5"/>
+  <circle cx="100" cy="166" r="3.5" fill="#5fae57"/>
+  <path d="M95 174 L105 174" stroke="#25395e" stroke-width="2" stroke-linecap="round"/>
+  <!-- left hand holds a tablet -->
+  <path d="M58 128 Q38 160 54 182" fill="none" stroke="#17243d" stroke-width="18" stroke-linecap="round"/>
+  <rect x="36" y="168" width="30" height="40" rx="4" fill="#2a2d33" stroke="#12110e" stroke-width="1.5" transform="rotate(-8 51 188)"/>
+  <rect x="40" y="173" width="22" height="30" rx="2" fill="#e9f5f7" transform="rotate(-8 51 188)"/>
+  <path d="M44 181 L58 179 M44 187 L56 185 M45 193 L58 191" stroke="#43afc1" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="60" cy="190" r="8" fill="#5fae57"/>
+  <path d="M142 128 Q160 156 148 182" fill="none" stroke="#17243d" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="146" cy="186" r="9" fill="#5fae57"/>
+  <rect x="88" y="96" width="24" height="22" rx="8" fill="#5fae57"/>
+  <path d="M60 70 Q62 30 104 30 Q150 30 162 62 Q170 82 150 92 Q120 104 92 100 Q62 96 60 70 Z" fill="#5fae57" stroke="#3f8a3a" stroke-width="2"/>
+  <path d="M70 46 L66 30 L80 38 L80 24 L92 34 L96 20 L104 32 L112 22 L114 34" fill="#3f8a3a"/>
+  <path d="M60 62 Q48 78 54 98 Q60 88 64 84 Q60 94 66 104 Q70 92 72 88" fill="#3f8a3a"/>
+  <path d="M96 92 Q128 96 154 84" fill="none" stroke="#9fd49a" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="156" cy="60" r="2.2" fill="#2f6e2b"/>
+  <circle cx="108" cy="62" r="9" fill="#fbf6ea" stroke="#3f8a3a" stroke-width="2"/>
+  <circle cx="136" cy="60" r="8" fill="#fbf6ea" stroke="#3f8a3a" stroke-width="2"/>
+  <circle cx="111" cy="62" r="4.2" fill="#1d1a16"/>
+  <circle cx="139" cy="60" r="3.8" fill="#1d1a16"/>
+  <circle cx="112.5" cy="60.5" r="1.3" fill="#fff"/><circle cx="140.5" cy="58.5" r="1.2" fill="#fff"/>
+  <!-- round glasses -->
+  <circle cx="108" cy="62" r="12" fill="#fff" fill-opacity=".18" stroke="#1d2433" stroke-width="3.5"/>
+  <circle cx="136" cy="60" r="11" fill="#fff" fill-opacity=".18" stroke="#1d2433" stroke-width="3.5"/>
+  <path d="M120 61 L125 60 M96 61 L84 58" stroke="#1d2433" stroke-width="3" stroke-linecap="round"/>
+  <path d="M120 88 Q138 96 156 84" fill="none" stroke="#2f6e2b" stroke-width="2.5" stroke-linecap="round"/>
+</svg>
