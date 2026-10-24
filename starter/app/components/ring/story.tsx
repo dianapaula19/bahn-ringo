@@ -10,6 +10,7 @@ import { DESK, claimOrder, recordRecovery, releaseClaim, reviewProposal } from "
 import { RECHECK_MINUTES, type Claim, type WithClaim } from "@/lib/triage/claim"
 import { unanswered } from "@/lib/triage/next-action"
 import { currentFacts } from "@/lib/triage/relevance"
+import { BY_HAND, FOLLOW_UP_MINUTES, personStep, stayLine, thenLine, type Names } from "@/lib/triage/follow-up"
 import { Icon } from "../icons"
 import { ACTION, FactChip, MODE, Simulated, When, entryRole, factLizard } from "./bits"
 import { RingoFace, RoleTag } from "../ringo"
@@ -74,7 +75,11 @@ function fromRecords(story: OrderStory, orderHref: string): ReactNode {
 
 function nextStep(story: OrderStory, ctx: HeroContext | null, ringPending: Proposal[], orderHref: string): Next | null {
   const n = nextStepFrom(story, ctx, ringPending)
-  return n && !n.source ? { ...n, source: fromRecords(story, orderHref) } : n
+  if (!n) return n
+  // Ringo writes "A person contacts the customer…"; the hero says it as the reader's own step: "Contact Pellavaro Auto…".
+  const own = /^(a person|a human|the team|someone)\b/i.test(n.text) ? personStep(n.text, { customer: ctx?.customer?.name, driver: ctx?.driver?.name }) : null
+  const text = own ? `${own.charAt(0).toUpperCase()}${own.slice(1)}.` : n.text
+  return { ...n, text, source: n.source ?? fromRecords(story, orderHref) }
 }
 
 /** One "Next:" line, built only from rows the story already carries; null when nothing concrete is known. */
@@ -149,12 +154,14 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
   const lastReviewed = settled ? story.proposals.filter((p) => p.origin === "ring" && p.review).sort((x, y) => x.review!.reviewedAt.localeCompare(y.review!.reviewedAt)).pop() : undefined
   const problem = lastReviewed && !ringPending.length ? `${REVIEWED[lastReviewed.review!.decision]}: ${lastReviewed.summary.replace(/\.$/, "")}.`
     : decision && (decision.outcome === "needs_person" || ringPending.length || settled) ? decision.headline : recorded?.rationale || triage.why
+  const names: Names = { customer: ctx?.customer?.name ?? null, driver: ctx?.driver?.name ?? null }
   const waiting = unanswered(story.timeline)
   const quoted = waiting && !triage.sources.some((s) => s.id === waiting.ref.id) ? waiting : null
   const chooseRecovery = triage.reason === "SAFETY" && /roadside or tow/i.test(triage.oneDecision ?? "")
   const canClaim = triage.bucket === "needs_you" && !ringPending.length
   const msg = triage.sources.find((s) => s.table === "messages" && story.timeline.some((e) => e.ref.id === s.id))
-  const say = next?.text ?? ""
+  // Names stand for their role here, so "Contact Pellavaro Auto" still offers the customer link.
+  const say = (next?.text ?? "").replace(ctx?.customer?.name || "\0", "the customer").replace(ctx?.driver?.name || "\0", "the driver")
   const links = [
     ctx?.driver && /\b(answer|ask|tell|call|message)\b[^.]*\bdriver\b/i.test(say) && { href: `/drivers/${ctx.driver.id}`, label: ctx.driver.name, role: "Driver" },
     ctx?.customer && /\b(contact|ask|tell|call|decide with|confirm with)\b[^.]*\bcustomer\b/i.test(say) && { href: `/customers/${ctx.customer.id}`, label: `Call ${ctx.customer.name}`, role: "Customer" },
@@ -164,14 +171,14 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
   return <section className={`decision d-${tone}`} aria-labelledby="decision-h">
     <h2 className="sr-only" id="decision-h">{triage.bucket === "needs_you" ? "Why this needs you" : "Where this stands"}</h2>
     <p className="decision-text">{problem}</p>
-    {quoted && <p className="decision-unanswered"><b>Unanswered:</b> {quoted.actor}{quoted.ref.table === "ring_driver_messages" && <> <Simulated /></>}, <When at={quoted.at} now={story.now} />: <a href={withBase(`${orderHref}#src-${quoted.ref.id}`)}>&ldquo;{quoted.text.length > 160 ? `${quoted.text.slice(0, 159).trimEnd()}…` : quoted.text}&rdquo;</a></p>}
+    {quoted && <p className="decision-unanswered"><b>Unanswered</b> · owner: you · {quoted.actor}{quoted.ref.table === "ring_driver_messages" && <> <Simulated /></>}, <When at={quoted.at} now={story.now} />: <a href={withBase(`${orderHref}#src-${quoted.ref.id}`)}>&ldquo;{quoted.text.length > 160 ? `${quoted.text.slice(0, 159).trimEnd()}…` : quoted.text}&rdquo;</a></p>}
     {story.claim && <p className="decision-claim q-claim">{story.claim.by === DESK ? "You have it" : `${story.claim.by} has it`} · <When at={story.claim.at} now={story.now} /> · back in the queue at <When at={story.claim.recheckAt} now={story.now} />{story.claim.note && <> · {story.claim.note}</>}</p>}
     {next ? <div className="decision-next">
       <p><b>Next:</b> {next.text}</p>
       {next.context && <p className="decision-context">{next.context}</p>}
       {next.source && <p className="decision-src">{next.source}</p>}
     </div> : triage.bucket !== "needs_you" && <p className="decision-next">Nothing waits on you.</p>}
-    {chooseRecovery && <RecoveryChoice orderId={story.orderId} reference={story.reference} onDone={onChanged} />}
+    {chooseRecovery && <RecoveryChoice orderId={story.orderId} reference={story.reference} names={names} onDone={onChanged} />}
     {(canRun || links.length > 0) && <div className="actions decision-actions">
       {canRun && triage.bucket === "ring" && runButton(true)}
       {links.map((l, i) => {
@@ -181,8 +188,9 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
       })}
       {canRun && triage.bucket !== "ring" && runButton(!links.length)}
     </div>}
-    {canClaim && <ClaimBox orderId={story.orderId} reference={story.reference} claim={story.claim ?? null} now={story.now} keys={keys} onDone={(c) => { onChanged(); if (c) onClaimed?.(c) }} />}
-    {ringPending.map((p) => <ProposalCard key={p.id} proposal={p} story={story} onChanged={onChanged} onReviewed={setReviewed} />)}
+    {canClaim && <ClaimBox orderId={story.orderId} reference={story.reference} claim={story.claim ?? null} now={story.now} keys={keys} names={names}
+      step={personStep(next?.text, names) ?? BY_HAND} followUp={triage.sources.some((s) => s.table === "ring_claims")} onDone={(c) => { onChanged(); if (c) onClaimed?.(c) }} />}
+    {ringPending.map((p) => <ProposalCard key={p.id} proposal={p} story={story} names={names} onChanged={onChanged} onReviewed={setReviewed} />)}
     {reviewed && <p className={`result tone-${reviewed.tone}`} role="status">{reviewed.text}</p>}
     {reviewed?.suggestion && <div className="learn-banner" role="status">
       <RingoFace size={28} />
@@ -200,7 +208,7 @@ const REVIEWED: Record<ReviewDecision, string> = { APPROVED: "You accepted Ringo
 
 /** The customer's roadside-or-tow answer, as a person heard it. A note is required (who said it, when).
  *  Recording it books nothing: the next step becomes booking the recovery, which needs approval as a cost. */
-function RecoveryChoice({ orderId, reference, onDone }: { orderId: string; reference: string; onDone: () => void }) {
+function RecoveryChoice({ orderId, reference, names, onDone }: { orderId: string; reference: string; names: Names; onDone: () => void }) {
   const [choice, setChoice] = useState<"roadside" | "tow" | null>(null)
   const [note, setNote] = useState("")
   const [busy, setBusy] = useState(false)
@@ -211,14 +219,14 @@ function RecoveryChoice({ orderId, reference, onDone }: { orderId: string; refer
     const r = await recordRecovery(orderId, choice, note.trim())
     setBusy(false)
     if ("error" in r) { setResult({ text: r.error, tone: "danger" }); return }
-    setResult({ text: `Recorded. Then: ${r.then}`, tone: "ok" }); setChoice(null); setNote(""); onDone()
+    setResult({ text: `Recorded. ${r.then}.`, tone: "ok" }); setChoice(null); setNote(""); onDone()
   }
   return <div className="recovery">
     {!choice && <ul className="will-list">
       <li><button type="button" className="btn primary" onClick={() => setChoice("roadside")}>Customer chose roadside</button>
-        <Will>Records &ldquo;customer chose roadside&rdquo; on {reference}, with who told you · then: booking roadside help needs approval as a cost</Will></li>
+        <Will>Records &ldquo;customer chose roadside&rdquo; on {reference}, with who told you · {stayLine(`book roadside assistance (it needs approval as a cost) and tell ${names.driver ?? "the driver"} who is coming`, "until it is booked")}</Will></li>
       <li><button type="button" className="btn primary" onClick={() => setChoice("tow")}>Customer chose tow</button>
-        <Will>Records &ldquo;customer chose tow&rdquo; on {reference}, with who told you · then: booking the recovery needs approval as a cost</Will></li>
+        <Will>Records &ldquo;customer chose tow&rdquo; on {reference}, with who told you · {stayLine(`book the tow (it needs approval as a cost) and tell ${names.driver ?? "the driver"} who is coming`, "until it is booked")}</Will></li>
     </ul>}
     {choice && <div className="recovery-form">
       <label className="field"><span>Customer chose {choice === "tow" ? "a tow" : "roadside assistance"}. Who told you, and when? (required)</span>
@@ -233,14 +241,18 @@ function RecoveryChoice({ orderId, reference, onDone }: { orderId: string; refer
 }
 
 /** "I'll handle it": takes the order off the shared queue until the recheck time (or until something new happens). */
-function ClaimBox({ orderId, reference, claim, now, keys, onDone }: { orderId: string; reference: string; claim: Claim | null; now: string; keys: boolean; onDone: (c: Claim | null) => void }) {
+function ClaimBox({ orderId, reference, claim, now, keys, names, step, followUp, onDone }: {
+  orderId: string; reference: string; claim: Claim | null; now: string; keys: boolean; names: Names; step: string
+  /** The card is the person's own follow-up: it closes with "Done", not with another claim. */
+  followUp: boolean; onDone: (c: Claim | null) => void
+}) {
   const [note, setNote] = useState("")
   const [minutes, setMinutes] = useState(30)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   async function take() {
     setBusy(true); setError("")
-    const r = await claimOrder(orderId, note, minutes)
+    const r = await claimOrder(orderId, note.trim() || step, minutes)
     setBusy(false)
     if ("error" in r) { setError(r.error); return }
     setNote(""); onDone(r.claim)
@@ -251,19 +263,22 @@ function ClaimBox({ orderId, reference, claim, now, keys, onDone }: { orderId: s
     setBusy(false)
     if (!ok) setError("Could not hand it back. Try again."); else onDone(null)
   }
-  if (claim) return <div className="claim-box"><button type="button" className="btn small" disabled={busy} onClick={giveBack}>Hand it back to the queue</button>
+  if (claim || followUp) return <div className="claim-box">
+    {followUp && <><button type="button" className="btn small" disabled={busy} onClick={giveBack}><Icon name="check" size={14} />Done: close my follow-up</button>
+      <Will>Closes your follow-up on {reference}; it leaves Needs you unless its records still need a person · nothing is sent to anyone</Will></>}
+    {claim && !followUp && <button type="button" className="btn small" disabled={busy} onClick={giveBack}>Hand it back to the queue</button>}
     {error && <p className="result tone-danger" role="alert">{error}</p>}</div>
   return <form className="claim-box" onSubmit={(e) => { e.preventDefault(); take() }}>
     <input className="claim-note" aria-label="What you will do (optional)" placeholder="What you'll do (optional)" maxLength={140} value={note} onChange={(e) => setNote(e.target.value)} />
     <label className="claim-back"><span>Back in</span>
       <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>{RECHECK_MINUTES.map((m) => <option key={m} value={m}>{m < 60 ? `${m} min` : `${m / 60} h`}</option>)}</select></label>
     <button type="submit" className="btn" data-claim disabled={busy}><Icon name="check" size={14} />{busy ? "Taking it…" : "I'll handle it"}{keys && <> <kbd>A</kbd></>}</button>
-    <Will>Puts {reference} in Taken under your desk until <When at={new Date(Date.parse(now) + minutes * 60_000).toISOString()} now={now} /> (sooner if something new happens) · nothing is sent to anyone</Will>
+    <Will>Puts {reference} in Taken under your desk; nothing is sent to anyone · {thenLine(note.trim() || step, new Date(Date.parse(now) + minutes * 60_000).toISOString(), names)}</Will>
     {error && <p className="result tone-danger" role="alert">{error}</p>}
   </form>
 }
 
-export function ProposalCard({ proposal: p, story, onChanged, onReviewed }: { proposal: Proposal; story: OrderStory; onChanged: () => void; onReviewed?: (r: Reviewed) => void }) {
+export function ProposalCard({ proposal: p, story, names = {}, onChanged, onReviewed }: { proposal: Proposal; story: OrderStory; names?: Names; onChanged: () => void; onReviewed?: (r: Reviewed) => void }) {
   const [mode, setMode] = useState<"idle" | "edit" | "reject">("idle")
   const [note, setNote] = useState("")
   const [draft, setDraft] = useState<Record<string, unknown>>(p.proposedPayload)
@@ -272,6 +287,10 @@ export function ProposalCard({ proposal: p, story, onChanged, onReviewed }: { pr
   const readOnly = p.origin === "dataset"
   const blocks = p.gate?.findings.filter((f) => f.effect === "block") ?? []
   const conditions = p.gate?.findings.filter((f) => f.effect === "condition") ?? []
+  // The same step and time the server writes as your follow-up when you press (lib/agent/proposals.ts handOver).
+  const whatNext = (story.runs.find((r) => r.id === p.runId)?.decision ?? story.decision)?.whatNext
+  const backAt = new Date(Date.parse(story.now) + FOLLOW_UP_MINUTES * 60_000).toISOString()
+  const afterAccept = thenLine(personStep(p.onApprove, names) ?? personStep(whatNext, names) ?? BY_HAND, backAt, names)
 
   async function send(decision: ReviewDecision) {
     if (decision !== "APPROVED" && !note.trim()) return
@@ -319,11 +338,11 @@ export function ProposalCard({ proposal: p, story, onChanged, onReviewed }: { pr
       : <div className="actions">
         {mode === "idle" && <ul className="will-list">
           <li><button type="button" className="btn primary" data-key="a" disabled={busy || blocks.length > 0} onClick={() => send("APPROVED")}>Accept</button>
-            <Will>{blocks.length ? "Blocked by the reviewer check: edit or reject instead" : <>Rechecks {story.reference} and records it if nothing changed since Ringo read it{p.onApprove && <> · then: {lower(p.onApprove)}</>}</>}</Will></li>
+            <Will>{blocks.length ? "Blocked by the reviewer check: edit or reject instead" : <>Rechecks {story.reference} and records it if nothing changed since Ringo read it{p.onApprove && <> · {lower(p.onApprove).replace(/\.$/, "")}</>} · {afterAccept}</>}</Will></li>
           <li><button type="button" className="btn" data-key="e" disabled={busy} onClick={() => setMode("edit")}>Edit</button>
-            <Will>Lets you change the fields, then records your version with a note on what you changed</Will></li>
+            <Will>Lets you change the fields, then records your version with a note on what you changed · {afterAccept}</Will></li>
           <li><button type="button" className="btn" data-key="r" disabled={busy} onClick={() => setMode("reject")}>Reject</button>
-            <Will>Records your reason; nothing on the order changes{p.onReject && <> · then: {lower(p.onReject)}</>}</Will></li>
+            <Will>Records your reason; nothing on the order changes{p.onReject && <> · {lower(p.onReject).replace(/\.$/, "")}</>} · {thenLine(BY_HAND, backAt, names)}</Will></li>
         </ul>}
         {mode === "edit" && <><button type="button" className="btn primary" data-submit disabled={busy || !note.trim()} onClick={() => send("EDITED")}>Accept with my changes</button><button type="button" className="btn" data-cancel onClick={() => { setMode("idle"); setDraft(p.proposedPayload); setNote("") }}>Cancel</button></>}
         {mode === "reject" && <><button type="button" className="btn danger" data-submit disabled={busy || !note.trim()} onClick={() => send("REJECTED")}>Reject</button><button type="button" className="btn" data-cancel onClick={() => { setMode("idle"); setNote("") }}>Cancel</button></>}

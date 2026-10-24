@@ -5,10 +5,11 @@ import { and, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import type { Desk } from "@/lib/contract"
 import { loadOrder } from "@/lib/present/load"
-import { rows } from "@/lib/present/bundle"
+import { rows, type Bundle } from "@/lib/present/bundle"
 import { ringClaims, ringEvents } from "@/lib/ring-schema"
 import { RECHECK_MINUTES, type Claim } from "@/lib/triage/claim"
 import { RECOVERY_THEN } from "@/lib/triage/triage"
+import { personStep, stayLine, type Names } from "@/lib/triage/follow-up"
 import { newId, simNow } from "./clock"
 
 const DESKS = new Set(["ops-support", "ops-readiness", "ops-planning", "ops-dispatch", "ops-import", "ops-travel", "ops-shift", "ops-intake", "ops-evidence", "ops-finance", "ops-expenses"])
@@ -46,5 +47,17 @@ export async function recordRecoveryChoice(orderId: string, body: { choice?: str
     id: eventId, orderId, at: await simNow(), command: "recovery.choice", actorType: "operator", actorId: body.operatorId as Desk, proposalId: null,
     changes: { choice: body.choice, note: body.note.trim().slice(0, 280), simulated: true }, sourceRefs: [{ table: "incidents", id: incident.id }],
   })
-  return { ok: true, value: { eventId, then: RECOVERY_THEN[body.choice] } }
+  return { ok: true, value: { eventId, then: recoveryThen(body.choice, followUpNames(loaded.bundle)) } }
+}
+
+/** "Then: you book the tow (it needs approval as a cost) and tell Kasper Kovelund who is coming · owner: … · it stays in Now
+ *  until the recovery is booked". A safety card never leaves Now, so there is no "back at" time. */
+export function recoveryThen(choice: string, names: Names = {}): string {
+  return stayLine(personStep(RECOVERY_THEN[choice], names) ?? "book the recovery", "until the recovery is booked")
+}
+
+/** The names a "Then:" line uses for "the customer" and "the driver". */
+export function followUpNames(b: Bundle): Names {
+  const driverId = rows(b, "work_assignments").find((a) => a.details.status !== "CANCELLED")?.details.driver_id
+  return { customer: b.customer.name, driver: typeof driverId === "string" ? b.dir.driverName(driverId) : null }
 }

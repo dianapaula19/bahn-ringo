@@ -11,7 +11,8 @@ import posthog from "posthog-js"
 import type { OrderStory, Proposal, QueueItem, ReviewDecision } from "@/lib/contract"
 import { needsYouSplit, type Claim, type WithClaim } from "@/lib/triage/claim"
 import { withBase } from "@/lib/base"
-import { fmtClockZone, relativeTo } from "@/lib/present/time"
+import { relativeTo } from "@/lib/present/time"
+import { BY_HAND, thenLine } from "@/lib/triage/follow-up"
 import { fieldLabel } from "@/lib/present/labels"
 import { dueSoon, inNow, nextAction } from "@/lib/triage/next-action"
 import { currentFacts } from "@/lib/triage/relevance"
@@ -108,7 +109,7 @@ export default function DecidePage() {
   function take() { card.current?.querySelector<HTMLButtonElement>("[data-claim]:not(:disabled)")?.click() }
   function claimed(orderId: string, c: Claim) {
     const ref = byId.get(orderId)?.reference
-    finish(orderId, { how: "TAKEN" }, { text: `${ref} is yours until ${fmtClockZone(c.recheckAt)}. It sits in Taken on the queue and comes back by itself then, or sooner if something new happens.`, tone: "ok" })
+    finish(orderId, { how: "TAKEN" }, { text: `${ref} is in Taken under your desk. ${thenLine(c.note ?? BY_HAND, c.recheckAt)}.`, tone: "ok" })
   }
 
   function move(step: number) { if (left.length) setIdx((at + step + left.length) % left.length) }

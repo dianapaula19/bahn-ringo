@@ -22,6 +22,7 @@ import { activeClaim, needsYouSplit, type Claim } from "./claim"
 import { readFileSync } from "node:fs"
 import { buildQueue, buildStory } from "@/lib/agent/story"
 import { currentFacts } from "./relevance"
+import { personStep, thenLine } from "./follow-up"
 import { orderFacts, rankFacts } from "./facts"
 import { similarGroups } from "./similar"
 import { ringEligibility, triage } from "./triage"
@@ -188,6 +189,28 @@ describe("Now: safety, anything overdue or due within 30 min, or critical/high d
     const due = s.urgent.filter((x) => x.reason !== "SAFETY").map((x) => x.decideBy).filter((d): d is string => !!d)
     assert.deepEqual(due, [...due].sort())
     for (const x of s.later) assert.ok(!x.decideBy || Date.parse(x.decideBy) - Date.parse(q.now) > 30 * 60_000, `${x.orderId} is due within 30 min but sits in When you can`)
+  })
+})
+
+describe("after a decision: the person's next step, its owner, and when the order comes back", () => {
+  const names = { customer: "Pellavaro Auto", driver: "Yara Sivellin" }
+  test("Ringo's 'what next' becomes the reader's own step", () => {
+    assert.equal(personStep("A person contacts the customer to find the site that holds the VIN. The driver said…", names), "contact Pellavaro Auto to find the site that holds the VIN")
+    assert.equal(personStep("After approval, a person can release driver dispatch.", names), "release driver dispatch")
+    assert.equal(personStep("A person confirms the address with the customer first, then updates the pickup address.", names), "confirm the address with Pellavaro Auto first, then update the pickup address")
+    assert.equal(personStep("The pickup access instruction is updated so any driver is sent to bay 4.", names), null) // an outcome, not a step
+    assert.equal(thenLine("contact Pellavaro Auto to find the site that holds the VIN", "2026-10-21T09:40:00.000Z", names),
+      "Then: you contact Pellavaro Auto to find the site that holds the VIN · owner: you (readiness desk) · back in your queue at 12:40 or when Pellavaro Auto replies")
+  })
+  test("an open follow-up keeps the order in Needs you, due at its recheck time; closing it lets it go", () => {
+    const b = bundles.get("ord-00516")!
+    const claim = { id: "claim-f", orderId: "ord-00516", by: "ops-readiness", note: "release driver dispatch", at: NOW, recheckAt: new Date(Date.parse(NOW) + 30 * 60_000).toISOString(), releasedAt: null }
+    const ring = { ...emptyRing(), proposals: [{ status: "EXECUTED" } as never], claims: [claim] }
+    const r = triage(b, ring, NOW)
+    assert.equal(r.bucket, "needs_you"); assert.equal(r.decideBy, claim.recheckAt); assert.match(r.why, /^Your follow-up: release driver dispatch/)
+    assert.equal(nextAction(r), "Your follow-up")
+    const closed = triage(b, { ...ring, claims: [{ ...claim, releasedAt: NOW }] }, NOW)
+    assert.ok(!closed.sources.some((s) => s.table === "ring_claims"))
   })
 })
 
