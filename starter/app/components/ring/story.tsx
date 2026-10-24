@@ -8,6 +8,8 @@ import { DESK, reviewProposal } from "../../_lib/agent-api"
 import { Icon } from "../icons"
 import { ACTION, FactChip, LIZARD, MODE, Simulated, When, factLizard } from "./bits"
 import { LizardFace } from "../ringo"
+import { withBase } from "@/lib/base"
+import type { Detail } from "../order-detail"
 
 // ---------------------------------------------------------------- plain-words payloads
 
@@ -36,17 +38,43 @@ export type HeroContext = {
   tasks: { id: string; nextAction: string | null; dueAt: string | null }[]
 }
 
+/** The starter's order API (/api/orders/:id) plus the assigned drivers, which RecordView does not carry. */
+export type OrderDetail = Detail & { drivers?: { id: string; displayName: string }[] }
+
+export function heroContext(detail: OrderDetail | null): HeroContext | null {
+  if (!detail) return null
+  const h = detail.view.header
+  return {
+    customer: h ? { id: h.customer.id, name: h.customer.name } : null,
+    driver: detail.drivers?.[0] ? { id: detail.drivers[0].id, name: detail.drivers[0].displayName } : null,
+    tasks: detail.view.workItems.filter((w) => w.status === "OPEN" || w.status === "NEEDS_EXTERNAL_INPUT").map((w) => ({ id: w.id, nextAction: w.nextAction, dueAt: w.dueAt })),
+  }
+}
+
 type Next = { text: string; context?: ReactNode; source?: ReactNode }
 
 const sentences = (t: string) => t.match(/[^.!?]+[.!?]+(\s|$)/g)?.map((x) => x.trim()) ?? [t]
 const blocked = (p: Proposal) => !!p.gate?.findings.some((f) => f.effect === "block")
 
+/** Where a "Next:" line comes from when nothing more specific says so: the triage source rows that are on the
+ *  timeline, each linked to its entry ("From Monitoring 08:07 UTC, Kasper Kovelund 08:22 UTC"). */
+function fromRecords(story: OrderStory, orderHref: string): ReactNode {
+  const entries = story.triage.sources.map((s) => story.timeline.find((e) => e.ref.id === s.id)).filter((e): e is StoryEntry => !!e).slice(0, 3)
+  if (!entries.length) return null
+  return <>From {entries.map((e, i) => <span key={e.ref.id}>{i > 0 && ", "}<a href={orderHref ? withBase(`${orderHref}#src-${e.ref.id}`) : `#src-${e.ref.id}`}>{e.actor} <When at={e.at} now={story.now} /></a></span>)}</>
+}
+
+function nextStep(story: OrderStory, ctx: HeroContext | null, ringPending: Proposal[], orderHref: string): Next | null {
+  const n = nextStepFrom(story, ctx, ringPending)
+  return n && !n.source ? { ...n, source: fromRecords(story, orderHref) } : n
+}
+
 /** One "Next:" line, built only from rows the story already carries; null when nothing concrete is known. */
-function nextStep(story: OrderStory, ctx: HeroContext | null, ringPending: boolean): Next | null {
+function nextStepFrom(story: OrderStory, ctx: HeroContext | null, ringPending: Proposal[]): Next | null {
   const { triage, decision } = story
   const lastRun = [...story.runs].sort((x, y) => y.startedAt.localeCompare(x.startedAt))[0]
   const byRingo = lastRun && decision ? <>Ringo, <When at={lastRun.startedAt} now={story.now} /></> : null
-  if (ringPending) return { text: "Accept, edit or reject Ringo's proposal." }
+  if (ringPending.length) return { text: `Accept, edit or reject Ringo's ${ringPending.length === 1 ? "proposal" : `${ringPending.length} proposals`}.`, source: <>Ringo, <When at={ringPending[0].createdAt} now={story.now} /></> }
   if (triage.bucket === "ring") return triage.reason === "RING_WORKING" ? { text: "Nothing yet. Ringo is on it." } : { text: "Run Ringo. He calls the site and brings back one decision." }
   const one = decision?.oneDecision ?? triage.oneDecision
   if (one) {
@@ -69,25 +97,28 @@ function nextStep(story: OrderStory, ctx: HeroContext | null, ringPending: boole
   }
 }
 
-/** Starts the run in Ringo's panel below (page wraps it in #ringo), so there is one Run button, not two. */
-function runRingo() {
-  const b = document.querySelector<HTMLButtonElement>("#ringo .ring-controls .btn.primary")
-  const panel = document.getElementById("ringo")
-  ;(b ?? panel)?.scrollIntoView({ block: "center", behavior: "smooth" })
-  if (b && !b.disabled) b.click()
+/** The hero offers "Run Ringo" when running him is the next step. Then it is the page's only Run button:
+ *  Ringo's panel below hides its own and starts when the hero asks. Once he has stopped with a decision,
+ *  running him again is not the next step, so the panel keeps the button instead. */
+export function heroCanRun(story: OrderStory): boolean {
+  const { triage, decision } = story
+  const pending = story.proposals.some((p) => p.origin === "ring" && p.status === "PENDING_REVIEW")
+  const live = story.runs.some((r) => r.status === "running")
+  return story.ringEligible && !pending && !live && (triage.bucket === "ring" || (triage.bucket === "needs_you" && !decision))
 }
 
-const RunButton = ({ primary }: { primary: boolean }) =>
-  <button type="button" className={`btn${primary ? " primary" : ""}`} onClick={runRingo}><Icon name="bot" size={15} /> Run Ringo</button>
-
-export function DecisionPanel({ story, ctx, onChanged }: { story: OrderStory; ctx: HeroContext | null; onChanged: () => void }) {
+/** `onRun` starts Ringo's panel on the order page; without it (decide mode) the hero shows no Run button.
+ *  `orderHref` makes in-page links (#src-…) point at the order page when the hero is shown elsewhere. */
+export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, orderHref = "" }: {
+  story: OrderStory; ctx: HeroContext | null; onChanged: () => void; onRun?: () => void; running?: boolean; orderHref?: string
+}) {
   const { triage, decision } = story
   const ringPending = story.proposals.filter((p) => p.origin === "ring" && p.status === "PENDING_REVIEW")
   const earlier = story.proposals.filter((p) => p.origin === "dataset" && p.status === "PENDING_REVIEW")
-  const next = nextStep(story, ctx, ringPending.length > 0)
-  const live = story.runs.some((r) => r.status === "running")
-  // Once Ringo has stopped with a decision, running him again is not the next step; his panel still offers it.
-  const canRun = story.ringEligible && !ringPending.length && !live && (triage.bucket === "ring" || (triage.bucket === "needs_you" && !decision))
+  const next = nextStep(story, ctx, ringPending, orderHref)
+  const canRun = !!onRun && (heroCanRun(story) || running)
+  const runButton = (primary: boolean) =>
+    <button type="button" className={`btn${primary ? " primary" : ""}`} disabled={running} onClick={onRun} aria-controls="ringo"><Icon name="bot" size={15} /> {running ? "Ringo is working…" : "Run Ringo"}</button>
   const tone = triage.bucket === "needs_you" ? (triage.severity === "critical" ? "danger" : "warn") : triage.bucket === "ring" ? "accent" : "ok"
   const recorded = triage.reason === "RECORDED_PROPOSAL" ? earlier.find((p) => !blocked(p)) : undefined
   // With a stop decision, Ringo's headline says what he found; the proposal card below says what he asks.
@@ -97,7 +128,7 @@ export function DecisionPanel({ story, ctx, onChanged }: { story: OrderStory; ct
   const links = [
     ctx?.driver && /\b(answer|ask|tell|call|message)\b[^.]*\bdriver\b/i.test(say) && { href: `/drivers/${ctx.driver.id}`, label: ctx.driver.name, role: "Driver" },
     ctx?.customer && /\b(contact|ask|tell|call|decide with|confirm with)\b[^.]*\bcustomer\b/i.test(say) && { href: `/customers/${ctx.customer.id}`, label: ctx.customer.name, role: "Customer" },
-    msg && { href: `#src-${msg.id}`, label: "Read the message", role: "" },
+    msg && { href: `${orderHref}#src-${msg.id}`, label: "Read the message", role: "" },
   ].filter((l): l is { href: string; label: string; role: string } => !!l)
 
   return <section className={`decision d-${tone}`} aria-labelledby="decision-h">
@@ -109,13 +140,13 @@ export function DecisionPanel({ story, ctx, onChanged }: { story: OrderStory; ct
       {next.source && <p className="decision-src">{next.source}</p>}
     </div> : triage.bucket !== "needs_you" && <p className="decision-next">Nothing waits on you.</p>}
     {(canRun || links.length > 0) && <div className="actions decision-actions">
-      {canRun && triage.bucket === "ring" && <RunButton primary />}
+      {canRun && triage.bucket === "ring" && runButton(true)}
       {links.map((l, i) => {
         const cls = `btn${i === 0 && triage.bucket !== "ring" ? " primary" : ""}`
-        return l.href.startsWith("#") ? <a key={l.href} className={cls} href={l.href}>{l.label}</a>
+        return l.href.includes("#") ? <a key={l.href} className={cls} href={l.href.startsWith("#") ? l.href : withBase(l.href)}>{l.label}</a>
           : <Link key={l.href} className={cls} href={l.href}><span className="btn-role">{l.role}</span>{l.label}<Icon name="arrow" size={13} /></Link>
       })}
-      {canRun && triage.bucket !== "ring" && <RunButton primary={!links.length} />}
+      {canRun && triage.bucket !== "ring" && runButton(!links.length)}
     </div>}
     {ringPending.map((p) => <ProposalCard key={p.id} proposal={p} story={story} onChanged={onChanged} />)}
     {triage.overtaken.length > 0 && <ul className="overtaken">{triage.overtaken.map((o) => <li key={o.ref.id}><s>{o.label}</s> overtaken by a later signal at <When at={o.overtakenAt} now={story.now} /></li>)}</ul>}
@@ -142,7 +173,7 @@ export function ProposalCard({ proposal: p, story, onChanged }: { proposal: Prop
     const r: ReviewResponse = await reviewProposal(p.id, { decision, note: note.trim() || null, finalPayload: decision === "EDITED" ? draft : undefined, reviewerId: DESK })
     setBusy(false)
     if ("error" in r) { setResult({ text: r.error, tone: "danger" }); return }
-    if (r.execution?.status === "STALE") setResult({ text: "The order changed after Ringo wrote this, so nothing was changed. Run Ringo again so it re-reads first.", tone: "warn" })
+    if (r.execution?.status === "STALE") setResult({ text: "The order changed after Ringo wrote this, so nothing was changed. Run Ringo again so he re-reads first.", tone: "warn" })
     else if (r.execution?.status === "FAILED") setResult({ text: `It did not go through: ${r.execution.error ?? "unknown error"}. Check before trying again.`, tone: "danger" })
     else setResult({ text: r.next, tone: "ok" })
     posthog.capture("proposal_reviewed", {
@@ -153,7 +184,7 @@ export function ProposalCard({ proposal: p, story, onChanged }: { proposal: Prop
     setMode("idle"); onChanged()
   }
 
-  return <article className="proposal-card">
+  return <article className="proposal-card" data-proposal={readOnly ? undefined : p.id} data-mode={mode}>
     <div className="proposal-card-head">
       <span className="chip tone-accent">{p.actionType ? ACTION[p.actionType] : "Recorded proposal"}</span>
       {p.trustMode && <span className={`chip tone-${MODE[p.trustMode].tone}`}>{MODE[p.trustMode].label}</span>}
@@ -184,12 +215,12 @@ export function ProposalCard({ proposal: p, story, onChanged }: { proposal: Prop
     {readOnly ? <p className="proposal-foot">Recorded before Ringo. Shown for context; it can&apos;t be reviewed here.</p>
       : <div className="actions">
         {mode === "idle" && <>
-          <button type="button" className="btn primary" disabled={busy || blocks.length > 0} onClick={() => send("APPROVED")}>Accept</button>
-          <button type="button" className="btn" disabled={busy} onClick={() => setMode("edit")}>Edit</button>
-          <button type="button" className="btn" disabled={busy} onClick={() => setMode("reject")}>Reject</button>
+          <button type="button" className="btn primary" data-key="a" disabled={busy || blocks.length > 0} onClick={() => send("APPROVED")}>Accept</button>
+          <button type="button" className="btn" data-key="e" disabled={busy} onClick={() => setMode("edit")}>Edit</button>
+          <button type="button" className="btn" data-key="r" disabled={busy} onClick={() => setMode("reject")}>Reject</button>
         </>}
-        {mode === "edit" && <><button type="button" className="btn primary" disabled={busy || !note.trim()} onClick={() => send("EDITED")}>Accept with my changes</button><button type="button" className="btn" onClick={() => { setMode("idle"); setDraft(p.proposedPayload); setNote("") }}>Cancel</button></>}
-        {mode === "reject" && <><button type="button" className="btn danger" disabled={busy || !note.trim()} onClick={() => send("REJECTED")}>Reject</button><button type="button" className="btn" onClick={() => { setMode("idle"); setNote("") }}>Cancel</button></>}
+        {mode === "edit" && <><button type="button" className="btn primary" data-submit disabled={busy || !note.trim()} onClick={() => send("EDITED")}>Accept with my changes</button><button type="button" className="btn" data-cancel onClick={() => { setMode("idle"); setDraft(p.proposedPayload); setNote("") }}>Cancel</button></>}
+        {mode === "reject" && <><button type="button" className="btn danger" data-submit disabled={busy || !note.trim()} onClick={() => send("REJECTED")}>Reject</button><button type="button" className="btn" data-cancel onClick={() => { setMode("idle"); setNote("") }}>Cancel</button></>}
       </div>}
     {result && <p className={`result tone-${result.tone}`} role="status">{result.text}</p>}
   </article>
