@@ -4,14 +4,6 @@
 .ev-big { margin-top: 6px; font-family: var(--font-display); font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; }
 .ev-big span { margin-left: 6px; font-family: var(--font-body); font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--brown); }
 
-.ev-spark { display: flex; align-items: flex-end; gap: 10px; margin-top: 6px; }
-.ev-spark svg { display: block; width: 100%; max-width: 220px; height: 56px; overflow: visible; }
-.ev-spark figcaption { flex: none; font-size: 12.5px; color: var(--brown); white-space: nowrap; }
-.ev-grid { stroke: var(--hair); stroke-width: 1; }
-.ev-line { fill: none; stroke: var(--teal-ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.ev-dot { fill: var(--teal-ink); stroke: var(--birch); stroke-width: 2; }
-.ev-hit { fill: transparent; }
-.ev-pt:hover .ev-dot { r: 5; }
 
 .ev-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .ev-skel { margin-top: 44px; }
