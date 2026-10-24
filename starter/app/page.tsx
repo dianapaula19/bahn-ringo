@@ -6,13 +6,13 @@ import type { Handover, QueueItem, QueueResponse } from "@/lib/contract"
 import { relativeTo } from "@/lib/present/time"
 import { withBase } from "@/lib/base"
 import { DESK, loadHandover, loadQueue } from "./_lib/agent-api"
-import type { Claim, WithClaim } from "@/lib/triage/claim"
+import { needsYouSplit, type Claim, type WithClaim } from "@/lib/triage/claim"
 import type { HandoverCounts } from "@/lib/agent/handover"
 import { AppFrame } from "./components/app-frame"
 import { Icon } from "./components/icons"
 import { CAST, LizardFace } from "./components/ringo"
 import { Ago, When } from "./components/ring/bits"
-import { inNow, nextAction } from "@/lib/triage/next-action"
+import { nextAction } from "@/lib/triage/next-action"
 import "./decide/decide.css"
 
 const PAGE = 50
@@ -75,30 +75,30 @@ export default function NeedsYou() {
   }, [loaded])
 
   const moving = queue ? queue.total - queue.needsYou.length : 0
-  const free = queue?.needsYou.filter((q) => !claimOf(q)) ?? [] // taken rows are not in the decide pass
+  const split = splitOf(queue) // one count everywhere: open rows nobody has taken
 
-  return <AppFrame section="queue" snapshotAt={queue?.snapshotAt ?? null}><main className="page queue-page">
+  return <AppFrame section="queue" snapshotAt={queue?.snapshotAt ?? null} now={queue?.now ?? null}><main className="page queue-page">
     <ShiftReport queue={queue} />
     <header className="queue-head">
       <div className="queue-title">
-        <h1 id="needs-h">Needs you{queue && queue.needsYou.length > 0 && <span className="queue-count num">{queue.needsYou.length}</span>}</h1>
-        {queue && free.length > 0 && <Link href="/decide" className="btn primary decide-start">Start deciding ({free.length})<Icon name="arrow" size={14} /></Link>}
+        <h1 id="needs-h">Needs you{split && split.open.length > 0 && <span className="queue-count num">{split.open.length}</span>}</h1>
+        {split && split.open.length > 0 && <Link href="/decide" className="btn primary decide-start">Start deciding ({split.open.length})<Icon name="arrow" size={14} /></Link>}
       </div>
       <p className="queue-sub">{queue
-        ? <>Checked <When at={queue.now} now={queue.now} /> · {queue.total} orders<span className="kbd-hint"> · j / k to move, Enter to open</span></>
+        ? <>Checked <When at={queue.now} now={queue.now} /> Helsinki time · {queue.total} orders{split!.taken.length > 0 && <> · <a href="#taken">{split!.taken.length} taken</a></>}<span className="kbd-hint"> · j / k to move, Enter to open</span></>
         : "Checking every order…"}</p>
     </header>
     {error && <p className="board-error" role="alert">{error}. Check that the app and database are running.</p>}
 
     {!queue && !error && <ul className="q-list" aria-busy="true" aria-label="Loading">{[0, 1, 2, 3, 4].map((i) => <li key={i} className="q-skel" />)}</ul>}
 
-    {queue && queue.needsYou.length === 0 && <div className="calm">
+    {split && split.open.length === 0 && <div className="calm">
       <div className="calm-cast" role="img" aria-label="Ringo with a pickup site, a customer and a driver">{(["ringo", "dealer", "customer", "driver"] as const).map((who) =>
         // eslint-disable-next-line @next/next/no-img-element -- a static svg needs no optimiser
         <img key={who} src={withBase(CAST[who].src)} alt="" width={107} height={120} />)}</div>
-      <div><p className="calm-title">Nothing needs you.</p><p className="calm-sub">Quiet on the lot. {moving} orders moving.</p></div>
+      <div><p className="calm-title">Nothing needs you.</p><p className="calm-sub">{split.taken.length ? `${split.taken.length} taken, back at their recheck time.` : "Quiet on the lot."} {moving} orders moving.</p></div>
     </div>}
-    {queue && queue.needsYou.length > 0 && <NeedsYouGroups items={queue.needsYou} now={queue.now} />}
+    {split && <NeedsYouGroups split={split} now={queue!.now} />}
 
     {queue && <RingoGroups items={queue.ring} now={queue.now} />}
 
@@ -115,15 +115,13 @@ export default function NeedsYou() {
 // Now: safety, or critical/high that is overdue or due within 2 h (lib/triage/next-action.ts). Rank order is kept inside each group.
 // Taken: someone said "I'll handle it". The row comes back on its own at the recheck time or when something new happens.
 const claimOf = (q: QueueItem) => (q as QueueItem & WithClaim).claim ?? null
-function NeedsYouGroups({ items, now }: { items: QueueItem[]; now: string }) {
-  const taken = items.filter((q) => claimOf(q))
-  const open = items.filter((q) => !claimOf(q))
-  const urgent = open.filter((q) => inNow(q, now))
-  const later = open.filter((q) => !urgent.includes(q))
+type Split = ReturnType<typeof needsYouSplit<QueueItem & WithClaim>>
+const splitOf = (q: QueueResponse | null): Split | null => q ? needsYouSplit(q.needsYou as (QueueItem & WithClaim)[], q.now) : null
+function NeedsYouGroups({ split: { urgent, later, taken }, now }: { split: Split; now: string }) {
   return <>
     {urgent.length > 0 && <><h2 className="q-group" id="now">Now · {urgent.length}</h2><Rows items={urgent} now={now} label="Orders that need a person now" person /></>}
     {later.length > 0 && <><h2 className="q-group">When you can · {later.length}</h2><Rows items={later} now={now} label="Follow-ups" /></>}
-    {taken.length > 0 && <><h2 className="q-group">Taken · {taken.length}</h2><Rows items={taken} now={now} label="Orders a person is handling" /></>}
+    {taken.length > 0 && <><h2 className="q-group" id="taken">Taken · {taken.length} <span className="q-group-note">not counted above; each comes back at its recheck time</span></h2><Rows items={taken} now={now} label="Orders a person is handling" /></>}
   </>
 }
 
@@ -137,8 +135,8 @@ function RingoGroups({ items, now }: { items: QueueItem[]; now: string }) {
       <Rows items={working} now={now} label="Orders Ringo is working" />
     </section>}
     <section className="sec" aria-labelledby="ring-h">
-      <div className="sec-head"><h2 id="ring-h">Ringo can phone these</h2><span className="count num">{can.length || ""}</span>
-        <span className="note">He has not started. Open one and run him.</span></div>
+      <div className="sec-head"><h2 id="ring-h">Ringo can phone these</h2>{can.length > 0 && <><span className="count num">{can.length}</span>
+        <span className="note">He has not started on these. Open one and run him.</span></>}</div>
       {can.length ? <Rows items={can} now={now} label="Orders Ringo can work" /> : <p className="empty">Nothing for Ringo to phone right now.</p>}
     </section>
   </>
@@ -233,9 +231,10 @@ function ShiftReport({ queue }: { queue: QueueResponse | null }) {
   const updates = counts?.updates ?? lines.length
   const orders = counts?.orders ?? new Set(lines.map((s) => s.orderId).filter(Boolean)).size
   const now = queue?.now ?? null
-  const free = queue?.needsYou.filter((q) => !claimOf(q)) ?? []
-  const urgent = queue ? free.filter((q) => inNow(q, queue.now)).length : 0
-  const top = free[0]
+  const split = splitOf(queue)
+  const urgent = split?.urgent.length ?? 0
+  const top = split?.open[0]
+  const can = queue?.ring.filter((q) => q.reason !== "RING_WORKING").length ?? 0
   const ready = !!queue && (!!handover || error)
 
   return <section className="shift" aria-labelledby="shift-h">
@@ -247,8 +246,8 @@ function ShiftReport({ queue }: { queue: QueueResponse | null }) {
           <p>{error ? "I couldn't load what happened while you were out. The queue below is current."
             : updates ? <>Here&apos;s the lot since <When at={handover!.since} now={now} />: {updates} {updates === 1 ? "update" : "updates"} on {orders} {orders === 1 ? "order" : "orders"}.</>
               : <>Nothing new since <When at={handover!.since} now={now} />.</>}</p>
-          <p>{top ? <><a href="#needs-h">{queue!.needsYou.length} need you</a>{urgent > 0 && <>, <a href="#now">{urgent} right now</a></>}. Start with the {top.vehicle}.</> : queue!.needsYou.length ? "Everything that needs you is taken. I'll put each back when its time is up." : "Nothing needs you. Enjoy the coffee."}</p>
-          {queue!.ring.length > 0 && <p><a href="#ring-h">{queue!.ring.length === 1 ? "One" : queue!.ring.length} I can phone myself</a>. Open {queue!.ring.length === 1 ? "it" : "one"} and say the word.</p>}
+          <p>{top ? <><a href="#needs-h">{split!.open.length} need you</a>{urgent > 0 && <>, <a href="#now">{urgent} right now</a></>}{split!.taken.length > 0 && <> (plus <a href="#taken">{split!.taken.length} taken</a>)</>}. Start with the {top.vehicle}.</> : split?.taken.length ? "Everything that needs you is taken. I'll put each back when its time is up." : "Nothing needs you. Enjoy the coffee."}</p>
+          {can > 0 && <p><a href="#ring-h">{can === 1 ? "One" : can} I can phone myself</a>. Open {can === 1 ? "it" : "one"} and say the word.</p>}
         </>}
       </div>
       {(lines.length > 0 || since) && <div className="shift-foot">

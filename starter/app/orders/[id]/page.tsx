@@ -38,13 +38,13 @@ export default function OrderStoryPage({ params }: { params: Promise<{ id: strin
   const [running, setRunning] = useState(false)
   const callbacks = story?.callbacks.filter((j) => j.status === "scheduled") ?? []
 
-  return <AppFrame section="queue" snapshotAt={detail?.view.snapshotAt ?? null}><main className="page story-page">
+  return <AppFrame section="queue" snapshotAt={detail?.view.snapshotAt ?? null} now={story?.now ?? null}><main className="page story-page">
     <nav className="crumbs" aria-label="Breadcrumb"><Link href="/">Needs you</Link><span>/</span><span className="mono">{reference ?? "Order"}</span></nav>
     {error && <div className="record-state" role="alert"><h1>{error}</h1><p>The order could not be opened. <Link href="/">Back to the queue</Link></p></div>}
     {!error && !story && <div aria-busy="true"><div className="q-skel tall" /><div className="q-skel" /><div className="q-skel" /><p className="empty">Loading the order…</p></div>}
     {story && <>
       <header className="story-head">
-        <p className="eyebrow"><span className="mono">{story.reference}</span>{h ? <> · {h.statusLabel}</> : null}</p>
+        <p className="eyebrow"><span className="mono">{story.reference}</span>{h ? <> · {h.statusLabel}</> : null} · times in Helsinki time</p>
         <h1 className="page-title small">{h?.vehicle?.title ?? story.reference}</h1>
         {h && <p className="story-meta">{h.customer.name} · {h.from.city} <Icon name="arrow" size={13} /> {h.to.city}
           <Link className="link-quiet" href={`/orders/${id}/record`}>Full record</Link></p>}

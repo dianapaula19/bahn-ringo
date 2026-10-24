@@ -1,9 +1,12 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { LANES } from "@/lib/present/labels"
 import type { Overview } from "@/lib/present/types"
 import { loadQueue } from "../_lib/agent-api"
+import type { QueueItem } from "@/lib/contract"
+import { needsYouSplit, type WithClaim } from "@/lib/triage/claim"
 import { AppFrame } from "../components/app-frame"
 import { Card } from "../components/card"
 import { Icon } from "../components/icons"
@@ -31,7 +34,7 @@ export default function Home() {
 
   useEffect(() => {
     const c = new AbortController()
-    loadQueue(c.signal).then((q) => setNeeds(new Set(q.needsYou.map((i) => i.orderId)))).catch(() => {}) // without it the board still works, minus the filter
+    loadQueue(c.signal).then((q) => setNeeds(new Set(needsYouSplit(q.needsYou as (QueueItem & WithClaim)[], q.now).open.map((i) => i.orderId)))).catch(() => {}) // without it the board still works, minus the filter
     return () => c.abort()
   }, [])
 
@@ -52,6 +55,7 @@ export default function Home() {
         <p className="board-sub">{overview
           ? <><b>{overview.total}</b> orders · <b>{overview.counts.moving ?? 0}</b> moving{needs && <> · <b>{needs.size}</b> need you</>}</>
           : "Loading the snapshot"}</p>
+        <p className="board-note">Every order by stage, folded to its first problem; hover or tab to a card for the rest. Decide from <Link href="/">Needs you</Link>. Times are Helsinki time.</p>
       </div>
       <div className="board-tools">
         <label className="search">

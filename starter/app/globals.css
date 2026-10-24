@@ -562,6 +562,7 @@ details.more > :not(summary) { margin-top: 8px; }
 .q-skel { height: 52px; margin-top: 8px; border-radius: 10px; background: linear-gradient(90deg, var(--hair-soft), var(--birch), var(--hair-soft)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
 .q-skel.tall { height: 140px; }
 .q-group { margin-top: 26px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.q-group-note { font-weight: 400; margin-left: 6px; }
 .q-group + .q-list { margin-top: 8px; }
 .q-steps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .q-group + .q-steps + .q-list, .q-steps + .q-list { margin-top: 10px; }
@@ -970,3 +971,39 @@ details.more > :not(summary) { margin-top: 8px; }
 .claim-back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 .claim-back select { padding: 7px 8px; border: 1px solid var(--hair); border-radius: 8px; background: var(--birch); font: inherit; font-size: 13.5px; color: var(--ink); }
 .claim-hint { flex-basis: 100%; font-size: 12.5px; color: var(--muted); }
+
+/* Timeline → What we know: a small link instead of re-nesting the fact rows. */
+.tl-facts { margin-top: 6px; padding: 2px 9px; border: 1px solid var(--hair); border-radius: 999px; background: var(--birch); font: inherit; font-size: 12.5px; color: var(--ink); cursor: pointer; }
+.tl-facts:hover, .tl-facts:focus-visible { border-color: var(--ink); }
+.fact-list > li { transition: background-color .4s; }
+.fact-list > li.is-lit { background: var(--tray); box-shadow: inset 3px 0 0 var(--ink); }
+
+/* The last run as a strip of steps: read, read, read, call, stop. */
+.run-steps-wrap { margin-top: 12px; }
+.run-steps-head { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.run-steps { display: flex; flex-wrap: wrap; gap: 6px 12px; list-style: none; padding: 0; margin: 0; }
+.run-step { position: relative; display: grid; gap: 1px; padding: 4px 8px; border-radius: 8px; background: var(--birch); box-shadow: 0 0 0 1px var(--hair); font-size: 12px; line-height: 1.3; }
+.run-step b { font-weight: 600; }
+.run-step small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.run-step:not(.last)::after { content: "→"; position: absolute; left: calc(100% + 6px); top: 50%; transform: translate(-50%, -50%); color: var(--muted); font-size: 11px; }
+.run-step.last { box-shadow: 0 0 0 1px var(--ink); }
+.run-step.tone-warn { background: var(--orange-bg); }
+.run-step.skel { width: 110px; height: 40px; }
+.run-step .sim-tag { padding: 0 5px; font-size: 11px; }
+
+/* Each decision button carries one line: what pressing it writes, and what comes after. */
+.will-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 8px 12px; list-style: none; padding: 0; margin: 10px 0 0; }
+.will-list > li { display: contents; }
+.will-list > li > .btn { justify-self: stretch; justify-content: center; }
+.will { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
+.will b { font-weight: 600; color: var(--ink); }
+.claim-box .will { flex-basis: 100%; }
+@media (max-width: 560px) { .will-list { grid-template-columns: minmax(0, 1fr); gap: 4px; } .will-list > li > .btn { justify-self: start; margin-top: 6px; } }
+
+/* /board is the secondary view: each card rests folded to the car and its first problem (or its date), and opens on hover or focus. */
+.board-note { margin-top: 4px; font-size: 13px; color: var(--muted); }
+.board .card .card-body > .card-line:not(:first-child), .board .card .tray-line:not(:first-child) { display: none; }
+.board .card:not(:has(.card-tray)) .card-body > .card-date { display: flex; }
+.board .card .card-body { padding-bottom: 9px; }
+.board .card:is(:hover, :focus-visible) .card-body > .card-line { display: flex; }
+.board .card:is(:hover, :focus-visible) .tray-line { display: flex; }

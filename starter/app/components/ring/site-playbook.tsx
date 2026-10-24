@@ -64,8 +64,8 @@ function Note({ entry: e, now, onChanged }: { entry: PlaybookEntry; now: string;
         : <p className="playbook-text">{e.note}</p>}
       {e.quote && <p className="fact-quote" lang={e.language ?? undefined}>“{e.quote}”{e.language && e.language !== "en" && <> ({LANG_NAME[e.language]})</>}</p>}
       <p className="fact-src">
-        {e.level === "observed" ? "Seen on the line" : "Said on the call"}{e.rung && <> · {RUNG_LABEL[e.rung].toLowerCase()}</>} · <Link className="nowrap" href={`/orders/${e.orderId}#src-${e.sourceCallId}`}>Ringo call{e.orderRef ? ` for ${e.orderRef}` : ""}</Link> · <When at={e.sourceAt} now={now} />
-        {e.editedBy && e.editedAt && <> · edited by {e.editedBy.replace(/-/g, " ")}, <When at={e.editedAt} now={now} /></>}
+        {e.level === "observed" ? "Seen on the line" : "Said on the call"}{e.rung && <> · {RUNG_LABEL[e.rung].toLowerCase()}</>} · <Link className="nowrap" href={`/orders/${e.orderId}#src-${e.sourceCallId}`}>Ringo call{e.orderRef ? ` for ${e.orderRef}` : ""}</Link> · <When at={e.sourceAt} now={now} zone />
+        {e.editedBy && e.editedAt && <> · edited by {e.editedBy.replace(/-/g, " ")}, <When at={e.editedAt} now={now} zone /></>}
       </p>
 
       {mode === "edit" && <div className="actions"><button type="button" className="btn primary small" disabled={busy || !draft.trim() || draft.trim() === e.note} onClick={() => send("PATCH")}>Save</button>

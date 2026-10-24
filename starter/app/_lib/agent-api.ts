@@ -30,6 +30,7 @@ async function post<T>(url: string, body: unknown): Promise<T> {
 
 export const loadQueue = (signal?: AbortSignal) => get<QueueResponse>("/api/agent/queue", signal)
 export const loadStory = (id: string, signal?: AbortSignal) => get<OrderStory>(`/api/agent/orders/${encodeURIComponent(id)}/story`, signal)
+export const loadRun = (runId: string, signal?: AbortSignal) => get<RunDetail>(`/api/agent/runs/${encodeURIComponent(runId)}`, signal)
 export const loadTrust = (signal?: AbortSignal) => get<TrustLedger>("/api/agent/trust", signal)
 export const loadHandover = (since: string | null, signal?: AbortSignal) =>
   get<Handover>(`/api/agent/handover${since ? `?since=${encodeURIComponent(since)}` : ""}`, signal)

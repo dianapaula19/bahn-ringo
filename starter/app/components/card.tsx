@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { laneLabel } from "@/lib/present/labels"
-import { fmtDateTime, fmtRange, fmtWeekday } from "@/lib/present/time"
+import { fmtDateTime, fmtWeekday, fmtWindow } from "@/lib/present/time"
 import type { BoardCard, Tone } from "@/lib/present/types"
 import { Icon } from "./icons"
 
@@ -11,7 +11,8 @@ export const MARK_ICON: Record<string, string> = {
   proposal: "proposal", claim: "alert", custody: "key", check: "note", inbox: "message",
 }
 
-/** One order on a board or in a list: car, reference, customer, route, the decisive date and the work tray. */
+/** One order on a board or in a list: car, reference, customer, route, the decisive date (Helsinki time; the
+ *  place's own clock on hover) and the work tray. On /board the card rests folded to the car and its first problem. */
 export function Card({ card, role }: { card: BoardCard; role?: string | null }) {
   const marks = uniqueMarks(card)
   const date = card.decisive
@@ -35,7 +36,7 @@ export function Card({ card, role }: { card: BoardCard; role?: string | null }) 
         {date && <div className={`card-line card-date tone-${date.tone}`}>
           <span className="card-date-label">{date.label}</span>
           {/* The relative note ("in 2 d", "slot passed") lives in the tooltip; on the card it only ever showed as "· i…". */}
-          <span className="card-date-value num" title={`${date.end ? fmtRange(date.start, date.end, date.zone) : fmtDateTime(date.start, date.zone)}${date.note ? ` · ${date.note}` : ""}`}>{dateText(date.start, date.end, date.zone)}</span>
+          <span className="card-date-value num" title={`${fmtWindow(date.start, date.end, date.zone)}${date.note ? ` · ${date.note}` : ""}`}>{dateText(date.start, date.end, null)}</span>
         </div>}
       </div>
       {card.work.length > 0 && <div className="card-tray">

@@ -27,7 +27,7 @@ function said(rule: LearnedRule, action: LearnedDecision["action"]): string {
 function Cites({ citations, now }: { citations: Citation[]; now: string }) {
   return <ul className="learn-cites">{citations.map((c) => <li key={c.correctionId}>
     <Link href={`/orders/${c.orderId}`} className="mono">{c.orderRef}</Link>
-    <span> {c.decision === "EDITED" ? "edited" : "rejected"} <When at={c.at} now={now} /> by the {desk(c.reviewerId).toLowerCase()}</span>
+    <span> {c.decision === "EDITED" ? "edited" : "rejected"} <When at={c.at} now={now} zone /> by the {desk(c.reviewerId).toLowerCase()}</span>
     {c.note && <q>{c.note}</q>}
   </li>)}</ul>
 }
@@ -109,11 +109,11 @@ function LearnedRow({ rule, now, onChanged }: { rule: LearnedRule; now: string; 
         <span className="chip tone-neutral" title="Each change of wording is a new version">Version {rule.version}</span></p>
       {editing ? <Wording initial={rule.text} busy={busy} saveLabel="Save wording" onSave={(t) => run(rule, "edit", t)} onCancel={() => setEditing(false)} />
         : <p className="learn-text">{rule.text}</p>}
-      <p className="trust-sub">{ACTION[rule.actionType]}. Learned from {rule.citations.length} reviews{accepted && <>, accepted <When at={accepted.at} now={now} /> by the {desk(accepted.by).toLowerCase()}</>}.</p>
+      <p className="trust-sub">{ACTION[rule.actionType]}. Learned from {rule.citations.length} reviews{accepted && <>, accepted <When at={accepted.at} now={now} zone /> by the {desk(accepted.by).toLowerCase()}</>}.</p>
       <details className="more"><summary><Icon name="chevron" size={12} />Where it came from{rule.history.length > 1 ? " and its history" : ""}</summary>
         <Cites citations={rule.citations} now={now} />
         {rule.history.length > 1 && <ol className="learn-history">{rule.history.map((h, i) => <li key={i}>
-          <When at={h.at} now={now} />: {step(h, rule.history[i - 1])} by the {desk(h.by).toLowerCase()}</li>)}</ol>}
+          <When at={h.at} now={now} zone />: {step(h, rule.history[i - 1])} by the {desk(h.by).toLowerCase()}</li>)}</ol>}
       </details>
       {msg && <p className={`result tone-${msg.tone}`} role="status">{msg.text}</p>}
     </div>

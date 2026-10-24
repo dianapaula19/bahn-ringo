@@ -1,7 +1,7 @@
 "use client"
 
 import type { ActionType, EvidenceLevel, Fact, StoryEntry, TrustMode } from "@/lib/contract"
-import { dayKey, fmtClockZone, fmtDateTime, fmtLong, relativeTo } from "@/lib/present/time"
+import { dayKey, fmtClock, fmtClockZone, fmtDateTime, fmtLong, relativeTo } from "@/lib/present/time"
 import type { Tone } from "@/lib/present/types"
 import { RoleTag, type Lizard, type Role } from "../ringo"
 
@@ -38,11 +38,12 @@ export const MODE: Record<TrustMode, { label: string; tone: Tone }> = {
   never: { label: "Never", tone: "danger" },
 }
 
-/** "11:24 EEST" when it is the same day as now, else "19 Oct 13:44 EEST" (operator's zone; UTC on hover). */
-export function When({ at, now }: { at: string | null | undefined; now?: string | null }) {
+/** "11:24" when it is the same day as now, else "19 Oct 13:44", in the desk's zone (Helsinki). The section around it
+ *  says "Helsinki time" once; `zone` adds the zone name for a time that stands alone. Full zone and UTC on hover. */
+export function When({ at, now, zone = false }: { at: string | null | undefined; now?: string | null; zone?: boolean }) {
   if (!at) return null
-  const text = now && dayKey(at) === dayKey(now) ? fmtClockZone(at) : fmtDateTime(at)
-  return <time dateTime={at} title={fmtLong(at)}>{text}</time>
+  const text = now && dayKey(at) === dayKey(now) ? (zone ? fmtClockZone(at) : fmtClock(at)) : fmtDateTime(at, undefined, zone)
+  return <time dateTime={at} title={`${fmtDateTime(at)} Helsinki · ${fmtLong(at)}`}>{text}</time>
 }
 
 export function Ago({ at, now }: { at: string | null | undefined; now: string | null | undefined }) {
