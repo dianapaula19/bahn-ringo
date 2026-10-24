@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 import posthog from "posthog-js"
 import type { CallRecord, CallTurn, OrderStory, RunEvent, ToolName } from "@/lib/contract"
@@ -59,6 +60,7 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
   const [replaying, setReplaying] = useState(false)
   const [offline, setOffline] = useState(false)
   const [message, setMessage] = useState("")
+  const [liveRunId, setLiveRunId] = useState<string | null>(null)
   const abort = useRef<AbortController | null>(null)
   const end = useRef<HTMLLIElement | null>(null)
 
@@ -82,6 +84,7 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
     setLines(text ? [{ kind: "you", text }] : [])
     try {
       await runRing(story.orderId, { trigger, message: text, operatorId: DESK }, (e) => {
+        if (e.type === "run_started" && !e.replay) setLiveRunId(e.runId)
         if (e.type === "error" && /offline/i.test(e.message)) { setOffline(true); return } // the offline note below says it once
         setLines((ls) => fold(ls, e))
       }, c.signal)
@@ -123,16 +126,20 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
 
     {offline && <p className="result tone-warn" role="status">Ringo is offline right now (no model key). You can still watch a recorded run. <button type="button" className="link-btn" onClick={() => start("replay")}>Replay</button></p>}
     {lines.length === 0 && busyElsewhere && <p className="empty" role="status">Ringo is working on this order now (started <When at={last.startedAt} now={story.now} />). Reload in a moment to see what it found.</p>}
-    {lines.length === 0 && !running && !busyElsewhere && !offline && <p className="empty">{last ? <>Ringo last ran <When at={last.startedAt} now={story.now} />{last.decision ? <>: {last.decision.headline}</> : null}</> : "Ringo has not run on this order yet."}</p>}
+    {lines.length === 0 && !running && !busyElsewhere && !offline && <p className="empty">{last ? <>Ringo last ran <When at={last.startedAt} now={story.now} />{last.decision ? <>: {last.decision.headline}</> : null} · <TraceLink runId={last.id} /></> : "Ringo has not run on this order yet."}</p>}
     {lines.length === 0 && running && <ul className="steps" aria-busy="true"><li className="step-line pending"><span className="spin" />Starting…</li></ul>}
     {lines.length > 0 && <ul className="steps" aria-live="polite">
       {lines.map((l, i) => <li key={i} className={`step-line kind-${l.kind}`}><LineView line={l} now={story.now} live={running} acted={lines.slice(0, i).some((x) => x.kind === "step" || x.kind === "call")} /></li>)}
       <li ref={end} aria-hidden="true" />
     </ul>}
     {callOpen && <p className="ringo-ringing" role="status"><span className="ring-pulse"><RingoFace size={32} /></span>Ringo is ringing {site}…</p>}
+    {!running && lines.length > 0 && liveRunId && <p className="note-text"><TraceLink runId={liveRunId} /></p>}
     {proposed && <p className="ringo-done" role="status"><span className="ringo-thumb" aria-hidden="true">{/* eslint-disable-next-line @next/next/no-img-element -- a static svg */}<img src={withBase("/ringo.svg")} alt="" /></span>Done. Over to you.</p>}
   </section>
 }
+
+/** The engineering view of one live run (/engine): model turns, tokens, timing. Not shown on this page. */
+const TraceLink = ({ runId }: { runId: string }) => <Link href={`/engine?run=${runId}#${runId}`} prefetch={false} className="foot-link">Technical trace</Link>
 
 function LineView({ line: l, now, live, acted }: { line: Line; now: string; live: boolean; acted: boolean }) {
   if (l.kind === "you") return <p className="you"><b>You:</b> {l.text}</p>
