@@ -737,6 +737,7 @@ details.more > :not(summary) { margin-top: 8px; }
   .decision { padding: 18px 16px; }
 }
 @media (max-width: 480px) {
+  .story-meta .link-quiet { flex-basis: 100%; margin-left: 0; }
   .fact-chip { grid-template-columns: minmax(0, 1fr); }
   .fact-chip .chip { grid-row: auto; margin-bottom: 4px; }
   .ring-chat textarea { min-height: 72px; }

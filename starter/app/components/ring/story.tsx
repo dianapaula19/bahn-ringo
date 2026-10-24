@@ -90,7 +90,8 @@ export function DecisionPanel({ story, ctx, onChanged }: { story: OrderStory; ct
   const canRun = story.ringEligible && !ringPending.length && !live && (triage.bucket === "ring" || (triage.bucket === "needs_you" && !decision))
   const tone = triage.bucket === "needs_you" ? (triage.severity === "critical" ? "danger" : "warn") : triage.bucket === "ring" ? "accent" : "ok"
   const recorded = triage.reason === "RECORDED_PROPOSAL" ? earlier.find((p) => !blocked(p)) : undefined
-  const problem = decision?.outcome === "needs_person" ? decision.headline : recorded?.rationale || triage.why
+  // With a stop decision, Ringo's headline says what he found; the proposal card below says what he asks.
+  const problem = decision && (decision.outcome === "needs_person" || ringPending.length) ? decision.headline : recorded?.rationale || triage.why
   const msg = triage.sources.find((s) => s.table === "messages" && story.timeline.some((e) => e.ref.id === s.id))
   const say = next?.text ?? ""
   const links = [

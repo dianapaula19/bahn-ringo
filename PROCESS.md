@@ -214,6 +214,16 @@ Ringo got three colleagues, one per role, so a reader can scan "who said it" bef
 - **Where they show.** A 22 px face beside every timeline entry and every "What we know" source line: driver, customer, site (dealer) or Ringo, mapped from the existing `actorKind` and fact source; Bahn people, monitoring and system events get a neutral dot of the same size so rows stay aligned. The name stays; the face is never the only cue (alt = the role). An event only gets a face when its label names the actor, so "System: offer accepted by Yara" never shows a driver beside "System". A fact from a Ringo call shows the dealer, because the site said it. "Nothing needs you" shows the four together.
 - Checked: renders at 22, 28, 48 px and full size, order pages ord-00593 / 00516 / 00413 and the empty queue (queue response faked in the browser) at 1440 and 390.
 
+## 6f. UI feel: queue, order hero, board (25 Oct)
+
+A design critique said the queue led with the car, said "A person must act" 11 times, and the board and queue disagreed (43 vs 19). What changed:
+
+- **Queue rows** lead with the problem; "CD-xxxxx · car" is a muted second line. The status column is now a next-step chip from `lib/triage/next-action.ts` ("Answer driver", "Call site", "Decide: roadside or tow", "Review proposal"), or nothing when no concrete step is known. Severity is a 3 px left edge, safety rows get a faint tint, and anything overdue goes in Now. Keyboard j/k and focus restore checked.
+- **Ringo's shift report** replaces the grey "Since you left" card: his face and three lines in his voice. Counts link to the rows they count; the cited handover sentences stay one click away behind "Show what happened", so every line still has its source.
+- **Order hero** is the problem, one "Next:" line and the buttons that do it. The next step comes only from rows already on the story (Ringo's proposal or stop decision, the one-decision template, the open task's next action, an unblocked recorded proposal). Recorded and blocked proposals fold into "Earlier proposal (blocked by reviewer check)". On 322 it reads "Next: Decide with the customer: roadside or tow", with the cited facts under it and a button to the customer. No new backend actions.
+- **Board** counts "Needs you" from the queue's triage list, so both pages say 19. Lanes are 300 px with snap, an edge fade and a step button; footers end in an ellipsis; mark icons have titles. On a phone a stage picker shows one lane at a time.
+- Checked at 1440 and 390, including a faked "Ringo proposal waiting" story and a failed handover (both faked in the browser; nothing written, no runs).
+
 ## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, and so on) are unverified. Serving under `/apps/<slug>` works in a local production build with the base path; whether the gateway keeps or strips the prefix on a real box is not checked.
