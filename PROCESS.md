@@ -149,6 +149,18 @@ Every order also asserts: the run finished, read before dial, no customer contac
 
 **Thrown away:** cutting the count by moving routine tasks (164, 941, 992, 071) out of Needs you. A person must still act on them; they sit in "When you can" instead. A third "overdue" group, because the sim clock makes rows drift into it every few minutes.
 
+## 6b. Judge pass (17:45)
+
+A 30-second look as a judge, on a production build (`next start` on a spare port; Next 16 refuses a second `next dev` in the same folder, and :3000 belonged to another project), with headless Chrome at 1440 and 390. The live model was called once (the first handover); everything after ran with the key unset and the recorded replay. The five biggest things a judge would notice:
+
+1. **"Since you left" was a grey skeleton for several seconds on every cold start**, because the route waited for the Scribe (an LLM call) before answering. Fixed: the page gets the template sentences (each with its source) at once, the Scribe writes in the background into the same cache, and the strip asks once more after 12 s. `?format=text` (cron/Telegram) still waits for the Scribe.
+2. **Driver rows were cut before the question.** 413 read "Understood. I will only collect the first Golf on Monday. Please tell me who…": the whole message fit under 150 characters, so it was shown whole and the two-line clamp hid the ask. Fixed: a quote is whole only up to 100 characters (two lines at 1440), and the filler first sentence ("Understood.") is no longer used as a lead. 413 now reads "Please tell me who confirms Tuesday's keys and where I should report", 201 "I have submitted the receipt; please review it".
+3. **Ring rows read "Ring can ring the pickup site: Get stock control's…"**, three times in a row and again as the order's headline. Now "Ring can call the site to get stock control's…".
+4. Not fixed: after a recorded run finishes, the button still says "Ring is working…" until "Stop watching".
+5. Not fixed: Ring rows show "Overdue by 36 min" (grey) while the order page says "No decision is waiting on you"; the due time is the site's task, not the desk's. And the sidebar wordmark says "Control Room" while the tab says "Ring".
+
+**Thrown away:** a timeout race around the Scribe (still a skeleton for the length of the timeout); polling until the Scribe answers (a loop for one swap).
+
 ## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, serving a Next app under `/apps/<slug>/`, and so on) are unverified.

@@ -138,8 +138,14 @@ function HandoverStrip({ now }: { now: string | null }) {
   useEffect(() => {
     if (since === undefined) return
     const c = new AbortController()
-    loadHandover(since, c.signal).then((data) => { setHandover(data); setError(false) }).catch(() => { if (!c.signal.aborted) setError(true) })
-    return () => c.abort()
+    let retry: ReturnType<typeof setTimeout> | undefined
+    const load = (again: boolean) => loadHandover(since, c.signal).then((data) => {
+      setHandover(data); setError(false)
+      // The Scribe writes in the background; ask once more for its version.
+      if (again && data.writer === "template" && data.sentences.length) retry = setTimeout(() => load(false), 12_000)
+    }).catch(() => { if (!c.signal.aborted) setError(true) })
+    load(true)
+    return () => { c.abort(); clearTimeout(retry) }
   }, [since])
 
   const lines = handover?.sentences ?? []

@@ -81,21 +81,23 @@ export async function validate(drafts: { text: string; sourceIds: string[]; orde
 }
 
 const cache = new Map<string, Handover>()
+const writing = new Map<string, Promise<void>>()
 
-export async function handover(sinceArg: string | null): Promise<Handover> {
+export async function handover(sinceArg: string | null, wait = false): Promise<Handover> {
   const now = await simNow()
   const since = sinceArg && !Number.isNaN(Date.parse(sinceArg)) ? new Date(sinceArg).toISOString() : new Date(Date.parse(SNAPSHOT) - 3 * 3600_000).toISOString()
   const list = (await items(since)).filter((i) => i.at <= now).slice(-40)
   const key = `${since}|${list.length}|${list[list.length - 1]?.id ?? ""}`
   const hit = cache.get(key)
   if (hit) return { ...hit, now }
-  const drafted = await scribe(list)
-  const writer: Handover["writer"] = drafted ? "scribe" : "template"
-  const drafts = drafted ?? list.slice(-12).reverse().map((i) => ({ text: `${hhmm(i.at)}: ${i.text}`, sourceIds: [i.id], orderId: i.orderId }))
-  const { sentences, dropped } = await validate(drafts)
-  const result: Handover = { now, since, sentences, dropped, writer }
-  cache.set(key, result)
-  return result
+  // The Scribe takes seconds; never hold the page on it. Answer with the template now and let the
+  // Scribe fill the cache for the next load (the strip asks once more when it got the template).
+  if (!writing.has(key)) writing.set(key, scribe(list).then(async (drafted) => {
+    if (drafted) cache.set(key, { now, since, ...(await validate(drafted)), writer: "scribe" })
+  }).catch(() => {}))
+  if (wait) { await writing.get(key); const done = cache.get(key); if (done) return { ...done, now } }
+  const drafts = list.slice(-12).reverse().map((i) => ({ text: `${hhmm(i.at)}: ${i.text}`, sourceIds: [i.id], orderId: i.orderId }))
+  return { now, since, ...(await validate(drafts)), writer: "template" }
 }
 
 export const handoverText = (h: Handover) =>

@@ -78,15 +78,17 @@ function safetyDecision(b: Bundle, incident: RelatedRow | undefined): string {
 // A driver message that asks for something. "Understood, no cost to submit" or a position update needs no answer.
 const ASKS = /\?|\bplease\b|\b(can|could) you\b/i
 
-/** A message, short: whole when it fits, else the sentence with the question, led by the sentence that says what is wrong when both fit. */
-export function quoteShort(body: string, max = 150): string {
+/** A message, short: whole when it fits the row's two lines, else the sentence with the question, led by the sentence that says what is wrong when both fit. Filler ("Understood.") is dropped so the ask is never clamped away. */
+export function quoteShort(body: string, max = 100): string {
   if (body.length <= max) return body
   const s = (body.match(/[^.!?]+[.!?]*/g) ?? [body]).map((x) => x.trim()).filter(Boolean)
   const ask = s.findLast((x) => ASKS.test(x)) ?? s[0]
-  const lead = s.find((x) => x !== ask && /\b(cannot|can't|won't|not|no)\b/i.test(x)) ?? (s[0] !== ask ? s[0] : undefined)
+  const lead = s.find((x) => x !== ask && /\b(cannot|can't|won't|not|no)\b/i.test(x))
   const text = lead && lead.length + ask.length < max ? `${lead} ${ask}` : ask
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
 }
+
+const lcFirst = (x: string) => x.charAt(0).toLowerCase() + x.slice(1)
 
 function unansweredDriver(b: Bundle, now: string) {
   const byThread = new Map<string, typeof b.messages>()
@@ -191,7 +193,7 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const worked = ring.proposals.some((p) => p.status === "EXECUTED")
   if ((gap || access) && !worked && RING_STATUSES.includes(b.order.status) && pickupSiteId(b)) return {
     reason: "RING_CAN_CALL", severity: "low",
-    why: gap ? `Ring can ring the pickup site: ${String(gap.details.next_action ?? gap.details.summary)}` : `Ring can ring the pickup site: ${access!.summary}`,
+    why: gap ? `Ring can call the site to ${lcFirst(String(gap.details.next_action ?? gap.details.summary))}` : `Ring can call the site: ${access!.summary}`,
     sources: [...(gap ? [ref("work_items", gap.id)] : []), ...(access ? [ref("alerts", access.id)] : [])],
   }
   // 11 WAITING_EXTERNAL (an open lower alert is in hand, not quiet: the quiet count promises "no open alert")
