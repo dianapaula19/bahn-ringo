@@ -26,6 +26,8 @@ export const ringSteps = pgTable("ring_steps", {
   runId: text("run_id").notNull(),
   seq: integer("seq").notNull(),
   event: jsonb("event").notNull(),
+  /** Real (wall) clock when the step was written, for the trace's tool latency. Null on older rows. */
+  wallAt: ts("wall_at"),
 }, (t) => [primaryKey({ columns: [t.runId, t.seq] })])
 
 export const ringCalls = pgTable("ring_calls", {
@@ -125,4 +127,23 @@ export const ringJobs = pgTable("ring_jobs", {
   status: text("status").notNull(),
   createdByRunId: text("created_by_run_id").notNull(),
   firedRunId: text("fired_run_id"),
+})
+
+/** One model call inside a run (Ringo's turns, and the site/driver simulators' replies). Engineering
+ *  trace only (/engine): never shown in the ops pages. Wall clock, not sim clock. */
+export const ringTurns = pgTable("ring_turns", {
+  id: text("id").primaryKey(),
+  runId: text("run_id").notNull(),
+  /** "ringo_turn", "short_reply" (site or driver simulator). */
+  name: text("name").notNull(),
+  model: text("model").notNull(),
+  startedAt: ts("started_at").notNull(),
+  latencyMs: integer("latency_ms").notNull(),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  cacheReadTokens: integer("cache_read_tokens"),
+  cacheWriteTokens: integer("cache_write_tokens"),
+  stopReason: text("stop_reason"),
+  toolUses: integer("tool_uses"),
+  error: text("error"),
 })

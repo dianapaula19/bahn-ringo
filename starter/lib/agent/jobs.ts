@@ -3,7 +3,7 @@
 import { and, asc, eq, lte } from "drizzle-orm"
 import { db } from "@/lib/db"
 import type { CallbackJob, ResetResponse, RunDueResponse } from "@/lib/contract"
-import { ringCalls, ringDriverMessages, ringEvents, ringFacts, ringJobs, ringMeta, ringProposals, ringRuns, ringSteps, ringTrust } from "@/lib/ring-schema"
+import { ringCalls, ringDriverMessages, ringEvents, ringFacts, ringJobs, ringMeta, ringProposals, ringRuns, ringSteps, ringTrust, ringTurns } from "@/lib/ring-schema"
 import { newId, resetClock, simNow } from "./clock"
 import { liveRun, runRing } from "./loop"
 import { toJob } from "./store"
@@ -32,7 +32,7 @@ export async function runDue(opts: { wait: boolean; force?: boolean } = { wait: 
 }
 
 export async function reset(): Promise<ResetResponse> {
-  const tables = { ring_runs: ringRuns, ring_steps: ringSteps, ring_calls: ringCalls, ring_driver_messages: ringDriverMessages, ring_facts: ringFacts, ring_proposals: ringProposals, ring_events: ringEvents, ring_jobs: ringJobs, ring_trust: ringTrust, ring_meta: ringMeta }
+  const tables = { ring_runs: ringRuns, ring_steps: ringSteps, ring_calls: ringCalls, ring_driver_messages: ringDriverMessages, ring_facts: ringFacts, ring_proposals: ringProposals, ring_events: ringEvents, ring_jobs: ringJobs, ring_trust: ringTrust, ring_meta: ringMeta, ring_turns: ringTurns }
   const cleared: Record<string, number> = {}
   for (const [name, table] of Object.entries(tables)) cleared[name] = (await db.delete(table).returning()).length
   await resetClock()
@@ -42,7 +42,7 @@ export async function reset(): Promise<ResetResponse> {
 /** Remove Ringo's rows for one order (eval and demo re-runs). The dataset is untouched. */
 export async function clearOrder(orderId: string): Promise<void> {
   const runs = await db.select({ id: ringRuns.id }).from(ringRuns).where(eq(ringRuns.orderId, orderId))
-  for (const r of runs) await db.delete(ringSteps).where(eq(ringSteps.runId, r.id))
+  for (const r of runs) { await db.delete(ringSteps).where(eq(ringSteps.runId, r.id)); await db.delete(ringTurns).where(eq(ringTurns.runId, r.id)) }
   for (const t of [ringRuns, ringCalls, ringDriverMessages, ringFacts, ringProposals, ringEvents, ringJobs]) await db.delete(t).where(eq(t.orderId, orderId))
   for (const m of await db.select().from(ringMeta)) if ((m.value as { orderId?: string })?.orderId === orderId) await db.delete(ringMeta).where(eq(ringMeta.key, m.key))
 }
