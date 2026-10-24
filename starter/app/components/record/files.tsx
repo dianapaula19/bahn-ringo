@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { label } from "@/lib/present/labels"
 import { Icon } from "../icons"
+import { withBase } from "@/lib/base"
 
 type CaseFile = {
   id: string; kind: string; status: string; content_type: string; file_name: string; url: string
@@ -15,7 +16,7 @@ export function OrderFiles({ orderId }: { orderId: string }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`/api/orders/${orderId}/attachments`, { signal: controller.signal })
+    fetch(withBase(`/api/orders/${orderId}/attachments`), { signal: controller.signal })
       .then((response) => { if (!response.ok) throw new Error("Could not load files"); return response.json() as Promise<{ attachments: CaseFile[] }> })
       .then((data) => { setFiles(data.attachments); setFailed(false) })
       .catch(() => { if (!controller.signal.aborted) setFailed(true) })

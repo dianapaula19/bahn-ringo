@@ -4,6 +4,7 @@ import Link from "next/link"
 import { use, useEffect, useState } from "react"
 import { AppFrame } from "../../../components/app-frame"
 import { OrderPane, type Detail } from "../../../components/order-detail"
+import { withBase } from "@/lib/base"
 
 export default function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -12,7 +13,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`/api/orders/${encodeURIComponent(id)}`, { signal: controller.signal })
+    fetch(withBase(`/api/orders/${encodeURIComponent(id)}`), { signal: controller.signal })
       .then((response) => { if (!response.ok) throw new Error(response.status === 404 ? "Order not found" : "Could not load order"); return response.json() as Promise<Detail> })
       .then((data) => { setDetail(data); setError("") })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load order") })

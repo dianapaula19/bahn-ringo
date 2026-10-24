@@ -3,11 +3,13 @@ import type {
   ActionType, Desk, Handover, OrderStory, QueueResponse, ReviewRequest, ReviewResponse, RunEvent, RunRequest, TrustLedger, TrustMode, TrustUpdateResponse,
 } from "@/lib/contract"
 
+import { withBase } from "@/lib/base"
+
 export const DESK: Desk = "ops-readiness"
 
 async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
   let res: Response
-  try { res = await fetch(url, { signal, cache: "no-store" }) } catch (e) {
+  try { res = await fetch(withBase(url), { signal, cache: "no-store" }) } catch (e) {
     if (signal?.aborted) throw e
     throw new Error("Could not reach the control room")
   }
@@ -18,7 +20,7 @@ async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
 
 async function post<T>(url: string, body: unknown): Promise<T> {
   let res: Response
-  try { res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }) } catch {
+  try { res = await fetch(withBase(url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }) } catch {
     return { error: "Could not reach the control room." } as T
   }
   return res.json().catch(() => ({ error: "The control room sent an unreadable answer." }) as T)
@@ -41,7 +43,7 @@ export async function runRing(orderId: string, req: RunRequest, onEvent: (e: Run
   const fail = (message: string, retryable: boolean) => onEvent({ type: "error", message, retryable, at: new Date().toISOString() })
   let res: Response
   try {
-    res = await fetch(`/api/agent/orders/${encodeURIComponent(orderId)}/run`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req), signal })
+    res = await fetch(withBase(`/api/agent/orders/${encodeURIComponent(orderId)}/run`), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req), signal })
   } catch { if (!signal?.aborted) fail("Could not reach the control room.", true); return }
   if (res.status === 409) return fail("Ringo is already working on this order.", false)
   if (!res.ok || !res.body) { const b = await res.json().catch(() => null); return fail(b?.error ?? "Ringo could not start.", true) }

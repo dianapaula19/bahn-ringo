@@ -19,4 +19,4 @@ node matrix/box-loop.mjs --check         # self-test of the clock logic
 
 **Telegram is off by default.** It is on only when `MATRIX_TOKEN` and `TELEGRAM_CHAT_ID` are set, and goes only to the operator's own chat. It carries the handover sentences with their source ids and nothing addressed to a customer.
 
-To watch it from a laptop, run `matrix port forward 3000`. The launcher entry may not render the Next app: Matrix serves apps under `/apps/<slug>/` and strips that prefix, while the app uses absolute `/_next` and `/api` paths. Not tested on a real box yet.
+To watch it from a laptop, run `matrix port forward 3000` and open http://localhost:3000/apps/bahn-ring. Matrix serves apps under `/apps/<slug>`, like its own Next template (`basePath: /apps/${MATRIX_APP_SLUG}`), so the box builds and starts with `NEXT_BASE_PATH=/apps/bahn-ring`: Next's `basePath`, plus `withBase()` (`starter/lib/base.ts`) for raw `fetch`, `<img>` and `<a>` URLs. Locally `NEXT_BASE_PATH` is unset and nothing changes. Checked with a local `next build && next start` under the prefix (pages, assets and API calls all load); not tested on a real box yet.

@@ -51,7 +51,7 @@ mx upload --force "$TGZ" "projects/$NAME.tgz"
 mx run -- sh -c "cd projects && tar xzf $NAME.tgz && rm $NAME.tgz && cd $NAME/starter && npm ci \
   && (docker compose up -d 2>/dev/null || docker-compose up -d) \
   && for i in \$(seq 30); do npm run -s db:push && break; sleep 2; done \
-  && npm run db:seed && npm run attachments:seed && npm run build"
+  && npm run db:seed && npm run attachments:seed && NEXT_BASE_PATH=/apps/$SLUG npm run build"
 
 # 4. Register the app: drop matrix.json into ~/apps/<slug>/ (the gateway lists apps from ~/apps).
 mx upload --force "$HERE/matrix.json" "apps/$SLUG/matrix.json"
@@ -63,9 +63,9 @@ mx run -C "projects/$NAME/starter" -- node --env-file-if-exists=../../.env ../ma
 cat <<EOF
 
 Start these on the box (each in its own detached terminal tab):
-  matrix run -it ${PROFILE[*]} -C projects/$NAME/starter -- node --env-file-if-exists=../../.env node_modules/next/dist/bin/next start -p 3000
-  matrix run -it ${PROFILE[*]} -C projects/$NAME/starter -- node --env-file-if-exists=../../.env ../matrix/box-loop.mjs
+  matrix run -it ${PROFILE[*]} -C projects/$NAME/starter -- env NEXT_BASE_PATH=/apps/$SLUG node --env-file-if-exists=../../.env node_modules/next/dist/bin/next start -p 3000
+  matrix run -it ${PROFILE[*]} -C projects/$NAME/starter -- env NEXT_BASE_PATH=/apps/$SLUG node --env-file-if-exists=../../.env ../matrix/box-loop.mjs
 View the control room from this laptop:
-  matrix port forward ${PROFILE[*]} 3000
+  matrix port forward ${PROFILE[*]} 3000   # then open http://localhost:3000/apps/$SLUG
 EOF
 ((APPLY)) || echo "(dry run: nothing was sent. Re-run with --apply.)"

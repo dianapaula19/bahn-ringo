@@ -6,6 +6,7 @@ import type { InboxThreadView, InboxView } from "@/lib/present/types"
 import { AppFrame } from "../components/app-frame"
 import { Icon } from "../components/icons"
 import { ActorName, Chip, OrderLinks, When } from "../components/ui"
+import { withBase } from "@/lib/base"
 
 export default function InboxPage() {
   const [view, setView] = useState<InboxView | null>(null)
@@ -15,7 +16,7 @@ export default function InboxPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch("/api/inbox", { signal: controller.signal })
+    fetch(withBase("/api/inbox"), { signal: controller.signal })
       .then((response) => { if (!response.ok) throw new Error("Could not load the inbox"); return response.json() as Promise<{ view: InboxView }> })
       .then((data) => {
         setView(data.view)

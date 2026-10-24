@@ -7,6 +7,7 @@ import { AppFrame, type Section } from "./app-frame"
 import { Card } from "./card"
 import { Icon } from "./icons"
 import { Empty, FactList, SectionHead } from "./ui"
+import { withBase } from "@/lib/base"
 
 const SECTION: Record<EntityKind, Section> = { driver: "drivers", customer: "customers", site: "sites" }
 const INDEX: Record<EntityKind, { href: string; label: string; noun: string }> = {
@@ -21,7 +22,7 @@ export function EntityPage({ kind, params }: { kind: EntityKind; params: Promise
   const [error, setError] = useState("")
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`/api/entities/${kind}/${encodeURIComponent(id)}`, { signal: controller.signal })
+    fetch(withBase(`/api/entities/${kind}/${encodeURIComponent(id)}`), { signal: controller.signal })
       .then((response) => { if (!response.ok) throw new Error(response.status === 404 ? `${INDEX[kind].label.slice(0, -1)} not found` : "Could not load record"); return response.json() as Promise<EntityView> })
       .then((data) => { setView(data); setError("") })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load record") })
@@ -55,7 +56,7 @@ export function EntityIndex({ kind }: { kind: EntityKind }) {
   const [query, setQuery] = useState("")
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`/api/entities/${kind}`, { signal: controller.signal })
+    fetch(withBase(`/api/entities/${kind}`), { signal: controller.signal })
       .then((response) => { if (!response.ok) throw new Error("Could not load the list"); return response.json() as Promise<EntityList> })
       .then((data) => { setList(data); setError("") })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load the list") })

@@ -4,13 +4,14 @@ import Image from "next/image"
 import Link from "next/link"
 import type { RecordView, Tile } from "@/lib/present/types"
 import { Icon } from "../icons"
+import { withBase } from "@/lib/base"
 
 export function RecordHero({ view }: { view: RecordView }) {
   const { header, story, journey } = view
   const vehicle = header.vehicle
   return <>
     {vehicle?.illustrationSlug && <figure className="cover">
-      <Image src={`/car-images/${vehicle.illustrationSlug}.webp`} alt={`Illustration of a ${vehicle.title}`} fill sizes="(max-width: 900px) 100vw, 1040px" priority />
+      <Image src={withBase(`/car-images/${vehicle.illustrationSlug}.webp`)} alt={`Illustration of a ${vehicle.title}`} fill sizes="(max-width: 900px) 100vw, 1040px" priority />
       <div className="cover-pill"><span className={`dot lane-${header.lane}`} /><span className="mono">{header.reference}</span><span>{header.laneLabel}</span></div>
       <span className="cover-info" title="Model illustration. Orders with the same model share it. It is not a photo or evidence of this car." aria-label="About this image"><Icon name="note" size={14} /></span>
     </figure>}

@@ -15,8 +15,8 @@
     "timeout": 60
   },
   "serve": {
-    "start": "cd ../../projects/bahn-ring/starter && exec node --env-file-if-exists=../../.env --env-file-if-exists=.env --env-file-if-exists=.env.local node_modules/next/dist/bin/next start -p $PORT",
-    "healthCheck": "/",
+    "start": "cd ../../projects/bahn-ring/starter && NEXT_BASE_PATH=/apps/bahn-ring exec node --env-file-if-exists=../../.env --env-file-if-exists=.env --env-file-if-exists=.env.local node_modules/next/dist/bin/next start -p $PORT",
+    "healthCheck": "/apps/bahn-ring",
     "startTimeout": 30,
     "idleShutdown": 900
   },

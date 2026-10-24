@@ -6,6 +6,7 @@ import type { Overview } from "@/lib/present/types"
 import { AppFrame } from "../components/app-frame"
 import { Card } from "../components/card"
 import { Icon } from "../components/icons"
+import { withBase } from "@/lib/base"
 
 export default function Home() {
   const [search, setSearch] = useState("")
@@ -16,7 +17,7 @@ export default function Home() {
   useEffect(() => {
     const controller = new AbortController()
     const timer = setTimeout(() => {
-      fetch(`/api/overview?q=${encodeURIComponent(search)}`, { signal: controller.signal })
+      fetch(withBase(`/api/overview?q=${encodeURIComponent(search)}`), { signal: controller.signal })
         .then((response) => { if (!response.ok) throw new Error("Could not load orders"); return response.json() as Promise<Overview> })
         .then((data) => { setOverview(data); setError("") })
         .catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load orders") })

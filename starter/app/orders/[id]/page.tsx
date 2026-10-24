@@ -10,6 +10,7 @@ import type { Detail } from "../../components/order-detail"
 import { When } from "../../components/ring/bits"
 import { RunPanel } from "../../components/ring/run-panel"
 import { DecisionPanel, FactsPanel, Timeline } from "../../components/ring/story"
+import { withBase } from "@/lib/base"
 
 export default function OrderStoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -24,7 +25,7 @@ export default function OrderStoryPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     const c = new AbortController()
     refresh(c.signal)
-    fetch(`/api/orders/${encodeURIComponent(id)}`, { signal: c.signal }).then((r) => (r.ok ? r.json() as Promise<Detail> : null)).then(setDetail).catch(() => {})
+    fetch(withBase(`/api/orders/${encodeURIComponent(id)}`), { signal: c.signal }).then((r) => (r.ok ? r.json() as Promise<Detail> : null)).then(setDetail).catch(() => {})
     return () => c.abort()
   }, [id, refresh])
 

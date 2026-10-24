@@ -17,7 +17,7 @@ import { spawnSync } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-const APP = process.env.APP_URL ?? "http://127.0.0.1:3000"
+const APP = process.env.APP_URL ?? `http://127.0.0.1:3000${process.env.NEXT_BASE_PATH ?? ""}`
 const TZ = process.env.RING_TZ ?? "Europe/Helsinki"
 const GW = process.env.MATRIX_GATEWAY_URL ?? "http://127.0.0.1:4000"
 const STATE = process.env.RING_LOOP_STATE ?? join(homedir(), ".bahn-ring-loop.json")
