@@ -5,6 +5,7 @@ import { LEVEL_RANK } from "@/lib/agent/facts"
 import type { RingOrderState } from "@/lib/agent/store"
 import { rows, str, strings, type Bundle, type RelatedRow } from "@/lib/present/bundle"
 import { orderFacts } from "./facts"
+import { fmtClockZone } from "@/lib/present/time"
 
 export const RING_KINDS = ["PICKUP_CONTACT_HANDLE_REQUIRED", "PICKUP_ACCESS_CHECK_REQUIRED", "KEY_HOLDER_STOCK_CHECK"]
 const RING_STATUSES = ["NEW", "WAITING_FOR_PICKUP"]
@@ -14,7 +15,8 @@ const SEV = { critical: 0, high: 1, medium: 2, low: 3 } as const
 type Sev = keyof typeof SEV
 
 const ref = (table: string, id: string): SourceRef => ({ table, id })
-const hhmm = (iso: string) => iso.slice(11, 16)
+// "11:22 EEST": the operator's clock with its zone name, so the queue and the slots read in one zone.
+const hhmm = (iso: string) => fmtClockZone(iso)
 const openItems = (b: Bundle) => rows(b, "work_items").filter((w) => w.details.status === "OPEN" || w.details.status === "NEEDS_EXTERNAL_INPUT")
 const openAlerts = (b: Bundle) => b.alerts.filter((a) => a.status === "OPEN" || a.status === "ACKNOWLEDGED")
 const openIncidents = (b: Bundle) => rows(b, "incidents").filter((i) => !i.details.resolved_at)
@@ -48,11 +50,11 @@ function decideBy(b: Bundle): string | null {
   return times.map((t) => new Date(t).toISOString()).sort()[0] ?? null
 }
 
-/** "Attempt to book the next-day crossing failed at 07:10 UTC: provider timed out without a confirmation reference." */
+/** "Attempt to book the next-day crossing failed at 10:10 EEST: provider timed out without a confirmation reference." */
 function failedDataset(p: RelatedRow): string {
   const exec = (p.details.execution ?? {}) as Record<string, unknown>
   const err = String(exec.error ?? "outcome unknown").split(/(?<=\.)\s/)[0].replace(/\.$/, "")
-  const at = str(exec.attempted_at) ? ` at ${hhmm(new Date(String(exec.attempted_at)).toISOString())} UTC` : ""
+  const at = str(exec.attempted_at) ? ` at ${hhmm(new Date(String(exec.attempted_at)).toISOString())}` : ""
   return `${String(p.details.summary).replace(/\.$/, "")} failed${at}: ${err}.`
 }
 
@@ -147,7 +149,7 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const driverMsg = unansweredDriver(b, now)
   if (empty || driverMsg) return {
     reason: "DRIVER_WAITING", severity: "high",
-    why: empty ? "Driver is at the pickup but the car is not there. They cannot wait much longer." : `Driver, ${hhmm(driverMsg!.authoredAt)} UTC: “${quoteShort(driverMsg!.body)}”`,
+    why: empty ? "Driver is at the pickup but the car is not there. They cannot wait much longer." : `Driver, ${hhmm(driverMsg!.authoredAt)}: “${quoteShort(driverMsg!.body)}”`,
     sources: [...(empty ? [ref("incidents", empty.id)] : []), ...(driverMsg ? [ref("messages", driverMsg.id)] : [])],
   }
   // 6 RECORDED_PROPOSAL
@@ -173,7 +175,7 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
       .sort((x, y) => x.authoredAt.localeCompare(y.authoredAt)).pop()
     const who = raised && (raised.authorType === "site_contact" ? "Site" : raised.authorType.replace(/^\w/, (c) => c.toUpperCase()))
     return { reason: "DUE_SOON", severity: "high", sources: [ref("alerts", unacked.id), ...(raised ? [ref("messages", raised.id)] : [])],
-      why: raised && /^Review /.test(unacked.summary) ? `${who}, ${hhmm(raised.authoredAt)} UTC: “${quoteShort(raised.body)}”` : alertText(unacked.summary) }
+      why: raised && /^Review /.test(unacked.summary) ? `${who}, ${hhmm(raised.authoredAt)}: “${quoteShort(raised.body)}”` : alertText(unacked.summary) }
   }
   if (due) return {
     reason: "DUE_SOON", severity: due.details.priority === "high" ? "high" : "medium", sources: [ref("work_items", due.id)],
@@ -184,7 +186,7 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const job = ring.jobs.find((j) => j.status === "scheduled")
   if (live || job) return {
     reason: "RING_WORKING", severity: "low",
-    why: live ? "Ringo is working on this now." : `Ringo calls back at ${hhmm(job!.dueAt)} UTC: ${job!.reason}`,
+    why: live ? "Ringo is working on this now." : `Ringo calls back at ${hhmm(job!.dueAt)}: ${job!.reason}`,
     sources: [live ? ref("ring_runs", live.id) : ref("ring_jobs", job!.id)],
   }
   // 10 RING_CAN_CALL (skipped once a Ringo change for this gap was executed)
@@ -201,7 +203,7 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const waitingThread = b.conversations.find((c) => c.status === "OPEN" && str(c.details.waiting_on))
   if (ack || waitingThread) return {
     reason: "WAITING_EXTERNAL", severity: "low",
-    why: waitingThread ? `Waiting on ${String(waitingThread.details.waiting_on).toLowerCase().replace(/_/g, " ")}${str(waitingThread.details.next_check_at) ? `, next check ${hhmm(String(waitingThread.details.next_check_at))} UTC` : ""}.` : `${str(ack!.details.owner) ? `${ack!.details.owner} owns it` : b.conversations.some((c) => c.id === ack!.details.conversation_id && c.status === "OPEN") ? "Being followed up in the conversation" : "Open alert"}: ${alertText(ack!.summary)}`,
+    why: waitingThread ? `Waiting on ${String(waitingThread.details.waiting_on).toLowerCase().replace(/_/g, " ")}${str(waitingThread.details.next_check_at) ? `, next check ${hhmm(String(waitingThread.details.next_check_at))}` : ""}.` : `${str(ack!.details.owner) ? `${ack!.details.owner} owns it` : b.conversations.some((c) => c.id === ack!.details.conversation_id && c.status === "OPEN") ? "Being followed up in the conversation" : "Open alert"}: ${alertText(ack!.summary)}`,
     sources: waitingThread ? [ref("conversations", waitingThread.id)] : [ref("alerts", ack!.id)],
   }
   return { reason: "QUIET", severity: "low", why: "Nothing needs a person.", sources: [] }
@@ -221,7 +223,7 @@ function overtaken(b: Bundle): Triage["overtaken"] {
       ...b.alerts.filter((a) => a.id !== gap.id && a.details.assignment_id === asg && a.triggeredAt > gap.triggeredAt).map((a) => ({ ref: ref("alerts", a.id), at: a.triggeredAt })),
       ...rows(b, "incidents").filter((i) => i.details.assignment_id === asg && String(i.details.opened_at) > gap.triggeredAt).map((i) => ({ ref: ref("incidents", i.id), at: new Date(String(i.details.opened_at)).toISOString() })),
     ].sort((x, y) => x.at.localeCompare(y.at))[0]
-    if (later) out.push({ ref: ref("alerts", gap.id), label: `Tracking gap ${hhmm(gap.triggeredAt)} UTC`, overtakenBy: later.ref, overtakenAt: later.at })
+    if (later) out.push({ ref: ref("alerts", gap.id), label: `Tracking gap ${hhmm(gap.triggeredAt)}`, overtakenBy: later.ref, overtakenAt: later.at })
   }
   return out
 }

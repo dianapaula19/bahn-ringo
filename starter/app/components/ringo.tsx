@@ -22,6 +22,15 @@ export function LizardFace({ who, size = 28, name }: { who: Lizard | null; size?
   </span>
 }
 
+/** Who a source line came from, as one word in the role's colour (.role-tag). Faces stay in the crew strip:
+ *  at 24 px the green lizards read alike, a word does not. `null` is someone inside Bahn. */
+export type Role = Lizard | "ops" | "system"
+const ROLE_WORD: Record<Role, string> = { ringo: "Ringo", dealer: "Site", customer: "Customer", driver: "Driver", ops: "Ops", system: "System" }
+export function RoleTag({ role }: { role: Role | null }) {
+  const r = role ?? "ops"
+  return <span className={`role-tag r-${r}`}>{ROLE_WORD[r]}</span>
+}
+
 export const RingoFace = ({ size = 28 }: { size?: number }) => <LizardFace who="ringo" size={size} />
 
 /** The whole cast standing in a row, full figure, with who they are. Decorative where the text says it. */

@@ -19,7 +19,7 @@ function pointName(bundle: Bundle, pointId: string): string | null {
 function scalarChanges(changes: Record<string, unknown>, skip: string[] = []): string | null {
   const parts = Object.entries(changes)
     .filter(([key, value]) => !skip.includes(key) && !/(_id|_ids|_refs|_reference|_at)$/.test(key) && (typeof value === "string" || typeof value === "number" || typeof value === "boolean"))
-    .map(([key, value]) => `${humanize(key).toLowerCase()}: ${typeof value === "string" ? label(value) : String(value)}`)
+    .map(([key, value]) => typeof value === "boolean" ? `${value ? "" : "no "}${humanize(key).toLowerCase()}` : `${humanize(key).toLowerCase()}: ${typeof value === "string" ? label(value) : String(value)}`)
   return parts.length ? parts.join(" · ") : null
 }
 

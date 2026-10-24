@@ -444,6 +444,28 @@ Merged `r2-decide`, `r2-learn`, `r2-calls`, `r2-evals`, `r2-engine`, `r2-scale` 
 - **Demo state.** `POST /api/agent/reset`, then two live runs to put back what the lanes' demo needs: 516 (Finnish call, five playbook notes for Velantora Helsinki) and 023 (German call, an address change waiting in Decide). Both access instructions were edited the same way through the review API ("Take the pickup photos at the bay before the car leaves."), so `/trust` opens on Ringo's rule suggestion. It is left unaccepted for the demo. Eval history, corrections and learned rules survive a reset by design; playbooks, traces and the savings tally do not.
 - Not re-run: `eval:ring` (about five more live runs; the calls lane flagged its 593 driver assertion), and the Matrix base-path build of the merged tree (engine and learn checked theirs; decide and calls did not).
 
+## 6o. Round 3, taste lane: what the judges flagged (25 Oct)
+
+**What the judges said.** A judge pass over our screenshots scored "taste" and "control room" below 5 and named five gaps: (1) the customer and site lizards are as green as Ringo, so at 24 px a customer fact looks like a Ringo fact; (2) 18 of 20 queue rows had the same orange bar, so "overdue, driver standing there" looked like "due in 5 d"; (3) every time was in UTC next to slots in EEST/CEST, against our own CLAUDE.md rule; (4) record words leaked ("Address line1", "high acknowledged", "assigned (assigned)", "proposal_ready", and a demote button on /trust that read like a status); (5) the board cards truncated to "· sl…" and "Readine…". Also known: phone nav cut "All orde›", and 322's "What matters" on /decide repeated the headline.
+
+**What changed**
+- **Role words, not faces, on sources.** Fact rows and timeline entries now start with one small word in the role's colour: DRIVER, CUSTOMER, SITE, RINGO, OPS, SYSTEM. The lizard faces stay in the crew strip, the shift report and Ringo's own panel. Dataset records with no outside author (Monitoring, Proof record) read SYSTEM; Operations and Dispatch read OPS.
+- **One colour per meaning in the queue.** Red bar plus tint: safety only. Orange bar: a "Now" row that is overdue or has a driver waiting on it. No bar for everything else, including all of "When you can". The overdue time is bold. On this snapshot the 19 rows are 1 red, 4 orange and 14 plain. Before, 12 of 18 were orange.
+- **Times in the desk's zone.** `lib/present/time.ts` gets `OPERATOR_ZONE = "Europe/Helsinki"`: a time with no zone of its own now shows as "11:22 EEST", with the UTC time still on hover. Triage's quoted lines ("Driver, 11:14 EEST: …"), 322's one decision, the handover strip and the Scribe's input follow. Stored times stay UTC ISO. `next-action.ts` reads any zone name now, and `triage.check.ts` asserts the new strings (25/25).
+- **Plain words.** Proposal fields go through a new `fieldLabel()` ("Street", "Phone or handle"). Alerts read "Critical alert, acknowledged by Ops shift". Assignments read "is assigned" / "is assigned and on the job". Event booleans read "(no driver cleared to drive)", not "(…: true)". /engine says "proposal ready". On /trust the demote control is a quiet link, "Make Ringo ask first".
+- **Board cards.** The relative date note ("in 2 d") moved into the tooltip and a long slot wraps rather than truncating. The work line clamps at two lines.
+- **Phone nav.** The wordmark is the face alone under 900 px, so Needs you, Decide, All orders and Inbox fit before the bar scrolls.
+- **/decide "What matters".** It drops the chip that repeats the headline and starts with the latest words from the driver, customer or site in the last 2 h, each with its role, channel and a linked time. On 322 that brings up the driver's "Please tell me who is collecting the car before anyone moves it" (11:58), which the card did not show before.
+
+**What we checked.** Before and after screenshots at 1440×900 and 390×844 of /, /orders/ord-00322, /orders/ord-00593, /decide, /trust and /board. No horizontal scroll at either width. `typecheck`, `ring:check` (25 + 9 + 3), `build`, and `smoke` against our own server. The dev server ran with the API key blanked, so **0 model runs** were used. The handover strip showed its template, not the Scribe.
+
+**Rejected or left**
+- Initials inside the role ring (judge's alternative). A word is readable at 10 px. Two letters in a ring are a second code to learn.
+- Changing Ringo's tool summaries ("Callback scheduled for 10:30 UTC") to local time. The model reads those strings, and the times in its tools are UTC on purpose. They still show in UTC in the run panel's step list.
+- Taking /board out of the nav. It is the only place that lists all 100 orders, and the cards no longer truncate the slot.
+- Not done: ranking the map's city panel by triage, and toning down Ringo's voice. Both are outside this lane's screens, and the second needs a model run to judge.
+- CONTRACT.md §4 still says 322's one-decision times are "message times in UTC". They are now Helsinki time with the zone name. The integrator owns that file.
+
 ## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, and so on) are unverified. Serving under `/apps/<slug>` works in a local production build with the base path; whether the gateway keeps or strips the prefix on a real box is not checked.

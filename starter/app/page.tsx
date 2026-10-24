@@ -148,7 +148,7 @@ function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: 
     <ul className="q-list" aria-label={label}>
       {list.slice(0, shown).map((q) => {
         const next = steps.get(q.orderId) ?? null
-        return <li key={q.orderId}><Link data-row={q.orderId} className={`q-row sev-${q.severity}${q.reason === "SAFETY" ? " is-safety" : ""}`} href={`/orders/${q.orderId}`} onClick={() => { try { sessionStorage.setItem(ROW_KEY, q.orderId) } catch {} }}>
+        return <li key={q.orderId}><Link data-row={q.orderId} className={`q-row${barClass(q, now, person)}`} href={`/orders/${q.orderId}`} onClick={() => { try { sessionStorage.setItem(ROW_KEY, q.orderId) } catch {} }}>
           <span className="q-main">
             <span className="q-why" title={q.why}>{q.reason === "SAFETY" && <span className="sr-only">Safety: </span>}{q.why}</span>
             <span className="q-meta"><span className="mono">{q.reference}</span> · {q.vehicle}</span>
@@ -163,6 +163,14 @@ function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: 
 }
 
 const OTHER = "Other"
+
+// One glance, one colour each: red bar and tint for safety only; orange for a Now row that is overdue
+// or has a driver waiting on it; every other row has no bar.
+function barClass(q: QueueItem, now: string, person: boolean): string {
+  if (q.reason === "SAFETY") return " is-safety"
+  if (!person) return ""
+  return q.reason === "DRIVER_WAITING" || relativeTo(q.decideBy, now)?.past ? " is-pressing" : ""
+}
 
 // Only an overdue card in Now is red; "When you can", Ringo's and waiting rows stay calm.
 function Due({ at, now, person }: { at: string | null; now: string; person: boolean }) {

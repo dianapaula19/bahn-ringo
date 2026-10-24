@@ -4,7 +4,7 @@ import type { EvidenceLevel, Fact } from "@/lib/contract"
 import { effectiveLevel } from "@/lib/agent/facts"
 import type { RingOrderState } from "@/lib/agent/store"
 import { rows, str, type Bundle } from "@/lib/present/bundle"
-import { label } from "@/lib/present/labels"
+import { humanize, label, labelIn } from "@/lib/present/labels"
 import { fmtRange } from "@/lib/present/time"
 
 const STATED_BY: Record<string, string> = {
@@ -46,7 +46,8 @@ export function datasetFacts(bundle: Bundle): Fact[] {
     const d = a.details
     if (d.status === "CANCELLED") continue
     const name = bundle.dir.driverName(d.driver_id) ?? String(d.driver_id)
-    add(a.id, "driver.assignment", `Driver ${name} is assigned (${String(d.status).toLowerCase().replace(/_/g, " ")}).`, "reserved", "work_assignment", iso(d.accepted_at), "Dispatch")
+    const state = d.status === "ASSIGNED" ? "is assigned" : d.status === "IN_PROGRESS" ? "is assigned and on the job" : `is assigned (${labelIn(String(d.status))})`
+    add(a.id, "driver.assignment", `Driver ${name} ${state}.`, "reserved", "work_assignment", iso(d.accepted_at), "Dispatch")
   }
   const track = [...rows(bundle, "tracking_observations")].sort((x, y) => String(y.details.observed_at).localeCompare(String(x.details.observed_at)))[0]
   if (track) add(track.id, "car.position", `Last app position ${track.details.distance_remaining_km ?? "?"} km from delivery.`, "observed", "tracking", iso(track.details.observed_at), "Driver app")
@@ -63,9 +64,15 @@ export function datasetFacts(bundle: Bundle): Fact[] {
   }
   for (const al of bundle.alerts) {
     if (al.status === "RESOLVED" || al.status === "DISMISSED") continue
-    add(al.id, `alert.${al.signal.toLowerCase()}`, al.summary, "claimed", "alert", al.triggeredAt, "Monitoring", `${al.severity} ${al.status.toLowerCase()}`)
+    add(al.id, `alert.${al.signal.toLowerCase()}`, al.summary, "claimed", "alert", al.triggeredAt, "Monitoring", alertNote(al.severity, al.status, str(al.details.owner)))
   }
   return out
+}
+
+/** "Critical alert, acknowledged by Shift lead" rather than "critical acknowledged". */
+function alertNote(severity: string, status: string, owner: string | null): string {
+  const state = status === "ACKNOWLEDGED" ? `acknowledged${owner ? ` by ${humanize(owner)}` : ""}` : status === "OPEN" ? "not yet acknowledged" : labelIn(status)
+  return `${label(severity)} alert, ${state}`
 }
 
 /** Dataset + ring facts for one order, with supersession and ageing applied at `now`. */

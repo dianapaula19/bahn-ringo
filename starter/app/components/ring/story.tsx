@@ -3,12 +3,13 @@
 import Link from "next/link"
 import { useEffect, useState, type ReactNode } from "react"
 import posthog from "posthog-js"
+import { fieldLabel } from "@/lib/present/labels"
 import type { CallRecord, Fact, OrderStory, Proposal, ReviewDecision, StoryEntry } from "@/lib/contract"
 import type { LearnedRule, ReviewWithSuggestion } from "@/lib/agent/learn/types"
 import { DESK, reviewProposal } from "../../_lib/agent-api"
 import { Icon } from "../icons"
-import { ACTION, FactChip, LIZARD, MODE, Simulated, When, factLizard } from "./bits"
-import { LizardFace, RingoFace } from "../ringo"
+import { ACTION, FactChip, MODE, Simulated, When, entryRole, factLizard } from "./bits"
+import { RingoFace, RoleTag } from "../ringo"
 import { withBase } from "@/lib/base"
 import type { Detail } from "../order-detail"
 import { CallView } from "./call-view"
@@ -17,7 +18,7 @@ export { CallView }
 
 // ---------------------------------------------------------------- plain-words payloads
 
-const human = (key: string) => key.replace(/[_.]/g, " ").replace(/^\w/, (c) => c.toUpperCase())
+const human = fieldLabel
 
 export function plain(v: unknown): string {
   if (v === null || v === undefined || v === "") return "Not set"
@@ -61,7 +62,7 @@ const sentences = (t: string) => t.match(/[^.!?]+[.!?]+(\s|$)/g)?.map((x) => x.t
 const blocked = (p: Proposal) => !!p.gate?.findings.some((f) => f.effect === "block")
 
 /** Where a "Next:" line comes from when nothing more specific says so: the triage source rows that are on the
- *  timeline, each linked to its entry ("From Monitoring 08:07 UTC, Kasper Kovelund 08:22 UTC"). */
+ *  timeline, each linked to its entry ("From Monitoring 11:07 EEST, Kasper Kovelund 11:22 EEST"). */
 function fromRecords(story: OrderStory, orderHref: string): ReactNode {
   const entries = story.triage.sources.map((s) => story.timeline.find((e) => e.ref.id === s.id)).filter((e): e is StoryEntry => !!e).slice(0, 3)
   if (!entries.length) return null
@@ -294,9 +295,8 @@ function TimelineEntry({ entry: e, now, facts, call }: { entry: StoryEntry; now:
   const [open, setOpen] = useState(false)
   return <li className={`tl-item kind-${e.actorKind}`} id={`src-${e.ref.id}`}>
     <span className="tl-time"><When at={e.at} now={now} /></span>
-    <LizardFace who={LIZARD[e.actorKind] ?? null} name={e.actor} />
     <div className="tl-body">
-      <p className="tl-who"><b>{e.actor}</b>{e.channel && <span className="tl-channel">{e.channel.replace(/_/g, " ")}</span>}{e.simulated && <Simulated />}</p>
+      <p className="tl-who"><RoleTag role={entryRole(e.actorKind)} /><b>{e.actor}</b>{e.channel && <span className="tl-channel">{e.channel.replace(/_/g, " ")}</span>}{e.simulated && <Simulated />}</p>
       <p className="tl-text">{e.text}</p>
       {facts.length > 0 && <ul className="fact-list inline">{facts.map((f) => <li key={f.id}><FactChip fact={f} now={now} /></li>)}</ul>}
       {call && <button type="button" className="link-btn" aria-expanded={open} onClick={() => setOpen((v) => !v)}>{open ? "Hide the call" : "Read the call"}</button>}

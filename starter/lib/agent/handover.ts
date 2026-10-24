@@ -7,6 +7,7 @@ import type Anthropic from "@anthropic-ai/sdk"
 import { db } from "@/lib/db"
 import type { Handover, HandoverSentence, RunOutcome, SourceRef, StopDecision } from "@/lib/contract"
 import { humanize } from "@/lib/present/labels"
+import { fmtClockZone } from "@/lib/present/time"
 import { messages, operationalEvents, orders } from "@/lib/schema"
 import { ringCalls, ringEvents, ringProposals, ringRuns } from "@/lib/ring-schema"
 import { SNAPSHOT, simNow } from "./clock"
@@ -15,7 +16,7 @@ import { anthropic, BETAS, captureAiGeneration, flushAiObservability, MODEL, new
 
 type Item = { id: string; table: string; at: string; orderId: string; text: string }
 const iso = (v: Date | string) => new Date(v).toISOString()
-const hhmm = (v: string) => `${v.slice(11, 16)} UTC`
+const hhmm = (v: string) => fmtClockZone(v) // "11:22 EEST", the desk's zone
 const STOPPED: Record<RunOutcome, string> = { needs_person: "Ringo needs a person", proposal_ready: "Ringo has a proposal for you", waiting: "Ringo is waiting", done: "Ringo is done", failed: "" }
 const handoverLine = (ref: string, d: StopDecision) => `${ref}: ${STOPPED[d.outcome] ? `${STOPPED[d.outcome]}: ` : ""}${d.headline}`
 
@@ -46,7 +47,7 @@ async function items(since: string): Promise<Item[]> {
   return out.sort((a, b) => a.at.localeCompare(b.at))
 }
 
-const SCRIBE = `You write the "Since you left" handover for a shift lead in a car delivery control room. From the numbered items, write at most 7 short sentences, most important first: decisions waiting, safety, blocks, and what Ringo found or did. Plain words. Name orders by their CD- reference, never by row ids; times as HH:MM UTC. Each sentence must list the ids of the items it is based on in sourceIds (copy them exactly). Do not state anything the items do not say. Simulated calls are simulated: say so.`
+const SCRIBE = `You write the "Since you left" handover for a shift lead in a car delivery control room. From the numbered items, write at most 7 short sentences, most important first: decisions waiting, safety, blocks, and what Ringo found or did. Plain words. Name orders by their CD- reference, never by row ids; copy times exactly as the items give them (HH:MM with the zone name). Each sentence must list the ids of the items it is based on in sourceIds (copy them exactly). Do not state anything the items do not say. Simulated calls are simulated: say so.`
 
 const SCHEMA = {
   type: "object", additionalProperties: false, required: ["sentences"],

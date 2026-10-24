@@ -103,7 +103,7 @@ export default async function EnginePage({ searchParams }: Props) {
             <summary>
               <span className="engine-ref">{refOf.get(run.orderId) ?? run.orderId}</span>
               <span className="engine-when">{fmtDateTime(run.startedAt, "Europe/Helsinki")}</span>
-              <span className={`engine-status s-${decision?.outcome ?? run.status}`}>{run.status === "running" ? "running" : decision?.outcome ?? run.status}</span>
+              <span className={`engine-status s-${decision?.outcome ?? run.status}`}>{run.status === "running" ? "running" : (decision?.outcome ?? run.status).replace(/_/g, " ")}</span>
               <span className="engine-stats mono">{run.trigger} · {ringo.length} turns · {tools.length} tools · {num(sum("inputTokens"))} in / {num(sum("outputTokens"))} out · {secs(wall)}{blocked ? ` · ${blocked} blocked` : ""}{errors ? ` · ${errors} errors` : ""}</span>
             </summary>
             <div className="engine-body mono">
@@ -141,6 +141,6 @@ function RowView({ row: r, t0 }: { row: Row; t0: number }) {
     case "gate": return <li className={`engine-row k-gate${r.result.passed ? "" : " bad"}`}>{at}<span className="engine-k">gate</span>
       <span>{r.command} · {r.result.passed ? "passed" : "blocked"}{r.result.findings.length ? ` · ${r.result.findings.map((f) => `${f.ruleId} (${f.effect})`).join(", ")}` : " · no findings"}</span></li>
     case "error": return <li className="engine-row k-error bad">{at}<span className="engine-k">error</span><span>{r.message}</span></li>
-    case "stop": return <li className="engine-row k-stop">{at}<span className="engine-k">stop</span><span>{r.decision.outcome} · {r.decision.headline}</span></li>
+    case "stop": return <li className="engine-row k-stop">{at}<span className="engine-k">stop</span><span>{r.decision.outcome.replace(/_/g, " ")} · {r.decision.headline}</span></li>
   }
 }

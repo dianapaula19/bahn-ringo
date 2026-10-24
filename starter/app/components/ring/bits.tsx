@@ -1,9 +1,9 @@
 "use client"
 
 import type { ActionType, EvidenceLevel, Fact, StoryEntry, TrustMode } from "@/lib/contract"
-import { dayKey, fmtClock, fmtDateTime, fmtLong, relativeTo } from "@/lib/present/time"
+import { dayKey, fmtClockZone, fmtDateTime, fmtLong, relativeTo } from "@/lib/present/time"
 import type { Tone } from "@/lib/present/types"
-import { LizardFace, type Lizard } from "../ringo"
+import { RoleTag, type Lizard, type Role } from "../ringo"
 
 export const LEVEL: Record<EvidenceLevel, { label: string; tone: Tone; hint: string }> = {
   claimed: { label: "Claimed", tone: "neutral", hint: "Someone said it. Nobody has checked." },
@@ -38,10 +38,10 @@ export const MODE: Record<TrustMode, { label: string; tone: Tone }> = {
   never: { label: "Never", tone: "danger" },
 }
 
-/** "08:24 UTC" when it is the same day as now, else "19 Oct 10:44 UTC". */
+/** "11:24 EEST" when it is the same day as now, else "19 Oct 13:44 EEST" (operator's zone; UTC on hover). */
 export function When({ at, now }: { at: string | null | undefined; now?: string | null }) {
   if (!at) return null
-  const text = now && dayKey(at) === dayKey(now) ? `${fmtClock(at)} UTC` : fmtDateTime(at)
+  const text = now && dayKey(at) === dayKey(now) ? fmtClockZone(at) : fmtDateTime(at)
   return <time dateTime={at} title={fmtLong(at)}>{text}</time>
 }
 
@@ -64,6 +64,8 @@ const KIND: Partial<Record<Fact["sourceKind"], string>> = {
 
 /** Which lizard speaks for a timeline entry. Bahn people, monitoring and system events get none. */
 export const LIZARD: Partial<Record<StoryEntry["actorKind"], Lizard>> = { ring: "ringo", driver: "driver", customer: "customer", site: "dealer" }
+/** The role word for a timeline entry: the four outside roles, Ops for Bahn people, System for monitoring and records. */
+export const entryRole = (kind: StoryEntry["actorKind"]): Role => LIZARD[kind] ?? (kind === "operator" ? "ops" : "system")
 
 /** Which lizard stands behind a fact's source. Messages take their author's role from the timeline;
  *  a Ringo call is what the site said, so the dealer; dataset records go by who stated them. */
@@ -84,7 +86,7 @@ export function FactChip({ fact, now, linked, old: forceOld, who }: { fact: Fact
   return <span className={`fact-chip${old ? " old" : ""}`}>
     <Level level={fact.level} />
     <span className="fact-claim">{fact.claim}{fact.note && <span className="fact-quote">{fact.note}</span>}</span>
-    <span className="fact-src" title={`Source: ${fact.sourceId}`}>{who !== undefined && <LizardFace who={who} name={fact.by} />}{fact.by} · {linked?.has(fact.sourceId) ? <a href={`#src-${fact.sourceId}`}>{kind}</a> : kind} · <When at={fact.at} now={now} /></span>
+    <span className="fact-src" title={`Source: ${fact.sourceId}`}>{who !== undefined && <RoleTag role={who ?? (/^(operations|dispatch|support|shift)/i.test(fact.by) ? "ops" : "system")} />}{fact.by} · {linked?.has(fact.sourceId) ? <a href={`#src-${fact.sourceId}`}>{kind}</a> : kind} · <When at={fact.at} now={now} /></span>
   </span>
 }
 

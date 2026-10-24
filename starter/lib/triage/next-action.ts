@@ -27,7 +27,7 @@ export function nextAction(t: Input): string | null {
 
 // ponytail: keyword match on the task summary; a work-item kind → action table if these start misfiring.
 function dueSoon(why: string): string | null {
-  const quoted = /^(Driver|Site|Customer), \d\d:\d\d UTC:/.exec(why)?.[1]
+  const quoted = /^(Driver|Site|Customer), \d\d:\d\d [A-Z+\d-]+:/.exec(why)?.[1]
   if (quoted) return quoted === "Driver" ? "Answer driver" : quoted === "Site" ? "Call site" : "Reply to customer"
   if (/\b(photo|proof|handover record)/i.test(why)) return "Check proof"
   if (/\b(customer|buyer)\b/i.test(why)) return "Confirm with customer"
