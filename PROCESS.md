@@ -237,10 +237,57 @@ A critique said the faces read as green blobs at 16 to 28 px, Bahn people got gr
 
 Left: the queue's empty states and the inbox (another lane owns those pages, so the line-up isn't placed there); status copy in `bits.tsx` ("A person must act") belongs to the queue rework.
 
+## 6h. Ringo learns from your edits (lane LEARN)
+
+Asked for: when a person edits or rejects one of Ringo's proposals, keep the diff and the reason. After two similar corrections, Ringo asks in his own words whether to make it a rule, citing the reviews. A person accepts, rewords or dismisses it. An accepted rule joins the Reviewer gate as `CL-Lxx`, shows in the trust ledger, is versioned and can be switched off. Nothing applies itself.
+
+**What we built**
+- **Corrections** (`ring_corrections`): `review()` in `lib/agent/proposals.ts` stores one row per changed field (EDITED) or per rejection (REJECTED). Each row holds the before and after values, the reviewer's note, and the order's open alert signals and work item kinds at the time. Approvals store nothing.
+- **Matching is plain code** (`lib/agent/learn/derive.ts`). Edits share a key when the action type and the field are the same. Rejections share a key when the action type and the reason class are the same; the class comes from keywords: the customer decides, unverified, already on file, wrong target, too early. "Other" is never learned from. A word-level diff (LCS) finds what each edit added and removed, and the rule is the longest run of words that every edit added (`require`), removed (`forbid`), or both. A yes/no field flipped the same way twice gives `equals`. The rule is scoped to the open signals the orders had in common. **A suggestion is only made if the rule blocks what Ringo wrote and passes what the person wrote, on every cited review.** Otherwise Ringo says nothing and keeps asking.
+- **Ringo's question** is a template in his voice, not a model call: "Twice now you've added “Take the pickup photos at the bay before the car leaves” to my access instruction. Shall I always put it in?" In a safety case (vehicle warning, safety stop) he drops the patter: "You've added … (2 reviews). Should I …".
+- **Rules** (`ring_learned_rules`): the status goes suggested → active ↔ off, or dismissed. Dismissed is final: later corrections on that pattern are stored but never asked about again. Accept assigns the next `CL-Lxx` id. Rewording bumps the version, and every change is kept in the history. Active rules are loaded into `runGate()` for each proposal Ringo makes (`learnedGateRules()`). A person's own edit is checked against the case law only: a different edit is new teaching, not a breach.
+- **API:** `GET /api/agent/learned` and `POST /api/agent/learned/:id` with `{action: accept|dismiss|off|on|edit, text?, operatorId}`. The review response carries an extra `suggestion` field (types in `lib/agent/learn/types.ts`; `lib/contract.ts` was not touched).
+- **UI:**
+  - `/trust` shows a calm teal "Ringo suggests a rule" card at the top (Accept, Edit wording, Don't ask again, plus the cited reviews behind a fold).
+  - A "Rules Ringo learned from you" section shows the rule id, its wording, On/Off, the version, where it came from (order links plus each reviewer's note) and the history.
+  - The ledger row of the action says "Checked against what you taught Ringo: CL-L01".
+  - On the order page, a one-line banner appears after the review that completed a pattern: "Second time you've fixed me the same way. I wrote it up as a rule for you to look at." The review result now lives in the decision panel too, because the reviewed card leaves the list on refresh and took its result line with it.
+  - The new section has empty, loading and error states.
+
+**Demo seeded for real** (DB `cr_learn`, 4 live runs, all through the API):
+1. A live run on CD-420516 proposed an access instruction. Edited through the review API: added "Take the pickup photos at the bay before the car leaves." (note: "Drivers keep leaving without pickup photos.").
+2. A live run on CD-420023 proposed an access instruction (and an address update, left pending for a person). The same line was added through the order page in headless Chrome, and the banner appeared. `/trust` then showed the suggestion, citing both reviews, and it was accepted in the browser as **CL-L01**.
+3. A live run on CD-420516 with the note "Ring stock control again … propose the access instruction either way". Ringo did not redial: the handover was already confirmed and recorded. That is read-before-dial working as intended, and no proposal came of it.
+4. A live run on CD-420516 with "Call stock control again: the yard told the support desk the handover bay may change". Ringo called, recorded two quoted facts, and proposed an access instruction without the line. **The gate blocked it with CL-L01 ("The access instruction must include … (learned from your edits)"), and Ringo re-proposed with the line on his own.** Accepted unchanged.
+
+**What we checked**
+- `npm run eval:learned` (new, deterministic, exits non-zero on a failed check): **38 / 38**.
+  - Part A uses synthetic corrections:
+    - One correction is not a pattern.
+    - "Changed X to Y" on seller holds is scoped to seller holds and does not fire elsewhere.
+    - Two rejections for the same reason stop that action only where both orders were.
+    - Different reasons, "other" reasons, or edits with nothing in common give no suggestion.
+    - Case-law rules still run beside the learned ones.
+    - A leave-one-out over three edits: each held-out original is blocked 3 / 3. But a held-out human version is blocked 1 / 3: the rule learned from two edits wants "the order reference", and the third person wrote "order reference". With three edits the phrase narrows and that false alarm goes away. Same lesson as the case-law eval: a rule learned from few examples is a memory, not a generalisation.
+  - Part B replays the real CL-L01 against the database. It blocks what Ringo wrote on 516 and 023, passes what the person wrote, and does not block the proposal accepted unchanged in run 4.
+  - Part C is the store round trip on throwaway rows, removed afterwards: two rejections give one suggestion, which is not in the gate. Accept gives a `CL-L` rule at v1 in the gate. Reword gives v2 with the history kept. Off takes it out of the gate and on puts it back. Dismissed means never asked again.
+  - The eval was mutation-tested: with `MIN_CORRECTIONS = 1` and the scope check removed, 5 checks fail and it exits 1.
+- `ring:check` 20 / 20 and `eval:reviewer` unchanged at 3 / 10 (learned rules only match Ringo's typed actions; dataset proposals have none). `typecheck`, `build`, and the build with `NEXT_BASE_PATH=/apps/bahn-ring`: `/trust` and the learned API answer under the prefix, the citation links carry the prefix and trailing slash, and nothing failed in the browser.
+- Screenshots at 1440 and 390 of the suggestion card (folded and open), the banner, the learned section, the ledger row, rewording, and the empty state (learned API emptied in the browser, not in the DB). No horizontal scroll at 390.
+
+**Thrown away**
+- The first demo edit ("driver shows the order reference and driver ID"). Ringo already writes that himself, so it would have taught nothing.
+- Exact-sentence matching. A third edit that dropped one word would have broken the pattern. The word diff plus the longest common run copes with that, and narrows the phrase instead.
+- Applying learned rules to the person's own edits (see above).
+- Letting the model phrase the suggestion (the lane allowed it). The template is deterministic, works offline and stays in Ringo's voice.
+- Putting the learned rules in Ringo's prompt. The gate's block message already tells him what to fix, and run 4 shows he does. The ceiling: a block costs one of his three proposal attempts.
+- Wiping corrections and learned rules on the demo reset. They are the review record the rules cite, so `reset()` keeps them. If a reset deletes a cited proposal, the correction row still holds the diff, the note and the order.
+
 ## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, and so on) are unverified. Serving under `/apps/<slug>` works in a local production build with the base path; whether the gateway keeps or strips the prefix on a real box is not checked.
 - `/orders/516` is not a route; order pages use the row id (`/orders/ord-00516`).
 - The gate's leave-one-out score is low (3/10) for the reason above.
 - No speech input in the Ringo chat box; earlier runs are not browsable (only the latest run's headline shows).
+- Learned rules live in the database, so a fresh clone starts with none (no export or seed for them). The run panel shows a learned-rule block only while the run is live, like every gate event. Scoping uses open alert signals and work item kinds only.
 - Ringo prepares no customer-message drafts. The background runner's `--autorun` is off by default so it cannot take over a live demo.
