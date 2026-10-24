@@ -1,3 +1,84 @@
+# Ring: a control room for Bahn car delivery
+
+Our entry for Bahn's Car Delivery Control Room challenge (Prompt Operations Hackathon, 24 to 25 October 2026). Bahn's original challenge README follows further down.
+
+**The control room** shows one queue: only the orders that need a person, each with one line saying why and when it must be decided. Order pages read as a story. Every fact shows how sure we are (claimed, quoted, reserved, observed, verified, out of date, refuted), who said it, which record it comes from, and when.
+
+**Ring** is a real LLM agent for pickup readiness. On an order it:
+
+1. reads the order, its messages and the site rules first (it cannot dial before it has read);
+2. rings the pickup site through a phone menu and talks to a person there, or asks the assigned driver a question (both are simulated, and every simulated call and message is labelled);
+3. writes down what it learned as graded facts, each citing a real source;
+4. either finishes, or stops with one clear decision for a person and proposals to accept, edit or reject.
+
+Ring never contacts a customer. It never changes a booking, a date, a cost or an address on its own, and it never gives mechanical advice. These rules are enforced in code (tool guards, a deterministic Reviewer gate, a trust ledger), not only in the prompt.
+
+Around it:
+
+- **Reconcile before retry.** After a dropped call, Ring must re-read and say what it found before it redials.
+- **Recheck before write.** Approval re-checks the order. If it changed after Ring read it, nothing is written and the order comes back as "check before retrying".
+- **Reviewer gate.** Case law from the dataset's 14 reviewed agent proposals, checked by plain code (no model), with a leave-one-out eval.
+- **What Ring may do** (`/trust`). Each kind of action is auto, ask or never. Ask rows can be promoted after five clean approvals in a row; bookings, dates, costs, addresses and customer messages are locked to ask.
+- **Since you left.** A handover strip on the queue in which every sentence links to its sources. A sentence whose source cannot be found is dropped and counted.
+- **CD-420322** (a car stopped on the road) is not a Ring order. It gets a one-decision card built from the records.
+
+How we built it with coding agents, what we checked and threw away, and the eval numbers (including the misses) are in [`PROCESS.md`](PROCESS.md). The hard rules are in [`CLAUDE.md`](CLAUDE.md), and the build contract is in [`CONTRACT.md`](CONTRACT.md).
+
+### Run it from a fresh clone
+
+You need Node.js 24 or newer, Docker, and, for live Ring runs, an Anthropic API key.
+
+```sh
+git clone <this repo> ring && cd ring/starter
+cp .env.example .env
+echo "ANTHROPIC_API_KEY=<your key>" > .env.local   # optional, see below; .env.local is gitignored
+npm ci
+
+# Postgres + RustFS. Docker Compose v2:
+docker compose up -d --wait
+# Docker Compose v1 has no --wait: start, then wait until both services say "healthy"
+docker-compose up -d && docker-compose ps
+
+npm run db:push            # creates the starter tables and Ring's ring_* tables
+npm run db:seed
+npm run attachments:seed
+npm run dev                # http://localhost:3000
+```
+
+- **Ports.** Postgres is on 5438 and RustFS on 9009/9010. If a port is taken, change it in `starter/compose.yaml` and in the matching line of `starter/.env`.
+- **The model key.** It is read from `starter/.env.local`, never printed and never committed. The model is `ANTHROPIC_MODEL`, default `claude-sonnet-5-5`. Without a key the app still works: triage, the queue, the stories, reviews and trust need no model, and Ring shows "offline" with **Watch a recorded run**, which replays a real recorded run for the five demo orders.
+- **Demo orders:** CD-420516 (key holder unknown), CD-420010 (the first call drops), CD-420023 (no street address), CD-420593 (driver on site, car not there), CD-420458 (seller hold, Ring must not call), CD-420322 (safety, not a Ring order). `POST /api/agent/reset` clears all Ring rows and restarts the sim clock at the dataset snapshot (Wed 21 Oct 2026 09:00 UTC).
+
+### Checks
+
+Run from `starter/`:
+
+```sh
+npm run typecheck && npm run build
+npm run ring:check                 # node:test self-check: triage, gate, evidence ladder (no model)
+npm run eval:reviewer              # Reviewer gate, leave-one-out;  -- --all for the leaky upper bound
+npm run eval:ring                  # Ring live on the 5 demo orders, 38 assertions (needs the key; clears their Ring rows)
+npm run ring:run -- ord-00516      # one live run in the terminal
+npm run ring:record                # rebuild the replay fixtures from stored runs
+```
+
+### Background work and Matrix OS
+
+`npm run ring:background` does one pass: it triages every order and fires the callbacks Ring has scheduled. Add `-- --loop` to keep it running (triage every 5 minutes, callbacks every minute). `--autorun` also starts Ring on orders it can call and has never worked (at most 2 per pass); it is off by default.
+
+To keep Ring running on an always-on [Matrix OS](https://github.com/HamedMP/matrix-os) box:
+
+```sh
+matrix/deploy.sh                          # dry run: packs the repo (no env files, no node_modules) and prints every remote step
+matrix/deploy.sh --apply --secrets=FILE   # FILE holds ANTHROPIC_API_KEY, and MATRIX_TOKEN + TELEGRAM_CHAT_ID for the 07:00 handover
+```
+
+The box loop (`matrix/box-loop.mjs`) runs the background pass every 5 minutes. At 07:00 Helsinki time it sends the "Since you left" handover to the operator's own Telegram chat through Matrix's channel; this is off unless `MATRIX_TOKEN` and `TELEGRAM_CHAT_ID` are set. Details and the open questions are in [`matrix/README.md`](matrix/README.md). The deploy has only been dry-run; it has not run against a real Matrix account.
+
+Everything is synthetic: no real people, companies, phone numbers or messages. Ring's only external call is the Anthropic API.
+
+---
+
 # The Car Delivery Control Room
 
 This is Bahn's challenge for the Prompt Operations Hackathon, 24 to 25 October
