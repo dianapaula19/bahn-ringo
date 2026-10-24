@@ -92,7 +92,7 @@ export default function Home() {
             <div className="lane-scroll">
               {!overview && !error && <ul className="lane-list" aria-busy="true">{[0, 1, 2].map((index) => <li className="skeleton" key={index} />)}</ul>}
               {overview && cards.length === 0 && <p className="lane-empty">{filtering ? "No matching orders here." : "No orders here."}</p>}
-              {cards.length > 0 && <ul className="lane-list">{cards.map((card) => <li key={card.id}><Card card={card} /></li>)}</ul>}
+              {cards.length > 0 && <LaneList cards={cards} />}
             </div>
           </div>
         })}
@@ -104,6 +104,18 @@ export default function Home() {
       {scroll.right && <button type="button" className="board-step right" aria-label="Later stages" onClick={() => scroll.by(1)}><Icon name="chevron" size={16} /></button>}
     </div>
   </main></AppFrame>
+}
+
+// A lane renders its first 40 cards (the busiest lane holds 24 in the dataset), then pages on request:
+// 1,000 orders as cards are ~26k DOM nodes and two seconds of rendering for lanes nobody scrolls to the end of.
+const LANE_PAGE = 40
+
+function LaneList({ cards }: { cards: Overview["visible"] }) {
+  const [shown, setShown] = useState(LANE_PAGE)
+  return <>
+    <ul className="lane-list">{cards.slice(0, shown).map((card) => <li key={card.id}><Card card={card} /></li>)}</ul>
+    {cards.length > shown && <button type="button" className="show-more" onClick={() => setShown((n) => n + LANE_PAGE)}>Show {Math.min(LANE_PAGE, cards.length - shown)} more of {cards.length - shown}</button>}
+  </>
 }
 
 /** Which sides of the lane strip have more lanes off screen, for the edge fades. */
