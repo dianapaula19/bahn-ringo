@@ -93,7 +93,7 @@ export default function TrustPage() {
           </dl> : <span />}
           <div className="trust-act">
             {!r.locked && r.mode === "ask" && r.promotable && <button type="button" className="btn primary" disabled={busy === r.actionType} onClick={() => change(r, "auto")}>Let Ringo do it</button>}
-            {!r.locked && r.mode === "auto" && <button type="button" className="btn" disabled={busy === r.actionType} onClick={() => change(r, "ask")}>Ask me first</button>}
+            {!r.locked && r.mode === "auto" && <button type="button" className="link-btn" disabled={busy === r.actionType} onClick={() => change(r, "ask")}>Make Ringo ask first</button>}
           </div>
         </li>)}</ul>}
       </section>

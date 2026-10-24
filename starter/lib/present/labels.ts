@@ -137,3 +137,13 @@ export function labelIn(code: string | null | undefined): string {
 export function severityLabel(severity: string | null | undefined): string {
   return label(severity).toLowerCase() || "unknown"
 }
+
+/** Field names in a proposal payload, as an ops person would say them. Unknown keys fall back to "Some key". */
+const FIELDS: Record<string, string> = {
+  address_line1: "Street", address_line2: "Street, more", postal_code: "Postcode", city: "City",
+  access_instruction: "Access instruction", contact_name: "Contact", contact_role: "Contact's role", contact_handle: "Phone or handle",
+  recipient_type: "Recipient", passenger_assignment_id: "Passenger assignment",
+}
+export function fieldLabel(key: string): string {
+  return FIELDS[key] ?? key.replace(/[_.]/g, " ").replace(/^\w/, (c) => c.toUpperCase())
+}
