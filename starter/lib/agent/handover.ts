@@ -5,7 +5,7 @@
 import { gte } from "drizzle-orm"
 import type Anthropic from "@anthropic-ai/sdk"
 import { db } from "@/lib/db"
-import type { Handover, HandoverSentence, SourceRef } from "@/lib/contract"
+import type { Handover, HandoverSentence, RunOutcome, SourceRef, StopDecision } from "@/lib/contract"
 import { humanize } from "@/lib/present/labels"
 import { messages, operationalEvents, orders } from "@/lib/schema"
 import { ringCalls, ringEvents, ringProposals, ringRuns } from "@/lib/ring-schema"
@@ -16,6 +16,8 @@ import { anthropic, BETAS, captureAiGeneration, flushAiObservability, MODEL, new
 type Item = { id: string; table: string; at: string; orderId: string; text: string }
 const iso = (v: Date | string) => new Date(v).toISOString()
 const hhmm = (v: string) => `${v.slice(11, 16)} UTC`
+const STOPPED: Record<RunOutcome, string> = { needs_person: "Ringo needs a person", proposal_ready: "Ringo has a proposal for you", waiting: "Ringo is waiting", done: "Ringo is done", failed: "" }
+const handoverLine = (ref: string, d: StopDecision) => `${ref}: ${STOPPED[d.outcome] ? `${STOPPED[d.outcome]}: ` : ""}${d.headline}`
 
 async function items(since: string): Promise<Item[]> {
   const s = new Date(since)
@@ -34,7 +36,7 @@ async function items(since: string): Promise<Item[]> {
     ...evs.map((e) => ({ id: e.id, table: "operational_events", at: iso(e.recordedAt), orderId: e.orderId, text: `${R(e.orderId)}: ${humanize(e.command)}${e.details.actor_type ? ` by ${e.details.actor_id ?? e.details.actor_type}` : ""}` })),
     ...msgs.filter((m) => m.details.visibility !== "INTERNAL").map((m) => ({ id: m.id, table: "messages", at: iso(m.authoredAt), orderId: m.orderId, text: `${R(m.orderId)}: ${m.authorType} via ${String(m.details.channel ?? "").replace(/_/g, " ")}: "${m.body.slice(0, 220)}"` })),
     ...revs.map((e) => ({ id: e.id, table: "ring_events", at: iso(e.at), orderId: e.orderId, text: `${R(e.orderId)}: ${humanize(e.command)} committed by ${e.actorId} (simulated)` })),
-    ...runs.filter((r) => r.decision).map((r) => ({ id: r.id, table: "ring_runs", at: iso(r.endedAt ?? r.startedAt), orderId: r.orderId, text: `${R(r.orderId)}: Ringo stopped (${(r.decision as { outcome: string }).outcome}): ${(r.decision as { headline: string }).headline}` })),
+    ...runs.filter((r) => r.decision).map((r) => ({ id: r.id, table: "ring_runs", at: iso(r.endedAt ?? r.startedAt), orderId: r.orderId, text: handoverLine(R(r.orderId), r.decision as StopDecision) })),
     ...calls.filter((c) => c.outcome).map((c) => ({ id: c.id, table: "ring_calls", at: iso(c.startedAt), orderId: c.orderId, text: `${R(c.orderId)}: Ringo called ${c.siteId} (simulated), outcome ${String(c.outcome).toLowerCase().replace(/_/g, " ")}` })),
     ...props.filter((p) => p.review && (p.review as { reviewedAt: string }).reviewedAt >= since).map((p) => {
       const r = p.review as { decision: string; reviewerId: string; reviewedAt: string; decisionNote: string | null }

@@ -636,6 +636,7 @@ details.more > :not(summary) { margin-top: 8px; }
 .step-line p { display: flex; align-items: baseline; gap: 8px; line-height: 1.45; }
 .step-line .icon { flex: none; color: var(--green-ink); position: relative; top: 2px; }
 .step-line .tone-warn .icon, .step-line .tone-danger .icon { color: inherit; }
+.run-failed .tech { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .step-line .pending { color: var(--muted); }
 .step-line.kind-you p { color: var(--brown); }
 .step-label { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }

@@ -108,7 +108,8 @@ export async function runRing(input: {
     status = "failed"
     error = e instanceof Anthropic.APIError ? `Model error ${e.status ?? ""}: ${e.message.slice(0, 300)}` : e instanceof Error ? e.message : String(e)
     await emit({ type: "error", message: `Ringo stopped: ${error}`, retryable: e instanceof Anthropic.APIError && (e.status === 429 || (e.status ?? 0) >= 500), at: await simNow() })
-    ctx.stopped = forcedStop("Ringo hit a problem and stopped. A person should look.", ctx.did, "Check the order by hand or run Ringo again.")
+    // outcome "failed" keeps the order's real decision card: a broken run is not a decision for a person.
+    ctx.stopped = { ...forcedStop(e instanceof Anthropic.APIError ? "Ringo couldn't reach its model and stopped." : "Ringo hit a problem and stopped.", ctx.did, "Try again or work it by hand."), outcome: "failed", oneDecision: null }
   }
   const decision = ctx.stopped!
   const endedAt = await simNow()

@@ -88,7 +88,7 @@ export async function buildStory(orderId: string): Promise<OrderStory | null> {
   for (const r of ring.runs) if (r.decision && r.endedAt) timeline.push({ at: r.endedAt, actor: "Ringo", actorKind: "ring", text: r.decision.headline, ref: { table: "ring_runs", id: r.id }, factIds: r.decision.found, channel: null, simulated: false })
   timeline.sort((x, y) => x.at.localeCompare(y.at))
   const eligible = ringEligibility(b)
-  const lastDecision = [...ring.runs].reverse().find((r) => r.decision)?.decision ?? null
+  const lastDecision = [...ring.runs].reverse().find((r) => r.decision && r.decision.outcome !== "failed")?.decision ?? null
   return {
     now, orderId, reference: b.order.reference, triage: t, facts, timeline,
     proposals: [...datasetProposals(b, now), ...ring.proposals], runs: ring.runs, calls: ring.calls, driverMessages: ring.driverMessages,

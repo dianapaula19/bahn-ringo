@@ -106,13 +106,13 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
     {lines.length === 0 && !running && !offline && <p className="empty">{last ? <>Ringo last ran <When at={last.startedAt} now={story.now} />{last.decision ? <>: {last.decision.headline}</> : null}</> : "Ringo has not run on this order yet."}</p>}
     {lines.length === 0 && running && <ul className="steps" aria-busy="true"><li className="step-line pending"><span className="spin" />Starting…</li></ul>}
     {lines.length > 0 && <ul className="steps" aria-live="polite">
-      {lines.map((l, i) => <li key={i} className={`step-line kind-${l.kind}`}><LineView line={l} now={story.now} live={running} /></li>)}
+      {lines.map((l, i) => <li key={i} className={`step-line kind-${l.kind}`}><LineView line={l} now={story.now} live={running} acted={lines.slice(0, i).some((x) => x.kind === "step" || x.kind === "call")} /></li>)}
       <li ref={end} aria-hidden="true" />
     </ul>}
   </section>
 }
 
-function LineView({ line: l, now, live }: { line: Line; now: string; live: boolean }) {
+function LineView({ line: l, now, live, acted }: { line: Line; now: string; live: boolean; acted: boolean }) {
   if (l.kind === "you") return <p className="you"><b>You:</b> {l.text}</p>
   if (l.kind === "text") return <p className={l.tone ? `tone-${l.tone === "muted" ? "neutral" : l.tone}` : undefined}>{l.text}</p>
   if (l.kind === "step") return <p className={l.done ? (l.ok ? "" : "tone-warn") : "pending"}>{l.done ? <Icon name={l.ok ? "check" : "alert"} size={14} /> : <span className="spin" />}{l.done ? l.text : `${l.text}…`}</p>
@@ -125,8 +125,15 @@ function LineView({ line: l, now, live }: { line: Line; now: string; live: boole
     case "proposal": return <p className="tone-accent"><Icon name="proposal" size={14} />Proposal ready for you: {e.proposal.summary}</p>
     case "driver_message": return <p><Simulated>Simulated driver</Simulated> <b>{e.message.direction === "out" ? "Ringo to driver:" : "Driver:"}</b> {e.message.body}</p>
     case "callback_scheduled": return <p><Icon name="waiting" size={14} />Will call back <When at={e.job.dueAt} now={now} />: {e.job.reason}</p>
-    case "stop": return <div className="stop"><p className="stop-head">{e.decision.headline}</p>{e.decision.oneDecision && <p>{e.decision.oneDecision}</p>}</div>
-    case "error": return <p className="tone-danger"><Icon name="alert" size={14} />{e.message}</p>
+    case "stop": return e.decision.outcome === "failed" ? null : <div className="stop"><p className="stop-head">{e.decision.headline}</p>{e.decision.oneDecision && <p>{e.decision.oneDecision}</p>}</div>
+    case "error": {
+      // A failed live run says so once, in plain words; the model's own error text stays folded away.
+      const tech = e.message.startsWith("Ringo stopped: ") ? e.message.slice(15) : null
+      if (!tech) return <p className="tone-danger"><Icon name="alert" size={14} />{e.message}</p>
+      return <div className="run-failed"><p className="tone-danger"><Icon name="alert" size={14} />
+        {tech.startsWith("Model error") ? "Ringo couldn't reach its model." : "Ringo hit a problem and stopped."} {acted ? "What it did before that is listed above." : "Nothing changed."} Try again or work it by hand.</p>
+        <details className="more"><summary><Icon name="chevron" size={12} />Technical details</summary><p className="tech">{tech}</p></details></div>
+    }
     default: return null
   }
 }

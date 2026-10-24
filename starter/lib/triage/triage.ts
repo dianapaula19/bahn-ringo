@@ -135,7 +135,7 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   }
   // 4 DECISION_WAITING
   const pending = ring.proposals.filter((p) => p.status === "PENDING_REVIEW")
-  const lastRun = ring.runs.filter((r) => r.status !== "running").pop()
+  const lastRun = ring.runs.filter((r) => r.status !== "running" && r.decision?.outcome !== "failed").pop()
   if (pending.length || lastRun?.decision?.outcome === "needs_person") return {
     reason: "DECISION_WAITING", severity: "high",
     why: pending.length ? `Ringo has ${pending.length === 1 ? "a proposal" : `${pending.length} proposals`} for you: ${pending[0].summary}` : lastRun!.decision!.headline,
