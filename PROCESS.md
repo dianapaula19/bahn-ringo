@@ -22,6 +22,7 @@ How we worked with coding agents: what we asked for, what we checked, what we th
 | 16:00 | UI | Build Lane UI to the contract: queue home, order story, trust ledger. Stubs until the routes exist. `npm run build` must pass | Queue, story, trust pages; headless-Chrome screenshots against stubs |
 | 16:00 | MATRIX | Learn the real Matrix OS formats from its source. Write manifests, cron entries, a dry-run deploy and README text. Mark every unverified assumption | `matrix/` (manifest, cron, box loop, deploy.sh), assumptions A1 to A10 |
 | 16:40 | integrator | Wire the UI to the real routes, run everything live, review against the judging criteria, fix the top issues, write README and PROCESS, fresh-clone run, commit | This commit series |
+| 17:10 | polish | Judge the queue and pages by Bahn's rubric (only orders that need a person, with just enough to decide; one glance, calm, hundreds of orders). Make every row specific, re-check triage, quieter colours, tab title, screenshot every page at 1440 and 390, test the sibling-STALE fix | §6 below |
 
 ## 3. What we checked
 
@@ -36,7 +37,7 @@ How we worked with coding agents: what we asked for, what we checked, what we th
 - `"database": "postgres"` in a manifest makes a node app fail to spawn (the resolver is never wired), so we dropped it.
 
 **Tests and assertions that guard the behaviour**
-- `npm run ring:check` (node:test, 15 tests): triage on the demo orders, gate rules, speech rules, and the evidence ladder. It exits non-zero on a broken assertion. An earlier `process.exit` workaround hid failures (exit 0 on a broken test); it was replaced by closing the DB pool.
+- `npm run ring:check` (node:test, 19 tests since the polish pass): triage on the demo orders, gate rules, speech rules, and the evidence ladder. It exits non-zero on a broken assertion. An earlier `process.exit` workaround hid failures (exit 0 on a broken test); it was replaced by closing the DB pool.
 - `npm run eval:ring`: Ring live on the five demo orders, with 38 assertions from CONTRACT §8 (read before dialling, no customer contact, never `verified`, 010's second call carries `reconciled`, 023 does not change the address, and so on).
 - Every route was called over HTTP, including the error paths: reject without a note (`NOTE_REQUIRED`), promoting a locked row (`LOCKED`, 409), promoting without five clean approvals (`NOT_PROMOTABLE`, 409), a second run on a busy order (409), unknown order and run (404), and a `STALE` execution after a synthetic newer event.
 
@@ -124,7 +125,31 @@ Every order also asserts: the run finished, read before dial, no customer contac
 
 **Fresh clone** (integrator): `git clone` of the `ring` branch into an empty folder, then the README steps with Compose v1 on other ports (Postgres 5448, RustFS 9019/9020) and no model key. `npm ci`, `db:push`, `db:seed` (100 orders), `attachments:seed` (58 files), `ring:check` 15/15 and `eval:reviewer` 3/10 all ran. The queue, story, trust and board pages served; a live run streamed "Ring is offline: no model key" and Replay streamed the recorded 010 run. The stack and its volumes were removed afterwards.
 
-## 6. Known gaps
+## 6. Polish pass (17:10 to 17:30)
+
+**Triage, re-checked row by row against the messages and work items.** The queue had 19 rows and five said only "A driver asked something and nobody has answered."
+- **Each driver row now quotes the driver** (the whole message when short, else the sentence with the question): 413 "Please tell me who confirms Tuesday's keys and where I should report", 399 "Please check a replacement or ask the customer about another slot", 201 "I paid 12 EUR for parking… please review it".
+- **The driver rule only fires on a message that asks something** (a question mark, "please", "can/could you"). Two rows were false: 419 was the driver's "Understood… I have no cost to submit" on a cancelled collection (now quiet: closed thread, nothing open), and 603 was a position update.
+- **603 did need a person, for a different reason**: an OPEN high ferry-cutoff alert nobody had acknowledged. Checking every open alert found **702 hidden as "quiet"**: "Original customer delivery window ends today… no revised promise is approved" (OPEN, high). Rule 8 now also fires on an OPEN, unacknowledged high alert (not the site-access one, which is Ring's). When the alert summary is the generated "Review … for CD-…", the row quotes the message that raised it.
+- **"Quiet" now means what it says.** 194 (invoice query) and 455 (mark after delivery, customer asked us to wait for a branch photo) had open alerts but counted as quiet. They go to "Waiting on others" as "Being followed up in the conversation", not to Needs you: nobody has to decide anything yet.
+- **Rows say what is wrong, not what to do.** Task rows use the work item's summary ("The booked driver has not confirmed fitness…") instead of "Due already: Obtain a definite driver response and…". The failed-action row names the action and the error: "Attempt to book the next-day quoted vehicle crossing failed at 07:10 UTC: Provider request timed out without a confirmation reference."
+- **"Overdue by 24 h" was often false.** `decideBy` took the earliest of all times, so a car already on the road showed its past pickup slot as overdue (071 said "due within the hour" next to "Overdue by 24 h"). It now uses the open task's due time, and a pickup slot only before pickup.
+
+**The final count is 19, and each is a person's call** (checked against what Ring may do in the trust ledger): safety (322); a failed ferry booking to reconcile (299, booking = locked); seller hold (458); driver on site with no car (593); three drivers waiting on an answer that is a driver instruction, a replacement or a cost (399, 413, 201); a backup-driver decision 22 h overdue (449); no authorised receiver for a car in transit (437); a live offer to withdraw (347); a three-way site handover (689); a ferry cutoff nobody owns (603); a delivery promise that can't be kept (702); and, in the lower group, a recorded proposal to review (055), a missing VIN that needs the customer (009), a missing signed handover (164), two dispatch reviews (941, 992) and rejected pickup photos (071). None of them is something Ring can do by phone; the three it can (516, 010, 023) stay under "Ring is on it". We did not cut rows to hit a number.
+
+**Look and feel** (headless Chrome over the DevTools protocol at 1440 and 390 wide, because plain `--window-size=390` renders at Chrome's ~500 px minimum and hid the real mobile layout):
+- Needs you is split into **Now** (critical and high) and **When you can** (routine), in rank order inside each.
+- Status words are muted; only Ring's teal stays. **Red is only an overdue card that needs a person**; Ring's and waiting rows never go red. Fixed-width status and due columns so the reason text lines up row to row (the `auto` column made every row a different width, and "Overdue by 11 min" spilled out of its 104 px).
+- "What we know" was a ragged mix of one-line pills and boxes; it is now one aligned list (level, claim, then who · record · when), stacked on phones.
+- The trust page showed "Accepted as is 0 · Edited 0 · Rejected 0" on all 14 rows and a made-up "Set 09:22" (the default row's time was `now`). It says "No reviews yet" and "Default setting" until there is something to count.
+- Tab title and metadata: "Ring — Bahn control room"; order tabs end in "· Ring".
+- The empty queue ("Nothing needs you") was checked by answering `/api/agent/queue` with an empty queue in the browser, not by resetting the shared DB.
+
+**Tests.** `ring:check` is 19/19: new tests for the driver quote, the acknowledgement that needs no answer, the unacknowledged high alert, and **recheck before write**: two sibling proposals from one run both execute, while any other newer event still makes the approval `STALE`. With the sibling fix removed, the sibling test fails (checked). The test writes to a quiet order and deletes its own rows. `eval:reviewer` is unchanged at 3/10 leave-one-out.
+
+**Thrown away:** cutting the count by moving routine tasks (164, 941, 992, 071) out of Needs you. A person must still act on them; they sit in "When you can" instead. A third "overdue" group, because the sim clock makes rows drift into it every few minutes.
+
+## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, serving a Next app under `/apps/<slug>/`, and so on) are unverified.
 - The gate's leave-one-out score is low (3/10) for the reason above.
