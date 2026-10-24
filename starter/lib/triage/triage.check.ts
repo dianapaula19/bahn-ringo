@@ -15,10 +15,12 @@ import { triageAll } from "@/lib/agent/story"
 import { emptyRing, type RingOrderState } from "@/lib/agent/store"
 import type { Bundle } from "@/lib/present/bundle"
 import { loadOrder } from "@/lib/present/load"
-import { fmtDateTime, fmtRange } from "@/lib/present/time"
+import { fmtDateTime, fmtRange, fmtWindow } from "@/lib/present/time"
 import { ringEvents, ringProposals } from "@/lib/ring-schema"
 import { inNow, nextAction, unanswered } from "./next-action"
-import { activeClaim, type Claim } from "./claim"
+import { activeClaim, needsYouSplit, type Claim } from "./claim"
+import { readFileSync } from "node:fs"
+import { buildQueue } from "@/lib/agent/story"
 import { orderFacts, rankFacts } from "./facts"
 import { similarGroups } from "./similar"
 import { ringEligibility, triage } from "./triage"
@@ -93,6 +95,9 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     const fresh = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Helsinki", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
     for (let i = 0; i < 2; i++) {
       assert.equal(fmtRange("2026-10-26T07:00:00Z", "2026-10-26T10:00:00Z", "Europe/Helsinki"), "26 Oct 09:00–12:00 EET")
+      // one zone story: desk time first; a German slot adds its own clock, labelled (round 4)
+      assert.equal(fmtWindow("2026-10-23T08:00:00Z", "2026-10-23T10:00:00Z", "Europe/Berlin"), "23 Oct 11:00–13:00 EEST (10:00–12:00 CEST, site time)")
+      assert.equal(fmtWindow("2026-10-26T07:00:00Z", "2026-10-26T10:00:00Z", "Europe/Helsinki"), "26 Oct 09:00–12:00 EET")
       assert.equal(fmtDateTime("2026-10-21T08:24:00Z", "Not/AZone"), "21 Oct 08:24 UTC")
     }
     assert.equal(fmtDateTime("2026-10-21T08:24:00Z", "Europe/Helsinki", false), fresh.format(new Date("2026-10-21T08:24:00Z")).replace(",", ""))
@@ -165,6 +170,25 @@ describe("I'll handle it: a claim holds until its recheck time, a hand-back, or 
     assert.equal(activeClaim([c], "2026-10-21T08:58:00.000Z", "2026-10-21T09:44:00.000Z"), null) // recheck time reached: back to the queue
     assert.equal(activeClaim([c], "2026-10-21T09:30:00.000Z", "2026-10-21T09:31:00.000Z"), null) // a new event after the claim
     assert.equal(activeClaim([{ ...c, releasedAt: "2026-10-21T09:20:00.000Z" }], null, "2026-10-21T09:21:00.000Z"), null) // handed back
+  })
+})
+
+describe("one count: Needs you means open rows nobody has taken, on every screen", () => {
+  test("the split partitions Needs you; taken rows are never in the headline or the Decide pass", async () => {
+    const q = await buildQueue()
+    const rows: (typeof q.needsYou[number] & { claim?: Claim | null })[] = q.needsYou.map((x, i) => ({ ...x, claim: i === 1 ? { id: "c", orderId: x.orderId, by: "ops-readiness", note: null, at: q.now, recheckAt: q.now, releasedAt: null } : null }))
+    const s = needsYouSplit(rows, q.now)
+    assert.equal(s.open.length + s.taken.length, rows.length)
+    assert.equal(s.taken.length, rows.length > 1 ? 1 : 0)
+    assert.ok(s.open.every((x) => !x.claim))
+    assert.deepEqual(s.open, [...s.urgent, ...s.later]) // Decide walks Now first, then the rest
+  })
+  test("queue header, shift report, Start deciding, Decide and the board toggle all count with needsYouSplit", () => {
+    for (const f of ["app/page.tsx", "app/decide/page.tsx", "app/board/page.tsx"]) {
+      const src = readFileSync(f, "utf8")
+      assert.ok(src.includes("needsYouSplit"), `${f} counts Needs you without needsYouSplit`)
+      assert.ok(!src.replace("queue.total - queue.needsYou.length", "").includes("needsYou.length"), `${f} shows needsYou.length (taken rows included) somewhere`)
+    }
   })
 })
 

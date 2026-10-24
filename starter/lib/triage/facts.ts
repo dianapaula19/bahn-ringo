@@ -5,7 +5,7 @@ import { effectiveLevel } from "@/lib/agent/facts"
 import type { RingOrderState } from "@/lib/agent/store"
 import { rows, str, type Bundle } from "@/lib/present/bundle"
 import { humanize, label, labelIn } from "@/lib/present/labels"
-import { fmtRange } from "@/lib/present/time"
+import { fmtWindow } from "@/lib/present/time"
 
 const STATED_BY: Record<string, string> = {
   MANAGED_SITE_PROFILE: "Site profile", SITE_CONTACT: "Site contact", CUSTOMER_ORDER_INPUT: "Customer order input",
@@ -53,7 +53,7 @@ export function datasetFacts(bundle: Bundle, now?: string): Fact[] {
     // A window that has ended is history, not a reservation: the pickup is done, or the slot went by.
     const past = !!now && str(d.end_at) && Date.parse(String(d.end_at)) < Date.parse(now)
     const gone = subject === "pickup.slot" ? (PRE_PICKUP.includes(bundle.order.status) ? "Slot has passed" : "Pickup done") : "Window has passed"
-    add(w.id, subject, `${what}: ${fmtRange(str(d.start_at), str(d.end_at), str(d.timezone))}.`, past ? "stale" : "reserved", "time_window", iso(d.stated_at) ?? iso(bundle.order.createdAt), d.source === "CUSTOMER" ? "Customer" : "Operations", past ? gone : null)
+    add(w.id, subject, `${what}: ${fmtWindow(str(d.start_at), str(d.end_at), str(d.timezone), subject === "pickup.slot" ? "site time" : "local time at delivery")}.`, past ? "stale" : "reserved", "time_window", iso(d.stated_at) ?? iso(bundle.order.createdAt), d.source === "CUSTOMER" ? "Customer" : "Operations", past ? gone : null)
   }
   for (const a of rows(bundle, "work_assignments")) {
     const d = a.details
@@ -77,9 +77,20 @@ export function datasetFacts(bundle: Bundle, now?: string): Fact[] {
   }
   for (const al of bundle.alerts) {
     if (al.status === "RESOLVED" || al.status === "DISMISSED") continue
-    add(al.id, `alert.${al.signal.toLowerCase()}`, al.summary, "claimed", "alert", al.triggeredAt, "Monitoring", alertNote(al.severity, al.status, str(al.details.owner)))
+    const level = alertLevel(al.summary)
+    add(al.id, `alert.${al.signal.toLowerCase()}`, al.summary, level, "alert", al.triggeredAt, "Monitoring", `${level === "quoted" ? "Relays what the site said · " : ""}${alertNote(al.severity, al.status, str(al.details.owner))}`)
   }
   return out
+}
+
+/** An alert is Monitoring's reading of other records, so it carries the level of what it relays (CLAUDE.md rule 4):
+ *  the site's own word is quoted, a missing driver-app position is an observation, and anything else (a driver's or
+ *  customer's report, a "review this" flag) stays claimed. ponytail: reads the summary's wording; a signal → source
+ *  table if the dataset's summaries change shape. */
+export function alertLevel(summary: string): EvidenceLevel {
+  if (/^site\b/i.test(summary)) return "quoted"
+  if (/^no recent driver-app position/i.test(summary)) return "observed"
+  return "claimed"
 }
 
 /** "Critical alert, acknowledged by Shift lead" rather than "critical acknowledged". */
@@ -100,7 +111,16 @@ export function orderFacts(bundle: Bundle, ring: RingOrderState, now: string): F
     if (s) return { ...f, level: s.level, supersededByFactId: s.factId }
     return f.sourceKind === "alert" && settled.has(f.sourceId) ? { ...f, level: "stale" as const, note: "Answered by the approved change" } : f
   })
-  return [...ds, ...ring.facts].map((f) => ({ ...f, level: effectiveLevel(f, now) }))
+  // A site-access alert asks for a call ("stock-control callback pending"). Once Ringo's call to the site has quoted
+  // a pickup fact after the alert was raised, the alert's story is overtaken: it folds into "no longer true", linked.
+  const answer = (f: Fact) => /^alert\.site_access/.test(f.subject) && !f.supersededByFactId
+    ? ring.facts.filter((r) => r.sourceKind === "ring_call" && r.level === "quoted" && !r.supersededByFactId && /^pickup\./.test(r.subject) && r.at > f.at).sort((x, y) => y.at.localeCompare(x.at))[0]
+    : undefined
+  const overtaken = ds.map((f) => {
+    const by = answer(f)
+    return by ? { ...f, level: "stale" as const, supersededByFactId: by.id, note: "Overtaken by Ringo's call to the site" } : f
+  })
+  return [...overtaken, ...ring.facts].map((f) => ({ ...f, level: effectiveLevel(f, now) }))
 }
 
 /** "What we know" in decision order: facts behind the card's reason first, then open alerts, then facts for the
