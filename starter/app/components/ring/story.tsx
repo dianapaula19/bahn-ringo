@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import Link from "next/link"
+import { useEffect, useState, type ReactNode } from "react"
 import posthog from "posthog-js"
 import type { CallRecord, Fact, OrderStory, Proposal, ReviewDecision, ReviewResponse, StoryEntry } from "@/lib/contract"
 import { DESK, reviewProposal } from "../../_lib/agent-api"
@@ -28,23 +29,99 @@ function Payload({ payload }: { payload: Record<string, unknown> }) {
 
 // ---------------------------------------------------------------- the one decision
 
-export function DecisionPanel({ story, onChanged }: { story: OrderStory; onChanged: () => void }) {
+/** What the hero needs from the order record: who to reach, and the open tasks with their next action. */
+export type HeroContext = {
+  customer: { id: string; name: string } | null
+  driver: { id: string; name: string } | null
+  tasks: { id: string; nextAction: string | null; dueAt: string | null }[]
+}
+
+type Next = { text: string; context?: ReactNode; source?: ReactNode }
+
+const sentences = (t: string) => t.match(/[^.!?]+[.!?]+(\s|$)/g)?.map((x) => x.trim()) ?? [t]
+const blocked = (p: Proposal) => !!p.gate?.findings.some((f) => f.effect === "block")
+
+/** One "Next:" line, built only from rows the story already carries; null when nothing concrete is known. */
+function nextStep(story: OrderStory, ctx: HeroContext | null, ringPending: boolean): Next | null {
   const { triage, decision } = story
-  const pending = story.proposals.filter((p) => p.status === "PENDING_REVIEW")
-  const ask = decision?.oneDecision ?? triage.oneDecision
+  const lastRun = [...story.runs].sort((x, y) => y.startedAt.localeCompare(x.startedAt))[0]
+  const byRingo = lastRun && decision ? <>Ringo, <When at={lastRun.startedAt} now={story.now} /></> : null
+  if (ringPending) return { text: "Accept, edit or reject Ringo's proposal." }
+  if (triage.bucket === "ring") return triage.reason === "RING_WORKING" ? { text: "Nothing yet. Ringo is on it." } : { text: "Run Ringo. He calls the site and brings back one decision." }
+  const one = decision?.oneDecision ?? triage.oneDecision
+  if (one) {
+    const s = sentences(one)
+    const context = s.length > 1 ? s.slice(0, -1).join(" ") : decision?.whatNext ? <>Meanwhile: {decision.whatNext}</> : undefined
+    return { text: s[s.length - 1], context, source: byRingo }
+  }
+  if (decision?.whatNext && triage.bucket === "needs_you") return { text: decision.whatNext, source: byRingo }
+  const task = ctx?.tasks.find((t) => triage.sources.some((s) => s.id === t.id) && t.nextAction) ?? (triage.bucket === "needs_you" ? ctx?.tasks.find((t) => t.nextAction) : undefined)
+  if (task?.nextAction) return { text: sentences(task.nextAction)[0], source: <>Open task{task.dueAt && <>, due <When at={task.dueAt} now={story.now} /></>}</> }
+  const recorded = story.proposals.find((p) => p.origin === "dataset" && p.status === "PENDING_REVIEW" && !blocked(p))
+  if (recorded) return { text: recorded.summary, source: <>Recorded proposal, <When at={recorded.createdAt} now={story.now} />. Do it by hand; it can&apos;t be accepted here.</> }
+  switch (triage.reason) {
+    case "SAFETY": return { text: "Check on the driver." }
+    case "FAILED_ACTION": return { text: "Find out what really happened before anyone retries." }
+    case "AUTHORITY_BLOCKED": return { text: "Only the customer can clear this. Decide whether and how to contact them." }
+    case "DRIVER_WAITING": return { text: story.ringEligible ? "Answer the driver. Ringo can check with the site first." : "Answer the driver." }
+    case "CUSTOMER_CONTACT": return { text: "Contact the customer. Ringo never does." }
+    default: return null
+  }
+}
+
+/** Starts the run in Ringo's panel below (page wraps it in #ringo), so there is one Run button, not two. */
+function runRingo() {
+  const b = document.querySelector<HTMLButtonElement>("#ringo .ring-controls .btn.primary")
+  const panel = document.getElementById("ringo")
+  ;(b ?? panel)?.scrollIntoView({ block: "center", behavior: "smooth" })
+  if (b && !b.disabled) b.click()
+}
+
+const RunButton = ({ primary }: { primary: boolean }) =>
+  <button type="button" className={`btn${primary ? " primary" : ""}`} onClick={runRingo}><Icon name="bot" size={15} /> Run Ringo</button>
+
+export function DecisionPanel({ story, ctx, onChanged }: { story: OrderStory; ctx: HeroContext | null; onChanged: () => void }) {
+  const { triage, decision } = story
+  const ringPending = story.proposals.filter((p) => p.origin === "ring" && p.status === "PENDING_REVIEW")
+  const earlier = story.proposals.filter((p) => p.origin === "dataset" && p.status === "PENDING_REVIEW")
+  const next = nextStep(story, ctx, ringPending.length > 0)
+  const live = story.runs.some((r) => r.status === "running")
+  // Once Ringo has stopped with a decision, running him again is not the next step; his panel still offers it.
+  const canRun = story.ringEligible && !ringPending.length && !live && (triage.bucket === "ring" || (triage.bucket === "needs_you" && !decision))
   const tone = triage.bucket === "needs_you" ? (triage.severity === "critical" ? "danger" : "warn") : triage.bucket === "ring" ? "accent" : "ok"
+  const recorded = triage.reason === "RECORDED_PROPOSAL" ? earlier.find((p) => !blocked(p)) : undefined
+  const problem = decision?.outcome === "needs_person" ? decision.headline : recorded?.rationale || triage.why
+  const msg = triage.sources.find((s) => s.table === "messages" && story.timeline.some((e) => e.ref.id === s.id))
+  const say = next?.text ?? ""
+  const links = [
+    ctx?.driver && /\b(answer|ask|tell|call|message)\b[^.]*\bdriver\b/i.test(say) && { href: `/drivers/${ctx.driver.id}`, label: ctx.driver.name, role: "Driver" },
+    ctx?.customer && /\b(contact|ask|tell|call|decide with|confirm with)\b[^.]*\bcustomer\b/i.test(say) && { href: `/customers/${ctx.customer.id}`, label: ctx.customer.name, role: "Customer" },
+    msg && { href: `#src-${msg.id}`, label: "Read the message", role: "" },
+  ].filter((l): l is { href: string; label: string; role: string } => !!l)
+
   return <section className={`decision d-${tone}`} aria-labelledby="decision-h">
-    <p className="decision-label" id="decision-h">{ask ? "The decision" : triage.bucket === "needs_you" ? "Why this needs you" : "Where this stands"}</p>
-    <p className="decision-text">{ask ?? triage.why}</p>
-    {ask && <p className="decision-why">{decision?.headline ?? triage.why}</p>}
-    {!story.ringEligible && story.ringIneligibleReason && <p className="decision-note"><Icon name="note" size={14} /> Not a Ringo order. {story.ringIneligibleReason}</p>}
-    {triage.overtaken.length > 0 && <ul className="overtaken">{triage.overtaken.map((o) => <li key={o.ref.id}><s>{o.label}</s> overtaken by a later signal at <When at={o.overtakenAt} now={story.now} /></li>)}</ul>}
-    {decision && (decision.did.length > 0 || decision.whatNext) && <div className="decision-did">
-      {decision.did.length > 0 && <><p className="sub">What Ringo did</p><ul>{decision.did.map((d, i) => <li key={i}>{d}</li>)}</ul></>}
-      {decision.whatNext && <p className="decision-next"><b>Next:</b> {decision.whatNext}</p>}
+    <h2 className="sr-only" id="decision-h">{triage.bucket === "needs_you" ? "Why this needs you" : "Where this stands"}</h2>
+    <p className="decision-text">{problem}</p>
+    {next ? <div className="decision-next">
+      <p><b>Next:</b> {next.text}</p>
+      {next.context && <p className="decision-context">{next.context}</p>}
+      {next.source && <p className="decision-src">{next.source}</p>}
+    </div> : triage.bucket !== "needs_you" && <p className="decision-next">Nothing waits on you.</p>}
+    {(canRun || links.length > 0) && <div className="actions decision-actions">
+      {canRun && triage.bucket === "ring" && <RunButton primary />}
+      {links.map((l, i) => {
+        const cls = `btn${i === 0 && triage.bucket !== "ring" ? " primary" : ""}`
+        return l.href.startsWith("#") ? <a key={l.href} className={cls} href={l.href}>{l.label}</a>
+          : <Link key={l.href} className={cls} href={l.href}><span className="btn-role">{l.role}</span>{l.label}<Icon name="arrow" size={13} /></Link>
+      })}
+      {canRun && triage.bucket !== "ring" && <RunButton primary={!links.length} />}
     </div>}
-    {pending.map((p) => <ProposalCard key={p.id} proposal={p} story={story} onChanged={onChanged} />)}
-    {!ask && pending.length === 0 && triage.bucket !== "needs_you" && <p className="decision-next">No decision is waiting on you.</p>}
+    {ringPending.map((p) => <ProposalCard key={p.id} proposal={p} story={story} onChanged={onChanged} />)}
+    {triage.overtaken.length > 0 && <ul className="overtaken">{triage.overtaken.map((o) => <li key={o.ref.id}><s>{o.label}</s> overtaken by a later signal at <When at={o.overtakenAt} now={story.now} /></li>)}</ul>}
+    {(earlier.length > 0 || (decision?.did.length ?? 0) > 0) && <div className="decision-more">
+      {decision && decision.did.length > 0 && <details className="more"><summary><Icon name="chevron" size={12} />What Ringo did</summary><ul className="decision-did">{decision.did.map((d, i) => <li key={i}>{d}</li>)}</ul></details>}
+      {earlier.map((p) => <details key={p.id} className="more"><summary><Icon name="chevron" size={12} />Earlier proposal ({blocked(p) ? "blocked by reviewer check" : "recorded, read-only"})</summary><ProposalCard proposal={p} story={story} onChanged={onChanged} /></details>)}
+    </div>}
   </section>
 }
 
@@ -103,7 +180,7 @@ export function ProposalCard({ proposal: p, story, onChanged }: { proposal: Prop
       <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
     </label>}
 
-    {readOnly ? <p className="proposal-foot">Recorded before Ringo. Shown for context with the reviewer check's opinion; it cannot be reviewed here.</p>
+    {readOnly ? <p className="proposal-foot">Recorded before Ringo. Shown for context; it can&apos;t be reviewed here.</p>
       : <div className="actions">
         {mode === "idle" && <>
           <button type="button" className="btn primary" disabled={busy || blocks.length > 0} onClick={() => send("APPROVED")}>Accept</button>
