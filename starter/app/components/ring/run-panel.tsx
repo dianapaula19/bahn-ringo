@@ -95,12 +95,12 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
   const busyElsewhere = !running && last?.status === "running" && Date.parse(story.now) - Date.parse(last.startedAt) < 10 * 60_000
 
   if (!story.ringEligible) return <section className="ring-panel" aria-labelledby="ring-h">
-    <div className="sec-head"><RingoFace size={26} /><h2 id="ring-h">Ringo</h2></div>
+    <div className="sec-head"><RingoFace size={56} /><h2 id="ring-h">Ringo</h2></div>
     <p className="empty">{story.ringIneligibleReason ?? "Ringo does not work this kind of order."} Ringo will not call or message anyone here.</p>
   </section>
 
   return <section className="ring-panel" aria-labelledby="ring-h">
-    <div className="sec-head"><RingoFace size={26} /><h2 id="ring-h">Ringo</h2>
+    <div className="sec-head"><RingoFace size={56} /><h2 id="ring-h">Ringo</h2>
       <span className="note">Ringo reads first, then rings the pickup site or asks the driver. It never contacts the customer.</span></div>
     <div className="ring-controls">
       <button type="button" className="btn primary" disabled={running || busyElsewhere} onClick={() => start("operator")}><Icon name="bot" size={15} /> {running && replaying ? "Replaying…" : running || busyElsewhere ? "Ringo is working…" : "Run Ringo"}</button>

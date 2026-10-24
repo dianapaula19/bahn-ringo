@@ -92,13 +92,14 @@ ul, ol { padding: 0; list-style: none; }
 .app { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); min-height: 100dvh; }
 .app-board { height: 100dvh; overflow: hidden; }
 .sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; gap: 26px; padding: 20px 14px 18px; border-right: 1px solid var(--hair); background: var(--birch); }
-.wordmark { display: flex; align-items: center; gap: 9px; padding: 0 10px; font-family: var(--font-display); font-weight: 600; font-size: 16px; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); white-space: nowrap; }
+.wordmark { display: flex; align-items: center; gap: 9px; padding: 0 10px; font-family: var(--font-display); font-weight: 600; font-size: 19px; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); white-space: nowrap; }
 /* The lizard cast (public/ringo.svg, lizard-*.svg, all 214x240) cropped to head and collar: the 124x124 square at (44, 14), which stops short of the raised hand. */
 .lizard-face { flex: none; position: relative; display: inline-block; overflow: hidden; border-radius: 50%; background: var(--teal-bg); box-shadow: 0 0 0 1px var(--hair); }
 .lizard-face img { position: absolute; left: -35.5%; top: -11.3%; width: 172.6%; max-width: none; height: auto; }
 .lizard-face.none { background: none; box-shadow: none; }
 .lizard-face.none::after { content: ""; position: absolute; inset: 0; margin: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--sand); }
 .sec-head .lizard-face { align-self: center; }
+.ring-panel > .sec-head { align-items: center; }
 .sidebar-nav { display: grid; gap: 20px; }
 .nav-label { margin: 0 10px 5px; font-size: 11.5px; color: var(--subtle); }
 .nav-link { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; font-weight: 500; color: var(--brown); text-decoration: none; }
@@ -656,9 +657,9 @@ details.more > :not(summary) { margin-top: 8px; }
 
 /* Timeline and calls */
 .tl { display: grid; }
-.tl-item { display: grid; grid-template-columns: 120px 22px minmax(0, 1fr); gap: 0 12px; padding: 12px 0; border-top: 1px solid var(--hair-soft); }
+.tl-item { display: grid; grid-template-columns: 120px 30px minmax(0, 1fr); gap: 0 12px; padding: 12px 0; border-top: 1px solid var(--hair-soft); }
 .tl-item:first-child { border-top: 0; }
-.tl-item > .lizard-face { margin-top: -1px; }
+.tl-item > .lizard-face { margin-top: -5px; }
 .tl-time { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 2px; }
 .tl-who { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; color: var(--muted); }
 .tl-who b { font-size: 13.5px; font-weight: 600; color: var(--ink); }
@@ -698,7 +699,7 @@ details.more > :not(summary) { margin-top: 8px; }
   .q-why { grid-column: 2 / -1; }
   .q-status { grid-column: 2 / -1; }
   .q-due { grid-column: 3; grid-row: 1; }
-  .tl-item { grid-template-columns: 22px minmax(0, 1fr); gap: 2px 10px; }
+  .tl-item { grid-template-columns: 30px minmax(0, 1fr); gap: 2px 10px; }
   .tl-time { grid-column: 2; }
   .turn { grid-template-columns: 1fr; gap: 0; }
   .payload > div { grid-template-columns: 1fr; gap: 0; }
