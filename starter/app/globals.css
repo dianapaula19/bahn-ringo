@@ -91,13 +91,18 @@ ul, ol { padding: 0; list-style: none; }
 /* ── Shell ─────────────────────────────────────────────────────────────── */
 .app { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); min-height: 100dvh; }
 .app-board { height: 100dvh; overflow: hidden; }
-.sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; gap: 26px; padding: 20px 14px 18px; border-right: 1px solid var(--hair); background: var(--birch); }
+.sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; gap: 26px; padding: 20px 14px 18px; background: var(--birch); }
 .wordmark { display: flex; align-items: center; gap: 9px; padding: 0 10px; font-family: var(--font-display); font-weight: 600; font-size: 19px; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); white-space: nowrap; }
-/* The lizard cast (public/ringo.svg, lizard-*.svg, all 214x240) cropped to head and collar: the 124x124 square at (44, 14), which stops short of the raised hand. */
-.lizard-face { flex: none; position: relative; display: inline-block; overflow: hidden; border-radius: 50%; background: var(--teal-bg); box-shadow: 0 0 0 1px var(--hair); }
-.lizard-face img { position: absolute; left: -35.5%; top: -11.3%; width: 172.6%; max-width: none; height: auto; }
-.lizard-face.none { background: none; box-shadow: none; }
-.lizard-face.none::after { content: ""; position: absolute; inset: 0; margin: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--sand); }
+/* The lizard cast (public/ringo.svg, lizard-*.svg, all 214x240): the head only, the 104x104 square at (58, 8),
+   centred on the face and clear of the raised hand. A 2px ring in the role's colour; Bahn people get a monogram. */
+.lizard-face { --ring: var(--sand); flex: none; position: relative; display: inline-grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--teal-bg); vertical-align: middle; }
+.lizard-face::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--ring); }
+.lizard-face img { position: absolute; left: -55.77%; top: -7.69%; width: 205.77%; max-width: none; height: auto; }
+.lizard-face.w-ringo { --ring: #2b8f9c; }
+.lizard-face.w-dealer { --ring: #c08a2a; background: #fbf3df; }
+.lizard-face.w-customer { --ring: #26385c; background: #eef1f6; }
+.lizard-face.w-driver { --ring: #b5482a; background: #fbefe9; }
+.lizard-face.mono-face { --ring: var(--hair); background: var(--canvas); color: var(--subtle); font-weight: 600; letter-spacing: 0.02em; line-height: 1; }
 .sec-head .lizard-face { align-self: center; }
 .ring-panel > .sec-head { align-items: center; }
 .sidebar-nav { display: grid; gap: 20px; }
@@ -108,7 +113,7 @@ ul, ol { padding: 0; list-style: none; }
 .nav-link.active { background: var(--hair-soft); color: var(--ink); }
 .nav-link.active .icon { color: var(--ink); }
 .sidebar-foot { margin-top: auto; padding: 0 10px; font-size: 12px; line-height: 1.5; color: var(--subtle); }
-.main { min-width: 0; display: flex; flex-direction: column; }
+.main { min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--hair); } /* on .main, not the sticky sidebar, so the line runs the full page height */
 .main:focus { outline: none; }
 .app-board .main { height: 100dvh; min-height: 0; }
 
@@ -431,9 +436,10 @@ details.more > :not(summary) { margin-top: 8px; }
   html { scroll-padding-top: 64px; } /* keeps scrolled-to buttons out from under the sticky top bar */
   .app { display: block; }
   .app-board { height: auto; overflow: visible; }
-  .sidebar { position: sticky; top: 0; z-index: 3; height: auto; flex-direction: row; align-items: center; gap: 14px; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--hair); overflow-x: auto; scrollbar-width: none;
-    mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); } /* the fade says the bar scrolls */
-  .sidebar::after { content: ""; flex: none; width: 24px; }
+  .sidebar { position: sticky; top: 0; z-index: 3; height: auto; flex-direction: row; align-items: center; gap: 14px; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--hair); overflow-x: auto; scrollbar-width: none; }
+  /* A fade and a chevron pinned to the right edge say the bar scrolls sideways. */
+  .sidebar::after { content: "›"; position: sticky; right: -12px; flex: none; align-self: stretch; display: flex; align-items: center; justify-content: flex-end; width: 44px; margin: -8px -12px -8px -30px; padding-right: 10px; background: linear-gradient(to right, transparent, var(--birch) 60%); font-size: 22px; line-height: 1; color: var(--muted); pointer-events: none; }
+  .main { border-left: 0; }
   .wordmark { padding: 0 4px; }
   .sidebar-nav { display: flex; gap: 2px; }
   .nav-group { display: flex; gap: 2px; }
@@ -616,7 +622,7 @@ details.more > :not(summary) { margin-top: 8px; }
 .fact-chip .chip { grid-row: span 2; justify-self: start; }
 .fact-claim { color: var(--ink); }
 .fact-src { font-size: 12.5px; color: var(--muted); }
-.fact-src .lizard-face { vertical-align: middle; margin: -3px 6px -2px 0; }
+.fact-src .lizard-face { margin: -4px 7px -3px 0; }
 .fact-src a { color: inherit; text-decoration: underline; text-decoration-color: var(--sand); text-underline-offset: 2px; }
 .tl-item:target { background: var(--tray); box-shadow: 0 0 0 1px var(--hair); border-radius: var(--radius); }
 .fact-chip.old .fact-claim { text-decoration: line-through; text-decoration-color: var(--sand); color: var(--muted); }
@@ -688,9 +694,9 @@ details.more > :not(summary) { margin-top: 8px; }
 
 /* Timeline and calls */
 .tl { display: grid; }
-.tl-item { display: grid; grid-template-columns: 120px 30px minmax(0, 1fr); gap: 0 12px; padding: 12px 0; border-top: 1px solid var(--hair-soft); }
+.tl-item { display: grid; grid-template-columns: 120px 28px minmax(0, 1fr); gap: 0 12px; padding: 12px 0; border-top: 1px solid var(--hair-soft); }
 .tl-item:first-child { border-top: 0; }
-.tl-item > .lizard-face { margin-top: -5px; }
+.tl-item > .lizard-face { margin-top: -4px; }
 .tl-time { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 2px; }
 .tl-who { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; color: var(--muted); }
 .tl-who b { font-size: 13.5px; font-weight: 600; color: var(--ink); }
@@ -722,18 +728,18 @@ details.more > :not(summary) { margin-top: 8px; }
 .trust-counts { display: flex; gap: 18px; }
 .trust-counts dt { font-size: 12px; color: var(--muted); }
 .trust-counts dd { font-size: 16px; font-weight: 500; }
-.trust-none { font-size: 12.5px; color: var(--subtle); white-space: nowrap; }
 .trust-act { display: flex; justify-content: flex-end; }
 
 @media (max-width: 900px) {
   .q-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main main" "next due"; gap: 8px 12px; padding: 12px 14px 12px 12px; }
   .q-row > span[aria-hidden] { grid-area: next; }
-  .tl-item { grid-template-columns: 30px minmax(0, 1fr); gap: 2px 10px; }
+  .tl-item { grid-template-columns: 28px minmax(0, 1fr); gap: 2px 10px; }
   .tl-time { grid-column: 2; }
   .turn { grid-template-columns: 1fr; gap: 0; }
   .payload > div { grid-template-columns: 1fr; gap: 0; }
   .trust-row { grid-template-columns: 1fr; gap: 10px; }
   .trust-act { justify-content: flex-start; }
+  .trust-row > span:empty, .trust-act:empty { display: none; }
   .decision { padding: 18px 16px; }
 }
 @media (max-width: 480px) {
@@ -802,3 +808,42 @@ details.more > :not(summary) { margin-top: 8px; }
   .map-layout { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .map-panel { position: static; max-height: none; }
 }
+
+/* ── Ringo in moments: standing back, ringing, thumbs-up ────────────────── */
+.ring-aside { display: flex; align-items: center; gap: 10px; margin-top: 28px; font-size: 13.5px; color: var(--muted); }
+.ring-aside b { font-weight: 600; color: var(--brown); }
+.ringo-ringing, .ringo-done { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 14px; color: var(--teal-ink); }
+.ring-pulse { position: relative; display: inline-flex; border-radius: 50%; }
+.ring-pulse::before { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 0 var(--teal); animation: ringo-ring 1.6s ease-out infinite; }
+@keyframes ringo-ring { 0% { box-shadow: 0 0 0 0 rgba(67, 175, 193, 0.55); } 100% { box-shadow: 0 0 0 10px rgba(67, 175, 193, 0); } }
+/* Ringo's head and raised thumb: the 160x116 box at (36, 6) of the 214x240 drawing (top % is of the height). */
+.ringo-thumb { flex: none; position: relative; width: 80px; height: 58px; overflow: hidden; }
+.ringo-thumb img { position: absolute; left: -22.5%; top: -5.17%; width: 133.75%; max-width: none; height: auto; }
+.ringo-done { color: var(--green-ink); font-weight: 500; }
+.ringo-done .ringo-thumb { animation: ringo-pop 0.45s cubic-bezier(.3, 1.5, .6, 1) both; transform-origin: 50% 100%; }
+@keyframes ringo-pop { from { transform: scale(0.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ringo-done .ringo-thumb { animation: none; } .ring-pulse::before { animation: none; box-shadow: 0 0 0 3px rgba(67, 175, 193, 0.35); } }
+
+/* 404: the dealer with his SOLD tag */
+.gone { display: flex; align-items: center; gap: 32px; max-width: 680px; margin: 12vh auto 0; }
+.gone img { flex: none; }
+.gone h1 { font-family: var(--font-display); font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+.gone p { margin: 8px 0 20px; color: var(--muted); }
+@media (max-width: 480px) { .gone { flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 24px; } .gone img { width: 120px; height: auto; } }
+.gone .btn { text-decoration: none; }
+
+/* Trust: Ringo by the intro, the crew at the bottom */
+.trust-intro { display: flex; align-items: center; gap: 20px; }
+.trust-intro .page-title { margin-top: 0; }
+.trust-intro .intro { margin-top: 6px; }
+.cast-lineup { display: flex; flex-wrap: wrap; gap: 12px 28px; margin-top: 14px; }
+.cast-lineup li { display: flex; align-items: center; gap: 10px; }
+.cast-lineup span { display: grid; font-size: 13px; color: var(--muted); }
+.cast-lineup b { font-size: 14px; font-weight: 600; color: var(--ink); }
+@media (max-width: 480px) { .trust-intro { align-items: flex-start; gap: 14px; margin-top: 14px; } .cast-lineup { display: grid; grid-template-columns: 1fr 1fr; } }
+.foot-link { color: inherit; text-decoration: underline; text-decoration-color: var(--sand); text-underline-offset: 2px; }
+
+/* Map with ?city=: everything else steps back to 30%, the chosen city gets a halo and a bold label. */
+.map-svg.has-selected .map-city:not(.is-selected), .map-svg.has-selected .map-road, .map-svg.has-selected > g > circle:not(.selected) { opacity: 0.3; }
+.map-halo { fill: var(--birch); fill-opacity: 0.6; stroke: var(--ink); }
+.map-label.selected { fill: var(--ink); font-weight: 700; }

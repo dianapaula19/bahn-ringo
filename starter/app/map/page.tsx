@@ -92,7 +92,7 @@ export default async function MapPage({ searchParams }: Props) {
     <p className="intro">Where our places are, which cities have an order that needs you, and where cars are on the road.</p>
     <div className="map-layout">
       <figure className="map-figure">
-        <svg className="map-svg" viewBox={`${VIEW.x} ${VIEW.y} ${VIEW.w} ${VIEW.h}`} aria-label="Places map">
+        <svg className={`map-svg${selected ? " has-selected" : ""}`} viewBox={`${VIEW.x} ${VIEW.y} ${VIEW.w} ${VIEW.h}`} aria-label="Places map">
           <g role="img" aria-label={summary}>
             <Countries filter={null} withPlaces={m.countries} stroke={0.8} />
             {m.road.map(([a, b], i) => <path key={i} className="map-road" d={arc(a, b)} strokeWidth={1.3} />)}
@@ -101,7 +101,7 @@ export default async function MapPage({ searchParams }: Props) {
             <path className="map-leader" d={`M${INSET.view.x + INSET.view.w - 2} ${INSET.view.y + INSET.view.h / 2} L${INSET.x} ${INSET.y + INSET.h / 2}`} />
           </g>
           <HitLayer cities={m.cities.filter((c) => !CAPITAL.has(c.name))} scale={1} />
-          {m.cities.filter((c) => !CAPITAL.has(c.name)).map((c) => <City key={c.name} c={c} scale={1} selected={c === selected} />)}
+          {m.cities.filter((c) => !CAPITAL.has(c.name)).sort((a, b) => Number(a === selected) - Number(b === selected)).map((c) => <City key={c.name} c={c} scale={1} selected={c === selected} />)}
           <svg x={INSET.x} y={INSET.y} width={INSET.w} height={INSET.h} viewBox={`${INSET.view.x} ${INSET.view.y} ${INSET.view.w} ${INSET.view.h}`}>
             <rect className="map-sea" x={INSET.view.x} y={INSET.view.y} width={INSET.view.w} height={INSET.view.h} />
             <Countries filter={INSET_COUNTRIES} withPlaces={m.countries} stroke={0.8 / ZOOM} />
@@ -174,6 +174,7 @@ function Dot({ c, scale, selected }: { c: City; scale: number; selected: boolean
   const [x, y] = c.xy
   const r = radius(c.places.length) * scale
   return <>
+    {selected && <circle className="map-halo" cx={x} cy={y} r={r + 9 * scale} strokeWidth={2 * scale} />}
     {c.needs.length > 0 && <circle className="map-needs" cx={x} cy={y} r={r + 3.5 * scale} strokeWidth={2.2 * scale} />}
     <circle className={`map-dot${selected ? " selected" : ""}`} cx={x} cy={y} r={r} strokeWidth={(selected ? 2.5 : 1) * scale} />
     {c.ferries.length > 0 && <rect className="map-ferry" x={x + r * 0.7} y={y - r * 0.7 - 8 * scale} width={8 * scale} height={8 * scale} strokeWidth={1.2 * scale} />}
@@ -196,10 +197,10 @@ function City({ c, scale, selected }: { c: City; scale: number; selected: boolea
   const lx = above || below ? x : belowRight ? x - 2 * scale : left ? x - r - 5 * scale : x + r + 5 * scale
   const ly = above ? y - r - 6 * scale : below || belowRight ? y + r + 15 * scale : y + 5 * scale
   const desc = `${c.name}: ${c.places.length} place${c.places.length === 1 ? "" : "s"}${c.needs.length ? `, ${c.needs.length} order${c.needs.length === 1 ? "" : "s"} need${c.needs.length === 1 ? "s" : ""} you` : ""}${c.ferries.length ? ", ferry terminal" : ""}`
-  return <CityLink city={c.name} from="map" label={desc} className="map-city">
+  return <CityLink city={c.name} from="map" label={desc} className={`map-city${selected ? " is-selected" : ""}`}>
     <title>{desc}</title>
     <circle className="map-hit" cx={x} cy={y} r={Math.max(r + 5 * scale, 13 * scale)} strokeWidth={1.5 * scale} />
     <Dot c={c} scale={scale} selected={selected} />
-    {labelled && <text className={`map-label${c.needs.length ? " needs" : ""}`} x={lx} y={ly} fontSize={15 * scale} strokeWidth={3.5 * scale} textAnchor={above || below ? "middle" : left ? "end" : "start"}>{c.name}</text>}
+    {labelled && <text className={`map-label${c.needs.length ? " needs" : ""}${selected ? " selected" : ""}`} x={lx} y={ly} fontSize={15 * scale} strokeWidth={3.5 * scale} textAnchor={above || below ? "middle" : left ? "end" : "start"}>{c.name}</text>}
   </CityLink>
 }

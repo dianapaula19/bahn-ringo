@@ -84,7 +84,7 @@ export function FactChip({ fact, now, linked, old: forceOld, who }: { fact: Fact
   return <span className={`fact-chip${old ? " old" : ""}`}>
     <Level level={fact.level} />
     <span className="fact-claim">{fact.claim}</span>
-    <span className="fact-src" title={`Source: ${fact.sourceId}`}>{who !== undefined && <LizardFace who={who} />}{fact.by} · {linked?.has(fact.sourceId) ? <a href={`#src-${fact.sourceId}`}>{kind}</a> : kind} · <When at={fact.at} now={now} /></span>
+    <span className="fact-src" title={`Source: ${fact.sourceId}`}>{who !== undefined && <LizardFace who={who} name={fact.by} />}{fact.by} · {linked?.has(fact.sourceId) ? <a href={`#src-${fact.sourceId}`}>{kind}</a> : kind} · <When at={fact.at} now={now} /></span>
   </span>
 }
 
