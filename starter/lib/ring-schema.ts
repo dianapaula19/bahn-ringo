@@ -126,3 +126,33 @@ export const ringJobs = pgTable("ring_jobs", {
   createdByRunId: text("created_by_run_id").notNull(),
   firedRunId: text("fired_run_id"),
 })
+
+// Scenario suite (scripts/eval-suite.ts, shown on /evals). Wall-clock times, not the sim clock.
+export const ringEvalRuns = pgTable("ring_eval_runs", {
+  id: text("id").primaryKey(),
+  model: text("model").notNull(),
+  status: text("status").notNull(), // running | done | failed
+  note: text("note"),
+  passed: integer("passed").notNull().default(0),
+  failed: integer("failed").notNull().default(0),
+  voided: integer("voided").notNull().default(0),
+  startedAt: ts("started_at").notNull(),
+  endedAt: ts("ended_at"),
+})
+
+export const ringEvalResults = pgTable("ring_eval_results", {
+  id: text("id").primaryKey(),
+  evalRunId: text("eval_run_id").notNull(),
+  scenarioId: text("scenario_id").notNull(),
+  title: text("title").notNull(),
+  orderId: text("order_id").notNull(),
+  verdict: text("verdict").notNull(), // pass | fail | void (the simulated side did not play its part)
+  expected: text("expected").notNull(),
+  actual: text("actual").notNull(),
+  reasons: jsonb("reasons").notNull(), // string[]: what failed, in plain words
+  checks: jsonb("checks").notNull(), // { label, ok, setup }[]
+  ringRunIds: jsonb("ring_run_ids").notNull(),
+  stopOutcome: text("stop_outcome"),
+  durationMs: integer("duration_ms").notNull(),
+  at: ts("at").notNull(),
+})

@@ -39,7 +39,16 @@ function velantora(site: SiteLike, stock: SimPersona, desk: SimPersona): IvrTree
 
 const PERSONA_STYLE = "Busy but helpful, plain spoken. Gives exact answers when you know them."
 
+// Eval hook (scripts/eval-suite.ts): a red-team scenario can stand in for one order. Never set by the app.
+type Override = (orderId: string, site: SiteLike) => SimScenario | null
+let override: Override | null = null
+export const setScenarioOverride = (fn: Override | null) => { override = fn }
+
 export function scenarioFor(orderId: string, site: SiteLike): SimScenario {
+  return override?.(orderId, site) ?? baseScenario(orderId, site)
+}
+
+export function baseScenario(orderId: string, site: SiteLike): SimScenario {
   switch (orderId) {
     case "ord-00516": {
       const stock: SimPersona = {
