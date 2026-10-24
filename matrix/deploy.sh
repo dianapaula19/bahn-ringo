@@ -43,6 +43,7 @@ docker start bahn-files 2>/dev/null || docker run -d --name bahn-files --restart
 box 'cd projects/bahn-ring/starter && setsid nohup sh -c "set -e; set -a; . ./.env.local; set +a; npm ci --no-audit --no-fund; for i in \$(seq 30); do npm run -s db:push && break; sleep 2; done; npm run db:seed; npm run attachments:seed; npm run build; echo SETUP_DONE" > ../../bahn-setup.log 2>&1 < /dev/null &'
 echo "wait for SETUP_DONE:  matrix run -C . -- tail -3 projects/bahn-setup.log"
 
+run matrix upload --force "$REPO/matrix/icon.png" system/icons/bahn-ring.png   # launcher icon (manifest "icon": "bahn-ring")
 run matrix upload --force "$REPO/matrix/matrix.json" apps/bahn-ring/matrix.json
 
 # 6. Ringo's background agent: triage every 5 min, due callbacks every minute, and (--autorun) a first

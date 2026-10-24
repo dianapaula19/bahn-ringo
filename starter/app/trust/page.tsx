@@ -46,6 +46,11 @@ export default function TrustPage() {
       <h1 className="page-title small">What Ringo may do</h1>
       <p className="intro">Ringo earns trust one action at a time. Bookings, dates, costs, addresses and customer messages always need a person.</p>
     </div></div>
+    {/* The crew sits above the rules: at the bottom it was only visible until the rules loaded and pushed it off screen. */}
+    <section className="sec crew" id="crew" aria-labelledby="crew-h">
+      <div className="sec-head"><h2 id="crew-h">Meet the crew</h2><span className="note">Who said it, at a glance. All fictional.</span></div>
+      <CastLineup />
+    </section>
     {error && <p className="board-error" role="alert">{error}.</p>}
     {msg && <p className="result tone-ok" role="status">{msg}</p>}
     {!ledger && !error && <div aria-busy="true">{[0, 1, 2].map((i) => <div className="q-skel" key={i} />)}</div>}
@@ -80,10 +85,6 @@ export default function TrustPage() {
         </li>)}</ul>}
       </section>
     })}
-    <section className="sec crew" id="crew" aria-labelledby="crew-h">
-      <div className="sec-head"><h2 id="crew-h">Meet the crew</h2><span className="note">Who said it, at a glance. All fictional.</span></div>
-      <CastLineup />
-    </section>
   </main></AppFrame>
 }
 

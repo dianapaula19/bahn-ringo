@@ -4,6 +4,7 @@
   "listingTrust": "first_party",
   "description": "Bahn car delivery control room with the Ringo pickup-readiness agent. Synthetic data, simulated calls.",
   "category": "productivity",
+  "icon": "bahn-ring",
   "author": "hackathon-04",
   "version": "0.1.0",
   "runtime": "node",
