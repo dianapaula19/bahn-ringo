@@ -90,7 +90,11 @@ ul, ol { padding: 0; list-style: none; }
 .app { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); min-height: 100dvh; }
 .app-board { height: 100dvh; overflow: hidden; }
 .sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; gap: 26px; padding: 20px 14px 18px; border-right: 1px solid var(--hair); background: var(--birch); }
-.wordmark { display: block; padding: 0 10px; font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); white-space: nowrap; }
+.wordmark { display: flex; align-items: center; gap: 9px; padding: 0 10px; font-family: var(--font-display); font-weight: 600; font-size: 16px; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); white-space: nowrap; }
+/* Ringo (public/ringo.svg, 214x240) cropped to head and shoulders: the 140x140 square at (45, 12). */
+.ringo-face { flex: none; position: relative; display: inline-block; overflow: hidden; border-radius: 50%; background: var(--teal-bg); box-shadow: 0 0 0 1px var(--hair); }
+.ringo-face img { position: absolute; left: -32.1%; top: -8.6%; width: 152.9%; max-width: none; height: auto; }
+.sec-head .ringo-face { align-self: center; }
 .sidebar-nav { display: grid; gap: 20px; }
 .nav-label { margin: 0 10px 5px; font-size: 11.5px; color: var(--subtle); }
 .nav-link { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; font-weight: 500; color: var(--brown); text-decoration: none; }
@@ -537,6 +541,9 @@ details.more > :not(summary) { margin-top: 8px; }
 .calm { display: flex; gap: 14px; align-items: flex-start; margin-top: 18px; padding: 28px 24px; border-radius: var(--radius-lg); background: var(--green-bg); color: var(--green-ink); }
 .calm-title { font-size: 20px; font-weight: 600; color: var(--ink); }
 .calm-sub { margin-top: 4px; font-size: 14px; color: var(--brown); }
+.calm { align-items: center; }
+.calm-ringo { flex: none; width: auto; height: 140px; margin: -12px 4px -16px -4px; }
+@media (max-width: 480px) { .calm-ringo { height: 96px; } }
 .fine { margin-top: 40px; border-top: 1px solid var(--hair); }
 .fine summary { display: flex; align-items: center; gap: 8px; padding: 16px 0; list-style: none; cursor: pointer; font-size: 15px; font-weight: 600; }
 .fine summary::-webkit-details-marker { display: none; }

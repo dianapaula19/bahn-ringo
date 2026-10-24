@@ -5,6 +5,7 @@ import posthog from "posthog-js"
 import type { CallRecord, CallTurn, OrderStory, RunEvent, ToolName } from "@/lib/contract"
 import { DESK, runRing } from "../../_lib/agent-api"
 import { Icon } from "../icons"
+import { RingoFace } from "../ringo"
 import { FactChip, Simulated, When } from "./bits"
 import { CallView } from "./story"
 
@@ -82,12 +83,12 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
   const last = [...story.runs].sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0]
 
   if (!story.ringEligible) return <section className="ring-panel" aria-labelledby="ring-h">
-    <div className="sec-head"><h2 id="ring-h">Ringo</h2></div>
+    <div className="sec-head"><RingoFace size={26} /><h2 id="ring-h">Ringo</h2></div>
     <p className="empty">{story.ringIneligibleReason ?? "Ringo does not work this kind of order."} Ringo will not call or message anyone here.</p>
   </section>
 
   return <section className="ring-panel" aria-labelledby="ring-h">
-    <div className="sec-head"><h2 id="ring-h">Ringo</h2>
+    <div className="sec-head"><RingoFace size={26} /><h2 id="ring-h">Ringo</h2>
       <span className="note">Ringo reads first, then rings the pickup site or asks the driver. It never contacts the customer.</span></div>
     <div className="ring-controls">
       <button type="button" className="btn primary" disabled={running} onClick={() => start("operator")}><Icon name="bot" size={15} /> {running ? "Ringo is working…" : "Run Ringo"}</button>
