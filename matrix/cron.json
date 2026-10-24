@@ -1,0 +1,9 @@
+[
+  {
+    "name": "bahn-ring-handover-0700",
+    "tz": "Europe/Helsinki",
+    "message": "Ring 07:00 handover. The full 'Since you left' summary is posted by the Ring loop on the box right after this. If it does not arrive, the loop is down: open Ring and read the handover strip.",
+    "schedule": { "type": "cron", "cron": "0 7 * * *" },
+    "target": { "channel": "telegram", "chatId": "${TELEGRAM_CHAT_ID}" }
+  }
+]

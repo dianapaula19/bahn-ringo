@@ -1,0 +1,28 @@
+{
+  "name": "Ring Control Room",
+  "slug": "bahn-ring",
+  "description": "Bahn car delivery control room with the Ring pickup-readiness agent. Synthetic data, simulated calls.",
+  "category": "productivity",
+  "author": "hackathon-04",
+  "version": "0.1.0",
+  "runtime": "node",
+  "runtimeVersion": "^1.0.0",
+  "scope": "personal",
+  "build": {
+    "install": "true",
+    "command": "true",
+    "output": ".",
+    "timeout": 60
+  },
+  "serve": {
+    "start": "cd ../../projects/bahn-ring/starter && exec node --env-file-if-exists=../../.env --env-file-if-exists=.env --env-file-if-exists=.env.local node_modules/next/dist/bin/next start -p $PORT",
+    "healthCheck": "/",
+    "startTimeout": 30,
+    "idleShutdown": 900
+  },
+  "resources": {
+    "memoryMb": 768,
+    "cpuShares": 512,
+    "maxFileHandles": 256
+  }
+}
