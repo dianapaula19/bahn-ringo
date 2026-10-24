@@ -632,7 +632,7 @@ details.more > :not(summary) { margin-top: 8px; }
 
 /* Ringo panel */
 .ring-panel { margin-top: 40px; }
-.ring-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.ring-controls { display: flex; flex-wrap: wrap; gap: 10px 20px; /* a tap that misses "Watch a recorded run" must not land on Run Ringo */ }
 .ring-chat { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
 .ring-chat textarea { flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid var(--hair); border-radius: var(--radius); background: var(--birch); font: inherit; font-size: 14px; resize: vertical; }
 .ring-chat textarea:focus { outline: none; border-color: var(--ink); }
