@@ -5,6 +5,7 @@ import posthog from "posthog-js"
 import type { CallRecord, CallTurn, OrderStory, RunEvent, ToolName } from "@/lib/contract"
 import { DESK, runRing } from "../../_lib/agent-api"
 import { Icon } from "../icons"
+import { withBase } from "@/lib/base"
 import { RingoFace } from "../ringo"
 import { FactChip, Simulated, When } from "./bits"
 import { CallView } from "./story"
@@ -94,14 +95,20 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
   // A run started in another tab (or before a reload) is still going on the server; same 10-minute cutoff as liveRun().
   const busyElsewhere = !running && last?.status === "running" && Date.parse(story.now) - Date.parse(last.startedAt) < 10 * 60_000
 
-  if (!story.ringEligible) return <section className="ring-panel" aria-labelledby="ring-h">
-    <div className="sec-head"><RingoFace size={56} /><h2 id="ring-h">Ringo</h2></div>
-    <p className="empty">{story.ringIneligibleReason ?? "Ringo does not work this kind of order."} Ringo will not call or message anyone here.</p>
-  </section>
+  // Ringo can't act here: one quiet line, not a panel. "…: a person owns this." is already said on the decision card.
+  if (!story.ringEligible) return <p className="ring-aside" id="ring-h">
+    <RingoFace size={24} /><span><b>Ringo stands back here.</b> {(story.ringIneligibleReason ?? "Ringo does not work this kind of order.").replace(/: a person owns this\.?$/, ".")} No calls, no messages.</span>
+  </p>
+
+  // The live call: from "Calling the site…" until the call ends. The site's name comes from the dial summary.
+  const callOpen = running && lines.some((l) => (l.kind === "step" && !l.done && l.text === DOING.place_call) || (l.kind === "call" && !l.record))
+  const site = lines.flatMap((l) => l.kind === "step" ? [/^Dialled (.+?) \(/.exec(l.text)?.[1]] : []).filter(Boolean).at(-1) ?? "the site"
+  // The run ended with something for a person to review.
+  const proposed = !running && lines.some((l) => l.kind === "event" && l.event.type === "proposal")
 
   return <section className="ring-panel" aria-labelledby="ring-h">
-    <div className="sec-head"><RingoFace size={56} /><h2 id="ring-h">Ringo</h2>
-      <span className="note">Ringo reads first, then rings the pickup site or asks the driver. It never contacts the customer.</span></div>
+    <div className="sec-head"><RingoFace size={40} /><h2 id="ring-h">Ringo</h2>
+      <span className="note">Reads first, then rings the site or asks the driver. Never the customer.</span></div>
     <div className="ring-controls">
       <button type="button" className="btn primary" disabled={running || busyElsewhere} onClick={() => start("operator")}><Icon name="bot" size={15} /> {running && replaying ? "Replaying…" : running || busyElsewhere ? "Ringo is working…" : "Run Ringo"}</button>
       <button type="button" className="btn" disabled={running} onClick={() => start("replay")}>Watch a recorded run</button>
@@ -122,6 +129,8 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
       {lines.map((l, i) => <li key={i} className={`step-line kind-${l.kind}`}><LineView line={l} now={story.now} live={running} acted={lines.slice(0, i).some((x) => x.kind === "step" || x.kind === "call")} /></li>)}
       <li ref={end} aria-hidden="true" />
     </ul>}
+    {callOpen && <p className="ringo-ringing" role="status"><span className="ring-pulse"><RingoFace size={32} /></span>Ringo is ringing {site}…</p>}
+    {proposed && <p className="ringo-done" role="status"><span className="ringo-thumb" aria-hidden="true">{/* eslint-disable-next-line @next/next/no-img-element -- a static svg */}<img src={withBase("/ringo.svg")} alt="" /></span>Done. Over to you.</p>}
   </section>
 }
 

@@ -165,7 +165,7 @@ function TimelineEntry({ entry: e, now, facts, call }: { entry: StoryEntry; now:
   const [open, setOpen] = useState(false)
   return <li className={`tl-item kind-${e.actorKind}`} id={`src-${e.ref.id}`}>
     <span className="tl-time"><When at={e.at} now={now} /></span>
-    <LizardFace who={LIZARD[e.actorKind] ?? null} size={30} />
+    <LizardFace who={LIZARD[e.actorKind] ?? null} name={e.actor} />
     <div className="tl-body">
       <p className="tl-who"><b>{e.actor}</b>{e.channel && <span className="tl-channel">{e.channel.replace(/_/g, " ")}</span>}{e.simulated && <Simulated />}</p>
       <p className="tl-text">{e.text}</p>

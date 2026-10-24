@@ -93,11 +93,16 @@ ul, ol { padding: 0; list-style: none; }
 .app-board { height: 100dvh; overflow: hidden; }
 .sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; gap: 26px; padding: 20px 14px 18px; border-right: 1px solid var(--hair); background: var(--birch); }
 .wordmark { display: flex; align-items: center; gap: 9px; padding: 0 10px; font-family: var(--font-display); font-weight: 600; font-size: 19px; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); white-space: nowrap; }
-/* The lizard cast (public/ringo.svg, lizard-*.svg, all 214x240) cropped to head and collar: the 124x124 square at (44, 14), which stops short of the raised hand. */
-.lizard-face { flex: none; position: relative; display: inline-block; overflow: hidden; border-radius: 50%; background: var(--teal-bg); box-shadow: 0 0 0 1px var(--hair); }
-.lizard-face img { position: absolute; left: -35.5%; top: -11.3%; width: 172.6%; max-width: none; height: auto; }
-.lizard-face.none { background: none; box-shadow: none; }
-.lizard-face.none::after { content: ""; position: absolute; inset: 0; margin: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--sand); }
+/* The lizard cast (public/ringo.svg, lizard-*.svg, all 214x240): the head only, the 104x104 square at (58, 8),
+   centred on the face and clear of the raised hand. A 2px ring in the role's colour; Bahn people get a monogram. */
+.lizard-face { --ring: var(--sand); flex: none; position: relative; display: inline-grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--teal-bg); vertical-align: middle; }
+.lizard-face::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--ring); }
+.lizard-face img { position: absolute; left: -55.77%; top: -7.69%; width: 205.77%; max-width: none; height: auto; }
+.lizard-face.w-ringo { --ring: #2b8f9c; }
+.lizard-face.w-dealer { --ring: #c08a2a; background: #fbf3df; }
+.lizard-face.w-customer { --ring: #26385c; background: #eef1f6; }
+.lizard-face.w-driver { --ring: #b5482a; background: #fbefe9; }
+.lizard-face.mono-face { --ring: var(--hair); background: var(--canvas); color: var(--subtle); font-weight: 600; letter-spacing: 0.02em; line-height: 1; }
 .sec-head .lizard-face { align-self: center; }
 .ring-panel > .sec-head { align-items: center; }
 .sidebar-nav { display: grid; gap: 20px; }
@@ -590,7 +595,7 @@ details.more > :not(summary) { margin-top: 8px; }
 .fact-chip .chip { grid-row: span 2; justify-self: start; }
 .fact-claim { color: var(--ink); }
 .fact-src { font-size: 12.5px; color: var(--muted); }
-.fact-src .lizard-face { vertical-align: middle; margin: -3px 6px -2px 0; }
+.fact-src .lizard-face { margin: -4px 7px -3px 0; }
 .fact-src a { color: inherit; text-decoration: underline; text-decoration-color: var(--sand); text-underline-offset: 2px; }
 .tl-item:target { background: var(--tray); box-shadow: 0 0 0 1px var(--hair); border-radius: var(--radius); }
 .fact-chip.old .fact-claim { text-decoration: line-through; text-decoration-color: var(--sand); color: var(--muted); }
@@ -657,9 +662,9 @@ details.more > :not(summary) { margin-top: 8px; }
 
 /* Timeline and calls */
 .tl { display: grid; }
-.tl-item { display: grid; grid-template-columns: 120px 30px minmax(0, 1fr); gap: 0 12px; padding: 12px 0; border-top: 1px solid var(--hair-soft); }
+.tl-item { display: grid; grid-template-columns: 120px 28px minmax(0, 1fr); gap: 0 12px; padding: 12px 0; border-top: 1px solid var(--hair-soft); }
 .tl-item:first-child { border-top: 0; }
-.tl-item > .lizard-face { margin-top: -5px; }
+.tl-item > .lizard-face { margin-top: -4px; }
 .tl-time { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 2px; }
 .tl-who { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; color: var(--muted); }
 .tl-who b { font-size: 13.5px; font-weight: 600; color: var(--ink); }
@@ -699,7 +704,7 @@ details.more > :not(summary) { margin-top: 8px; }
   .q-why { grid-column: 2 / -1; }
   .q-status { grid-column: 2 / -1; }
   .q-due { grid-column: 3; grid-row: 1; }
-  .tl-item { grid-template-columns: 30px minmax(0, 1fr); gap: 2px 10px; }
+  .tl-item { grid-template-columns: 28px minmax(0, 1fr); gap: 2px 10px; }
   .tl-time { grid-column: 2; }
   .turn { grid-template-columns: 1fr; gap: 0; }
   .payload > div { grid-template-columns: 1fr; gap: 0; }
@@ -772,3 +777,18 @@ details.more > :not(summary) { margin-top: 8px; }
   .map-layout { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .map-panel { position: static; max-height: none; }
 }
+
+/* ── Ringo in moments: standing back, ringing, thumbs-up ────────────────── */
+.ring-aside { display: flex; align-items: center; gap: 10px; margin-top: 28px; font-size: 13.5px; color: var(--muted); }
+.ring-aside b { font-weight: 600; color: var(--brown); }
+.ringo-ringing, .ringo-done { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 14px; color: var(--teal-ink); }
+.ring-pulse { position: relative; display: inline-flex; border-radius: 50%; }
+.ring-pulse::before { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 0 var(--teal); animation: ringo-ring 1.6s ease-out infinite; }
+@keyframes ringo-ring { 0% { box-shadow: 0 0 0 0 rgba(67, 175, 193, 0.55); } 100% { box-shadow: 0 0 0 10px rgba(67, 175, 193, 0); } }
+/* Ringo's head and raised thumb: the 160x116 box at (36, 6) of the 214x240 drawing (top % is of the height). */
+.ringo-thumb { flex: none; position: relative; width: 80px; height: 58px; overflow: hidden; }
+.ringo-thumb img { position: absolute; left: -22.5%; top: -5.17%; width: 133.75%; max-width: none; height: auto; }
+.ringo-done { color: var(--green-ink); font-weight: 500; }
+.ringo-done .ringo-thumb { animation: ringo-pop 0.45s cubic-bezier(.3, 1.5, .6, 1) both; transform-origin: 50% 100%; }
+@keyframes ringo-pop { from { transform: scale(0.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ringo-done .ringo-thumb { animation: none; } .ring-pulse::before { animation: none; box-shadow: 0 0 0 3px rgba(67, 175, 193, 0.35); } }
