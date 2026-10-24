@@ -214,6 +214,19 @@ Ringo got three colleagues, one per role, so a reader can scan "who said it" bef
 - **Where they show.** A 22 px face beside every timeline entry and every "What we know" source line: driver, customer, site (dealer) or Ringo, mapped from the existing `actorKind` and fact source; Bahn people, monitoring and system events get a neutral dot of the same size so rows stay aligned. The name stays; the face is never the only cue (alt = the role). An event only gets a face when its label names the actor, so "System: offer accepted by Yara" never shows a driver beside "System". A fact from a Ringo call shows the dealer, because the site said it. "Nothing needs you" shows the four together.
 - Checked: renders at 22, 28, 48 px and full size, order pages ord-00593 / 00516 / 00413 and the empty queue (queue response faked in the browser) at 1440 and 390.
 
+## 6f. Cast where it delights (25 Oct, UI feel pass)
+
+A critique said the faces read as green blobs at 16 to 28 px, Bahn people got grey dots, and Ringo's panel was a big header even where he can't act. What changed:
+
+- **Faces.** The crop is now the head only: the 104x104 square at (58, 8), centred on the face and clear of the raised hand (was 124 at (44, 14), which spent half the circle on the collar). Each face sits in a circle with a 2 px ring in its role colour: Ringo teal, site ochre, customer navy, driver rust. 28 px in the timeline and fact lines. Support desk, shift lead, dispatch, monitoring and system get a muted monogram (SD, SL, D, M, S) of the same size. Still one SVG per lizard, cropped in CSS; nothing redrawn.
+- **Ringo in moments.** While a call is open the run panel says "Ringo is ringing Velantora Helsinki…" (name taken from the dial step) next to his head with a pulsing ring; under reduced motion the ring holds still. A run that ends with a proposal gets a thumbs-up crop and "Done. Over to you." When Ringo can't act on an order, his panel is one line with a 24 px head: "Ringo stands back here. On-the-road safety. No calls, no messages." (the decision card already says a person owns it).
+- **404.** The dealer with his SOLD tag, "This one's already gone.", one button back to the queue. No internal ids.
+- **/trust.** 64 px Ringo by a shorter intro; "No reviews yet" once in each section note instead of 14 times; the never rows carry a slashed-circle "Never" chip instead of a key "Locked"; locked ask rows say "Always asks". "Meet the crew" at the bottom shows all four, linked from the sidebar foot.
+- **Shell and map.** The sidebar's divider moved to `.main`, so it runs the full page height. On a phone the top bar ends in a pinned chevron over a fade. `/map?city=` dims other cities and the road arcs to 30% and gives the chosen city a halo and a bold label.
+- **Checked** with the run API faked in the browser (no live run, no model call): order 516 ringing and done, order 322, /trust, the 404, /map?city=Hamburg, at 1440 and 390.
+
+Left: the queue's empty states and the inbox (another lane owns those pages, so the line-up isn't placed there); status copy in `bits.tsx` ("A person must act") belongs to the queue rework.
+
 ## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, and so on) are unverified. Serving under `/apps/<slug>` works in a local production build with the base path; whether the gateway keeps or strips the prefix on a real box is not checked.
