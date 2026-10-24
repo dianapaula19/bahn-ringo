@@ -62,6 +62,15 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
 
   useEffect(() => () => abort.current?.abort(), [])
   useEffect(() => { end.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }) }, [lines.length])
+  // Escape stops watching a run or replay (the run itself still finishes on the server).
+  useEffect(() => {
+    if (!running) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") stop() }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  })
+
+  function stop() { posthog.capture("ring_run_stopped"); abort.current?.abort(); setRunning(false); onDone() }
 
   async function start(trigger: "operator" | "replay", text?: string) {
     posthog.capture("ring_run_started", { trigger })
@@ -93,12 +102,12 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
     <div className="ring-controls">
       <button type="button" className="btn primary" disabled={running} onClick={() => start("operator")}><Icon name="bot" size={15} /> {running ? "Ringo is working…" : "Run Ringo"}</button>
       <button type="button" className="btn" disabled={running} onClick={() => start("replay")}>Watch a recorded run</button>
-      {running && <button type="button" className="btn" onClick={() => { posthog.capture("ring_run_stopped"); abort.current?.abort(); setRunning(false); onDone() }}>Stop watching</button>}
+      {running && <button type="button" className="btn" onClick={stop}>Stop watching</button>}
     </div>
     <form className="ring-chat" onSubmit={(e) => { e.preventDefault(); const t = message.trim(); if (t && !running) { setMessage(""); start("operator", t) } }}>
       <label className="sr-only" htmlFor="ring-msg">Tell Ringo something</label>
       <textarea id="ring-msg" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Tell Ringo something, e.g. “call stock control again” or “don't call before 10:00”"
-        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit() } }} />
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit() } else if (e.key === "Escape" && !running) e.currentTarget.blur() }} />
       <button type="submit" className="btn" disabled={running || !message.trim()}>Send</button>
     </form>
 

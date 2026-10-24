@@ -12,6 +12,7 @@ import { Ago, When, agentStatus } from "./components/ring/bits"
 
 const PAGE = 50
 const SEEN_KEY = "ring.lastSeen"
+const ROW_KEY = "ring.openedRow"
 
 function readSeen(): string | null { try { return localStorage.getItem(SEEN_KEY) } catch { return null } }
 function writeSeen(at: string) { try { localStorage.setItem(SEEN_KEY, at) } catch { /* private window: strip falls back to the default window */ } }
@@ -56,6 +57,17 @@ export default function NeedsYou() {
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [])
+
+  // Back from an order puts focus on the row it was opened from, not on <body>.
+  const loaded = !!queue
+  useEffect(() => {
+    if (!loaded) return
+    try {
+      const id = sessionStorage.getItem(ROW_KEY)
+      sessionStorage.removeItem(ROW_KEY)
+      if (id) document.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`)?.focus()
+    } catch { /* storage blocked: focus stays where the browser puts it */ }
+  }, [loaded])
 
   const moving = queue ? queue.total - queue.needsYou.length : 0
 
@@ -110,7 +122,7 @@ function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: 
     <ul className="q-list" aria-label={label}>
       {items.slice(0, shown).map((q) => {
         const status = agentStatus(q)
-        return <li key={q.orderId}><Link data-row className={`q-row sev-${q.severity}`} href={`/orders/${q.orderId}`}>
+        return <li key={q.orderId}><Link data-row={q.orderId} className={`q-row sev-${q.severity}`} href={`/orders/${q.orderId}`} onClick={() => { try { sessionStorage.setItem(ROW_KEY, q.orderId) } catch {} }}>
           <span className="q-sev" aria-label={`Severity ${q.severity}`} />
           <span className="q-id"><span className="mono q-ref">{q.reference}</span><span className="q-vehicle">{q.vehicle}</span></span>
           <span className="q-why" title={q.why}>{q.why}</span>

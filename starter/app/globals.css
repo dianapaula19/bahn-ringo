@@ -53,6 +53,8 @@ button { cursor: pointer; }
 h1, h2, h3, h4, p, dl, dd, dt, ul, ol, figure { margin: 0; }
 ul, ol { padding: 0; list-style: none; }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 2px; }
+.skip-link { position: absolute; left: 8px; top: -60px; z-index: 10; padding: 8px 14px; border-radius: var(--radius); background: var(--ink); color: var(--birch); font-weight: 500; }
+.skip-link:focus { top: 8px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .mono { font-family: var(--font-mono); font-feature-settings: normal; letter-spacing: 0; }
 .num { font-variant-numeric: tabular-nums; }
@@ -104,6 +106,7 @@ ul, ol { padding: 0; list-style: none; }
 .nav-link.active .icon { color: var(--ink); }
 .sidebar-foot { margin-top: auto; padding: 0 10px; font-size: 12px; line-height: 1.5; color: var(--subtle); }
 .main { min-width: 0; display: flex; flex-direction: column; }
+.main:focus { outline: none; }
 .app-board .main { height: 100dvh; min-height: 0; }
 
 /* ── Board ─────────────────────────────────────────────────────────────── */
@@ -410,9 +413,12 @@ details.more > :not(summary) { margin-top: 8px; }
 
 @media (max-width: 900px) {
   :root { --gutter: 16px; }
+  html { scroll-padding-top: 64px; } /* keeps scrolled-to buttons out from under the sticky top bar */
   .app { display: block; }
   .app-board { height: auto; overflow: visible; }
-  .sidebar { position: sticky; top: 0; z-index: 3; height: auto; flex-direction: row; align-items: center; gap: 14px; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--hair); overflow-x: auto; scrollbar-width: none; }
+  .sidebar { position: sticky; top: 0; z-index: 3; height: auto; flex-direction: row; align-items: center; gap: 14px; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--hair); overflow-x: auto; scrollbar-width: none;
+    mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); } /* the fade says the bar scrolls */
+  .sidebar::after { content: ""; flex: none; width: 24px; }
   .wordmark { padding: 0 4px; }
   .sidebar-nav { display: flex; gap: 2px; }
   .nav-group { display: flex; gap: 2px; }

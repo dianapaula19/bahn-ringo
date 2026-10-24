@@ -63,3 +63,8 @@ export function Empty({ children, quiet = false, small }: { children: ReactNode;
 export function More({ label, children, open = false }: { label: string; children: ReactNode; open?: boolean }) {
   return <details className="more" open={open}><summary><Icon name="chevron" size={12} />{label}</summary>{children}</details>
 }
+
+/** Focuses the page content without adding a #main history entry (Next's router would strand Back on it). */
+export function SkipLink() {
+  return <a className="skip-link" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus() }}>Skip to content</a>
+}

@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import { fmtDateTime } from "@/lib/present/time"
 import { Icon } from "./icons"
 import { RingoFace } from "./ringo"
+import { SkipLink } from "./ui"
 
 export type Section = "queue" | "trust" | "board" | "inbox" | "customers" | "drivers" | "sites" | "map"
 
@@ -21,8 +22,9 @@ const GROUPS: { label: string; links: { section: Section; href: string; label: s
   ] },
 ]
 
-export function AppFrame({ children, section, snapshotAt, board = false }: { children: ReactNode; section: Section; snapshotAt?: string | null; board?: boolean }) {
+export function AppFrame({ children, section, snapshotAt, board = false }: { children: ReactNode; section?: Section; snapshotAt?: string | null; board?: boolean }) {
   return <div className={`app${board ? " app-board" : ""}`}>
+    <SkipLink />
     <aside className="sidebar">
       <Link href="/" className="wordmark" aria-label="Ringo, Bahn control room: home"><RingoFace size={28} />Ringo</Link>
       <nav className="sidebar-nav" aria-label="Main navigation">
@@ -35,6 +37,6 @@ export function AppFrame({ children, section, snapshotAt, board = false }: { chi
       </nav>
       <div className="sidebar-foot">{snapshotAt ? `Snapshot ${fmtDateTime(snapshotAt)}` : "Fictional snapshot"}<br />Fictional data · calls and drivers simulated</div>
     </aside>
-    <div className="main">{children}</div>
+    <div className="main" id="main" tabIndex={-1}>{children}</div>
   </div>
 }
