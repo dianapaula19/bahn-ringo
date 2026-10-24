@@ -109,7 +109,7 @@ export async function runRing(input: {
     error = e instanceof Anthropic.APIError ? `Model error ${e.status ?? ""}: ${e.message.slice(0, 300)}` : e instanceof Error ? e.message : String(e)
     await emit({ type: "error", message: `Ringo stopped: ${error}`, retryable: e instanceof Anthropic.APIError && (e.status === 429 || (e.status ?? 0) >= 500), at: await simNow() })
     // outcome "failed" keeps the order's real decision card: a broken run is not a decision for a person.
-    ctx.stopped = { ...forcedStop(e instanceof Anthropic.APIError ? "Ringo couldn't reach its model and stopped." : "Ringo hit a problem and stopped.", ctx.did, "Try again or work it by hand."), outcome: "failed", oneDecision: null }
+    ctx.stopped = { ...forcedStop(e instanceof Anthropic.APIError ? "Ringo couldn't reach his model and stopped." : "Ringo hit a problem and stopped.", ctx.did, "Try again or work it by hand."), outcome: "failed", oneDecision: null }
   }
   const decision = ctx.stopped!
   const endedAt = await simNow()
@@ -135,7 +135,7 @@ async function loop(client: Anthropic, ctx: RunCtx, input: { orderId: string; tr
   let nudges = 0
   for (;;) {
     if (ctx.toolCalls >= LIMITS.toolCalls) {
-      ctx.stopped = forcedStop("Ringo reached its step limit before finishing. A person should take over.", ctx.did, "Read Ringo's notes on this order and decide the next step.")
+      ctx.stopped = forcedStop("Ringo reached his step limit before finishing. A person should take over.", ctx.did, "Read Ringo's notes on this order and decide the next step.")
       return
     }
     ctx.ai = newAiTrace(ctx.runId)

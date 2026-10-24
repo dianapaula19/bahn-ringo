@@ -10,7 +10,7 @@ import { CastLineup, RingoFace } from "../components/ringo"
 import { ACTION, MODE, When } from "../components/ring/bits"
 
 const GROUPS: { mode: TrustMode; title: string; note: string }[] = [
-  { mode: "auto", title: "Ringo does these on its own", note: "Asking and looking. Nothing on the order changes." },
+  { mode: "auto", title: "Ringo does these on his own", note: "Asking and looking. Nothing on the order changes." },
   { mode: "ask", title: "Ringo asks a person first", note: "Five accepted as-is in a row, and you can hand it over." },
   { mode: "never", title: "Ringo never does these", note: "Not even with approval." },
 ]
