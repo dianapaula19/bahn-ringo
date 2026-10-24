@@ -723,6 +723,7 @@ details.more > :not(summary) { margin-top: 8px; }
 .map-needs { fill: none; stroke: var(--red); }
 .map-ferry { fill: var(--birch); stroke: var(--ink); }
 .map-hit { fill: transparent; }
+.map-city .map-hit { pointer-events: none; } /* the focus ring; taps go to the hit layer underneath */
 .map-city { cursor: pointer; outline: none; }
 .map-city:hover .map-dot, .map-city:focus-visible .map-dot { fill-opacity: 1; stroke: var(--ink); }
 .map-city:focus-visible .map-hit { stroke: var(--ink); stroke-dasharray: 3 2; }

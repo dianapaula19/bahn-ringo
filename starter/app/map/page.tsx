@@ -66,16 +66,24 @@ async function loadMap() {
 
 type Props = { searchParams: Promise<{ city?: string | string[] }> }
 
-export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+/** ?city= matched to a known city, ignoring case, accents and stray spaces. */
+const askedCity = async (searchParams: Props["searchParams"]) => {
   const c = (await searchParams).city
-  return { title: `${typeof c === "string" && c ? `${c} · ` : ""}Map · Ringo` }
+  return typeof c === "string" && c.trim() ? c.trim() : null
+}
+const sameCity = (a: string, b: string) => a.localeCompare(b, "en", { sensitivity: "base" }) === 0
+
+// The title names a matched city only, never the raw query text.
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const asked = await askedCity(searchParams)
+  const name = asked && Object.keys(CITY_XY).find((n) => sameCity(n, asked))
+  return { title: name ? `${name} · Map` : "Map" }
 }
 
 export default async function MapPage({ searchParams }: Props) {
-  const asked = (await searchParams).city
-  const selectedName = typeof asked === "string" ? asked : null
+  const selectedName = await askedCity(searchParams)
   const m = await loadMap()
-  const selected = m.cities.find((c) => c.name === selectedName) ?? null
+  const selected = selectedName ? m.cities.find((c) => sameCity(c.name, selectedName)) ?? null : null
   const flagged = m.cities.filter((c) => c.needs.length)
   const summary = `Map of ${m.cities.length} cities with ${m.placeCount} places. ${flagged.length} cities have an order that needs you${flagged.length ? `: ${flagged.map((c) => c.name).join(", ")}` : ""}. ${m.road.length} cars on the road between cities.`
 
@@ -92,10 +100,12 @@ export default async function MapPage({ searchParams }: Props) {
             <rect className="map-frame" x={INSET.view.x + 2} y={INSET.view.y + 2} width={INSET.view.w - 4} height={INSET.view.h - 4} rx={3} />
             <path className="map-leader" d={`M${INSET.view.x + INSET.view.w - 2} ${INSET.view.y + INSET.view.h / 2} L${INSET.x} ${INSET.y + INSET.h / 2}`} />
           </g>
+          <HitLayer cities={m.cities.filter((c) => !CAPITAL.has(c.name))} scale={1} />
           {m.cities.filter((c) => !CAPITAL.has(c.name)).map((c) => <City key={c.name} c={c} scale={1} selected={c === selected} />)}
           <svg x={INSET.x} y={INSET.y} width={INSET.w} height={INSET.h} viewBox={`${INSET.view.x} ${INSET.view.y} ${INSET.view.w} ${INSET.view.h}`}>
             <rect className="map-sea" x={INSET.view.x} y={INSET.view.y} width={INSET.view.w} height={INSET.view.h} />
             <Countries filter={INSET_COUNTRIES} withPlaces={m.countries} stroke={0.8 / ZOOM} />
+            <HitLayer cities={m.cities.filter((c) => CAPITAL.has(c.name))} scale={1 / ZOOM} />
             {m.cities.filter((c) => CAPITAL.has(c.name)).map((c) => <City key={c.name} c={c} scale={1 / ZOOM} selected={c === selected} />)}
           </svg>
           <rect className="map-inset-edge" x={INSET.x} y={INSET.y} width={INSET.w} height={INSET.h} rx={4} />
@@ -168,6 +178,14 @@ function Dot({ c, scale, selected }: { c: City; scale: number; selected: boolean
     <circle className={`map-dot${selected ? " selected" : ""}`} cx={x} cy={y} r={r} strokeWidth={(selected ? 2.5 : 1) * scale} />
     {c.ferries.length > 0 && <rect className="map-ferry" x={x + r * 0.7} y={y - r * 0.7 - 8 * scale} width={8 * scale} height={8 * scale} strokeWidth={1.2 * scale} />}
   </>
+}
+
+// Invisible tap targets about 44 px across on a 390 px phone (~0.43 px per map unit there). They sit under
+// every dot, so tapping a dot always opens that city; where two overlap, the later city wins.
+const HIT_R = 51
+function HitLayer({ cities, scale }: { cities: City[]; scale: number }) {
+  return <g aria-hidden="true">{cities.map((c) => <CityLink key={c.name} city={c.name} from="map" hidden>
+    <circle className="map-hit" cx={c.xy[0]} cy={c.xy[1]} r={HIT_R * scale} /></CityLink>)}</g>
 }
 
 function City({ c, scale, selected }: { c: City; scale: number; selected: boolean }) {
