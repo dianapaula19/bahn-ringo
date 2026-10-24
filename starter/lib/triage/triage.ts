@@ -35,16 +35,29 @@ export function ringEligibility(b: Bundle): { ok: boolean; reason: string | null
   return { ok: true, reason: null }
 }
 
+// The open task's due time when there is one; a pickup slot that already passed on a moving car is not a deadline.
 function decideBy(b: Bundle): string | null {
   const times: string[] = []
   for (const w of openItems(b)) if (str(w.details.due_at)) times.push(String(w.details.due_at))
+  if (times.length) return times.map((t) => new Date(t).toISOString()).sort()[0]
   for (const t of rows(b, "time_windows")) {
     if (t.details.is_selected !== true) continue
-    if (t.details.purpose === "SELECTED_PICKUP_SLOT" && str(t.details.start_at)) times.push(String(t.details.start_at))
+    if (t.details.purpose === "SELECTED_PICKUP_SLOT" && RING_STATUSES.includes(b.order.status) && str(t.details.start_at)) times.push(String(t.details.start_at))
     if (str(t.details.commitment_deadline_at)) times.push(String(t.details.commitment_deadline_at))
   }
   return times.map((t) => new Date(t).toISOString()).sort()[0] ?? null
 }
+
+/** "Attempt to book the next-day crossing failed at 07:10 UTC: provider timed out without a confirmation reference." */
+function failedDataset(p: RelatedRow): string {
+  const exec = (p.details.execution ?? {}) as Record<string, unknown>
+  const err = String(exec.error ?? "outcome unknown").split(/(?<=\.)\s/)[0].replace(/\.$/, "")
+  const at = str(exec.attempted_at) ? ` at ${hhmm(new Date(String(exec.attempted_at)).toISOString())} UTC` : ""
+  return `${String(p.details.summary).replace(/\.$/, "")} failed${at}: ${err}.`
+}
+
+/** Alert summaries end in boilerplate ("; source is a conversation, not a verified outcome."). Keep the part that says what is wrong. */
+const alertText = (summary: string) => summary.replace(/;\s*source is a conversation, not a verified outcome\.?$/i, ".")
 
 type Hit = { reason: TriageReason; why: string; sources: SourceRef[]; severity?: Sev; oneDecision?: string | null }
 
@@ -62,12 +75,25 @@ function safetyDecision(b: Bundle, incident: RelatedRow | undefined): string {
   return parts.join(" ")
 }
 
+// A driver message that asks for something. "Understood, no cost to submit" or a position update needs no answer.
+const ASKS = /\?|\bplease\b|\b(can|could) you\b/i
+
+/** A message, short: whole when it fits, else the sentence with the question, led by the sentence that says what is wrong when both fit. */
+export function quoteShort(body: string, max = 150): string {
+  if (body.length <= max) return body
+  const s = (body.match(/[^.!?]+[.!?]*/g) ?? [body]).map((x) => x.trim()).filter(Boolean)
+  const ask = s.findLast((x) => ASKS.test(x)) ?? s[0]
+  const lead = s.find((x) => x !== ask && /\b(cannot|can't|won't|not|no)\b/i.test(x)) ?? (s[0] !== ask ? s[0] : undefined)
+  const text = lead && lead.length + ask.length < max ? `${lead} ${ask}` : ask
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
+}
+
 function unansweredDriver(b: Bundle, now: string) {
   const byThread = new Map<string, typeof b.messages>()
   for (const m of b.messages) byThread.set(m.conversationId, [...(byThread.get(m.conversationId) ?? []), m])
   for (const list of byThread.values()) {
     const last = [...list].filter((m) => m.authorType !== "internal" && m.details.visibility !== "INTERNAL").sort((x, y) => x.authoredAt.localeCompare(y.authoredAt)).pop()
-    if (last?.authorType === "driver" && Date.parse(now) - Date.parse(last.authoredAt) <= 2 * 3600_000) return last
+    if (last?.authorType === "driver" && ASKS.test(last.body) && Date.parse(now) - Date.parse(last.authoredAt) <= 2 * 3600_000) return last
   }
   return null
 }
@@ -93,7 +119,7 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   if (failed.length) return {
     reason: "FAILED_ACTION", severity: "high", sources: failed,
     why: failed[0].table === "ring_calls" ? "Ring's last call dropped with an unknown outcome and no reconciling call followed." :
-      failed[0].table === "agent_proposals" ? "An earlier action failed with an unknown outcome. Reconcile before anyone retries." :
+      failed[0].table === "agent_proposals" ? failedDataset(dsProps.find((p) => p.id === failed[0].id)!) :
         "An approved change could not run because the order changed. Ring must re-read first.",
   }
   // 3 AUTHORITY_BLOCKED
@@ -119,7 +145,7 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const driverMsg = unansweredDriver(b, now)
   if (empty || driverMsg) return {
     reason: "DRIVER_WAITING", severity: "high",
-    why: empty ? "Driver is at the pickup but the car is not there. They cannot wait much longer." : "A driver asked something and nobody has answered.",
+    why: empty ? "Driver is at the pickup but the car is not there. They cannot wait much longer." : `Driver, ${hhmm(driverMsg!.authoredAt)} UTC: “${quoteShort(driverMsg!.body)}”`,
     sources: [...(empty ? [ref("incidents", empty.id)] : []), ...(driverMsg ? [ref("messages", driverMsg.id)] : [])],
   }
   // 6 RECORDED_PROPOSAL
@@ -136,11 +162,20 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
     why: identity ? String(identity.details.summary ?? "The next step needs the customer, and only a person contacts them.") : "The next step needs the customer, and only a person contacts them.",
     sources: identity ? [ref("work_items", identity.id)] : [ref("ring_proposals", custProp!.id)],
   }
-  // 8 DUE_SOON
+  // 8 DUE_SOON: a task due within the hour, or a high alert nobody has acknowledged yet (e.g. a promise that can't be kept)
   const due = items.find((w) => !RING_KINDS.includes(String(w.details.kind)) && str(w.details.due_at) && Date.parse(String(w.details.due_at)) - Date.parse(now) <= 3600_000)
+  const unacked = alerts.find((a) => a.status === "OPEN" && a.severity === "high" && a.signal !== "SITE_ACCESS_UNCONFIRMED")
+  if (!due && unacked) {
+    // Generated summaries ("Review ferry cutoff for CD-…") say little; quote the message that raised the alert instead.
+    const raised = b.messages.filter((m) => m.conversationId === unacked.details.conversation_id && m.authorType !== "operator" && m.authorType !== "internal" && m.authoredAt <= unacked.triggeredAt)
+      .sort((x, y) => x.authoredAt.localeCompare(y.authoredAt)).pop()
+    const who = raised && (raised.authorType === "site_contact" ? "Site" : raised.authorType.replace(/^\w/, (c) => c.toUpperCase()))
+    return { reason: "DUE_SOON", severity: "high", sources: [ref("alerts", unacked.id), ...(raised ? [ref("messages", raised.id)] : [])],
+      why: raised && /^Review /.test(unacked.summary) ? `${who}, ${hhmm(raised.authoredAt)} UTC: “${quoteShort(raised.body)}”` : alertText(unacked.summary) }
+  }
   if (due) return {
     reason: "DUE_SOON", severity: due.details.priority === "high" ? "high" : "medium", sources: [ref("work_items", due.id)],
-    why: `Due ${Date.parse(String(due.details.due_at)) < Date.parse(now) ? "already" : "within the hour"}: ${String(due.details.next_action ?? due.details.summary)}`,
+    why: String(due.details.summary ?? due.details.next_action),
   }
   // 9 RING_WORKING
   const live = ring.runs.find((r) => r.status === "running")
@@ -159,12 +194,12 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
     why: gap ? `Ring can ring the pickup site: ${String(gap.details.next_action ?? gap.details.summary)}` : `Ring can ring the pickup site: ${access!.summary}`,
     sources: [...(gap ? [ref("work_items", gap.id)] : []), ...(access ? [ref("alerts", access.id)] : [])],
   }
-  // 11 WAITING_EXTERNAL
-  const ack = alerts.find((a) => a.status === "ACKNOWLEDGED" && str(a.details.owner))
+  // 11 WAITING_EXTERNAL (an open lower alert is in hand, not quiet: the quiet count promises "no open alert")
+  const ack = alerts.find((a) => a.status === "ACKNOWLEDGED" && str(a.details.owner)) ?? alerts[0]
   const waitingThread = b.conversations.find((c) => c.status === "OPEN" && str(c.details.waiting_on))
   if (ack || waitingThread) return {
     reason: "WAITING_EXTERNAL", severity: "low",
-    why: waitingThread ? `Waiting on ${String(waitingThread.details.waiting_on).toLowerCase().replace(/_/g, " ")}${str(waitingThread.details.next_check_at) ? `, next check ${hhmm(String(waitingThread.details.next_check_at))} UTC` : ""}.` : `${ack!.details.owner} owns it: ${ack!.summary}`,
+    why: waitingThread ? `Waiting on ${String(waitingThread.details.waiting_on).toLowerCase().replace(/_/g, " ")}${str(waitingThread.details.next_check_at) ? `, next check ${hhmm(String(waitingThread.details.next_check_at))} UTC` : ""}.` : `${str(ack!.details.owner) ? `${ack!.details.owner} owns it` : b.conversations.some((c) => c.id === ack!.details.conversation_id && c.status === "OPEN") ? "Being followed up in the conversation" : "Open alert"}: ${alertText(ack!.summary)}`,
     sources: waitingThread ? [ref("conversations", waitingThread.id)] : [ref("alerts", ack!.id)],
   }
   return { reason: "QUIET", severity: "low", why: "Nothing needs a person.", sources: [] }

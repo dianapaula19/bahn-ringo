@@ -70,16 +70,16 @@ Triage is deterministic code with no LLM. It runs on the starter `Bundle` (`load
 | 2 | `FAILED_ACTION` | needs_you | a proposal is `FAILED`, an execution is `STALE`, or a Ring call ended `DROPPED_UNKNOWN` with no reconciling call after it |
 | 3 | `AUTHORITY_BLOCKED` | needs_you | an OPEN `RELEASE_DOCUMENT_UNCLEAR` alert, or an open work item `COMMERCIAL_RELEASE_HOLD` |
 | 4 | `DECISION_WAITING` | needs_you | a Ring proposal is `PENDING_REVIEW`, or the latest Ring run stopped with `needs_person` |
-| 5 | `DRIVER_WAITING` | needs_you | an open `EMPTY_PICKUP` incident, or an unanswered driver message in the last 2 h |
+| 5 | `DRIVER_WAITING` | needs_you | an open `EMPTY_PICKUP` incident, or an unanswered driver message in the last 2 h that asks something (a question or "please"); the row quotes it |
 | 6 | `RECORDED_PROPOSAL` | needs_you | a dataset proposal is `PENDING_REVIEW` |
 | 7 | `CUSTOMER_CONTACT` | needs_you | the open work item's `next_action` or a pending proposal needs the customer (`IDENTITY_INPUT_REQUIRED`, or a payload `contact` that includes `"customer"`) |
-| 8 | `DUE_SOON` | needs_you | an open work item is due within 60 min of `now` and is not Ring-workable |
+| 8 | `DUE_SOON` | needs_you | an open work item is due within 60 min of `now` and is not Ring-workable, or an OPEN (not acknowledged) `high` alert other than `SITE_ACCESS_UNCONFIRMED` |
 | 9 | `RING_WORKING` | ring | a Ring run is in progress, or a callback is scheduled |
 | 10 | `RING_CAN_CALL` | ring | an open work item of kind `PICKUP_CONTACT_HANDLE_REQUIRED`, `PICKUP_ACCESS_CHECK_REQUIRED` or `KEY_HOLDER_STOCK_CHECK`, or an OPEN `SITE_ACCESS_UNCONFIRMED` alert, on a `NEW` / `WAITING_FOR_PICKUP` order with a pickup site or contact |
-| 11 | `WAITING_EXTERNAL` | waiting | an ACKNOWLEDGED alert with an owner, or an open conversation with `waiting_on` |
+| 11 | `WAITING_EXTERNAL` | waiting | an ACKNOWLEDGED alert with an owner, an open conversation with `waiting_on`, or any other open alert (so "quiet" really means no open alert) |
 | 12 | `QUIET` | quiet | nothing above matched (the 70-ish quiet orders) |
 
-- Ranking inside `needs_you` goes by reason order, then severity, then `decideBy` ascending. `decideBy` is the earliest of: the work item `due_at`, the selected pickup slot start, the promise deadline.
+- Ranking inside `needs_you` goes by reason order, then severity, then `decideBy` ascending. `decideBy` is the earliest open work item `due_at`; with no open task, the earliest of the selected pickup slot start (only before pickup) and the promise deadline.
 - Overtaken signals: an OPEN `TRACKING_GAP` alert with a later alert, incident or driver message on the same assignment goes into `Triage.overtaken`. For 322, the 05:16 gap (`alert-x105238e92e7f3ba6`) is overtaken by the 08:07 SAFETY_STOP (`alert-x539dcfdd5a51d9ab`).
 - The `oneDecision` for non-agent cards is a template filled from rows. For 322 it reads: "Driver says they are safe and stopped (driver 08:22). Location unverified, no photo yet. Customer: keep it stopped (08:40). Decide with the customer: roadside or tow." The times are message times in UTC.
 - Self-check: `lib/triage/triage.check.ts`, which asserts the demo table in §8. Run it with `npx tsx lib/triage/triage.check.ts`.
