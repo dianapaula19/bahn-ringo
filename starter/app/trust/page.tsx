@@ -6,11 +6,12 @@ import type { TrustLedger, TrustMode, TrustRow } from "@/lib/contract"
 import { loadTrust, updateTrust } from "../_lib/agent-api"
 import { AppFrame } from "../components/app-frame"
 import { Icon } from "../components/icons"
+import { CastLineup, RingoFace } from "../components/ringo"
 import { ACTION, MODE, When } from "../components/ring/bits"
 
 const GROUPS: { mode: TrustMode; title: string; note: string }[] = [
-  { mode: "auto", title: "Ringo does these on its own", note: "Asking and looking things up. Nothing changes on the order." },
-  { mode: "ask", title: "Ringo asks a person first", note: "Ringo prepares it; a person accepts, edits or rejects." },
+  { mode: "auto", title: "Ringo does these on its own", note: "Asking and looking. Nothing on the order changes." },
+  { mode: "ask", title: "Ringo asks a person first", note: "Five accepted as-is in a row, and you can hand it over." },
   { mode: "never", title: "Ringo never does these", note: "Not even with approval." },
 ]
 
@@ -41,28 +42,37 @@ export default function TrustPage() {
   }
 
   return <AppFrame section="trust"><main className="page">
-    <h1 className="page-title small">What Ringo may do</h1>
-    <p className="intro">Ringo earns trust one kind of action at a time. When a person has accepted five in a row without changes, you can let Ringo do that kind on its own. Bookings, dates, costs, address changes and anything sent to a customer always need a person.</p>
+    <div className="trust-intro"><RingoFace size={64} /><div>
+      <h1 className="page-title small">What Ringo may do</h1>
+      <p className="intro">Ringo earns trust one action at a time. Bookings, dates, costs, addresses and customer messages always need a person.</p>
+    </div></div>
     {error && <p className="board-error" role="alert">{error}.</p>}
     {msg && <p className="result tone-ok" role="status">{msg}</p>}
     {!ledger && !error && <div aria-busy="true">{[0, 1, 2].map((i) => <div className="q-skel" key={i} />)}</div>}
     {ledger && ledger.rows.length === 0 && <p className="empty">No rules yet.</p>}
     {ledger && GROUPS.map((g) => {
       const rows = ledger.rows.filter((r) => r.mode === g.mode)
+      const reviewed = (r: TrustRow) => r.approvedUnchanged + r.edited + r.rejected > 0
+      // Reviews say nothing about "never"; elsewhere "No reviews yet" is said once, not on every row.
+      const unreviewed = g.mode !== "never" && rows.length > 0 && !rows.some(reviewed)
       return <section className="sec" key={g.mode} aria-labelledby={`t-${g.mode}`}>
-        <div className="sec-head"><h2 id={`t-${g.mode}`}>{g.title}</h2><span className="count num">{rows.length || ""}</span><span className="note">{g.note}</span></div>
+        <div className="sec-head"><h2 id={`t-${g.mode}`}>{g.title}</h2><span className="count num">{rows.length || ""}</span><span className="note">{g.note}{unreviewed && <> No reviews yet.</>}</span></div>
         {rows.length === 0 ? <p className="empty">None.</p> : <ul className="trust-list">{rows.map((r) => <li key={r.actionType} className="trust-row">
           <div className="trust-main">
-            <p className="trust-name">{ACTION[r.actionType]}{r.locked && <span className="chip tone-neutral" title={r.lockedReason ?? "Locked"}><Icon name="key" size={12} />Locked</span>}</p>
-            <p className="trust-sub">{r.locked ? (r.lockedReason ?? "Always needs a person.")
-              : g.mode === "ask" ? (r.promotable ? "Clean record: ready to hand over to Ringo." : "Needs five accepted-as-is reviews in a row before Ringo can do it alone.")
-              : r.updatedAt === ledger.now ? "Default setting." : <>Set <When at={r.updatedAt} now={ledger.now} /></>}</p>
+            <p className="trust-name">{ACTION[r.actionType]}{g.mode === "never" ? <span className="chip tone-neutral" title={r.lockedReason ?? "Never"}><NeverIcon />Never</span>
+              : r.locked && <span className="chip tone-neutral" title={r.lockedReason ?? "Locked"}><Icon name="key" size={12} />Always asks</span>}</p>
+            {(() => {
+              const sub = r.locked ? (r.lockedReason ?? "Always needs a person.")
+                : g.mode === "ask" ? (r.promotable ? "Clean record: ready to hand over to Ringo." : null)
+                : r.updatedAt === ledger.now ? null : <>Set <When at={r.updatedAt} now={ledger.now} /></>
+              return sub && <p className="trust-sub">{sub}</p>
+            })()}
           </div>
-          {r.approvedUnchanged + r.edited + r.rejected === 0 ? <span className="trust-none">No reviews yet</span> : <dl className="trust-counts">
+          {g.mode !== "never" && reviewed(r) ? <dl className="trust-counts">
             <div><dt>Accepted as is</dt><dd className="num">{r.approvedUnchanged}</dd></div>
             <div><dt>Edited</dt><dd className="num">{r.edited}</dd></div>
             <div><dt>Rejected</dt><dd className="num">{r.rejected}</dd></div>
-          </dl>}
+          </dl> : <span />}
           <div className="trust-act">
             {!r.locked && r.mode === "ask" && r.promotable && <button type="button" className="btn primary" disabled={busy === r.actionType} onClick={() => change(r, "auto")}>Let Ringo do it</button>}
             {!r.locked && r.mode === "auto" && <button type="button" className="btn" disabled={busy === r.actionType} onClick={() => change(r, "ask")}>Ask me first</button>}
@@ -70,5 +80,13 @@ export default function TrustPage() {
         </li>)}</ul>}
       </section>
     })}
+    <section className="sec crew" id="crew" aria-labelledby="crew-h">
+      <div className="sec-head"><h2 id="crew-h">Meet the crew</h2><span className="note">Who said it, at a glance. All fictional.</span></div>
+      <CastLineup />
+    </section>
   </main></AppFrame>
 }
+
+/** A circle with a slash: "never", not "locked". */
+const NeverIcon = () => <svg viewBox="0 0 16 16" width={12} height={12} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+  <circle cx="8" cy="8" r="6" /><path d="M3.8 12.2 12.2 3.8" /></svg>

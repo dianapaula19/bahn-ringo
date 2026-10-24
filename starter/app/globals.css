@@ -91,7 +91,7 @@ ul, ol { padding: 0; list-style: none; }
 /* ── Shell ─────────────────────────────────────────────────────────────── */
 .app { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); min-height: 100dvh; }
 .app-board { height: 100dvh; overflow: hidden; }
-.sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; gap: 26px; padding: 20px 14px 18px; border-right: 1px solid var(--hair); background: var(--birch); }
+.sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; gap: 26px; padding: 20px 14px 18px; background: var(--birch); }
 .wordmark { display: flex; align-items: center; gap: 9px; padding: 0 10px; font-family: var(--font-display); font-weight: 600; font-size: 19px; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); white-space: nowrap; }
 /* The lizard cast (public/ringo.svg, lizard-*.svg, all 214x240): the head only, the 104x104 square at (58, 8),
    centred on the face and clear of the raised hand. A 2px ring in the role's colour; Bahn people get a monogram. */
@@ -113,7 +113,7 @@ ul, ol { padding: 0; list-style: none; }
 .nav-link.active { background: var(--hair-soft); color: var(--ink); }
 .nav-link.active .icon { color: var(--ink); }
 .sidebar-foot { margin-top: auto; padding: 0 10px; font-size: 12px; line-height: 1.5; color: var(--subtle); }
-.main { min-width: 0; display: flex; flex-direction: column; }
+.main { min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--hair); } /* on .main, not the sticky sidebar, so the line runs the full page height */
 .main:focus { outline: none; }
 .app-board .main { height: 100dvh; min-height: 0; }
 
@@ -424,9 +424,10 @@ details.more > :not(summary) { margin-top: 8px; }
   html { scroll-padding-top: 64px; } /* keeps scrolled-to buttons out from under the sticky top bar */
   .app { display: block; }
   .app-board { height: auto; overflow: visible; }
-  .sidebar { position: sticky; top: 0; z-index: 3; height: auto; flex-direction: row; align-items: center; gap: 14px; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--hair); overflow-x: auto; scrollbar-width: none;
-    mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); } /* the fade says the bar scrolls */
-  .sidebar::after { content: ""; flex: none; width: 24px; }
+  .sidebar { position: sticky; top: 0; z-index: 3; height: auto; flex-direction: row; align-items: center; gap: 14px; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--hair); overflow-x: auto; scrollbar-width: none; }
+  /* A fade and a chevron pinned to the right edge say the bar scrolls sideways. */
+  .sidebar::after { content: "›"; position: sticky; right: -12px; flex: none; align-self: stretch; display: flex; align-items: center; justify-content: flex-end; width: 44px; margin: -8px -12px -8px -30px; padding-right: 10px; background: linear-gradient(to right, transparent, var(--birch) 60%); font-size: 22px; line-height: 1; color: var(--muted); pointer-events: none; }
+  .main { border-left: 0; }
   .wordmark { padding: 0 4px; }
   .sidebar-nav { display: flex; gap: 2px; }
   .nav-group { display: flex; gap: 2px; }
@@ -696,7 +697,6 @@ details.more > :not(summary) { margin-top: 8px; }
 .trust-counts { display: flex; gap: 18px; }
 .trust-counts dt { font-size: 12px; color: var(--muted); }
 .trust-counts dd { font-size: 16px; font-weight: 500; }
-.trust-none { font-size: 12.5px; color: var(--subtle); white-space: nowrap; }
 .trust-act { display: flex; justify-content: flex-end; }
 
 @media (max-width: 900px) {
@@ -710,6 +710,7 @@ details.more > :not(summary) { margin-top: 8px; }
   .payload > div { grid-template-columns: 1fr; gap: 0; }
   .trust-row { grid-template-columns: 1fr; gap: 10px; }
   .trust-act { justify-content: flex-start; }
+  .trust-row > span:empty, .trust-act:empty { display: none; }
   .decision { padding: 18px 16px; }
 }
 @media (max-width: 480px) {
@@ -792,3 +793,22 @@ details.more > :not(summary) { margin-top: 8px; }
 .ringo-done .ringo-thumb { animation: ringo-pop 0.45s cubic-bezier(.3, 1.5, .6, 1) both; transform-origin: 50% 100%; }
 @keyframes ringo-pop { from { transform: scale(0.6); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .ringo-done .ringo-thumb { animation: none; } .ring-pulse::before { animation: none; box-shadow: 0 0 0 3px rgba(67, 175, 193, 0.35); } }
+
+/* 404: the dealer with his SOLD tag */
+.gone { display: flex; align-items: center; gap: 32px; max-width: 680px; margin: 12vh auto 0; }
+.gone img { flex: none; }
+.gone h1 { font-family: var(--font-display); font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+.gone p { margin: 8px 0 20px; color: var(--muted); }
+@media (max-width: 480px) { .gone { flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 24px; } .gone img { width: 120px; height: auto; } }
+.gone .btn { text-decoration: none; }
+
+/* Trust: Ringo by the intro, the crew at the bottom */
+.trust-intro { display: flex; align-items: center; gap: 20px; }
+.trust-intro .page-title { margin-top: 0; }
+.trust-intro .intro { margin-top: 6px; }
+.cast-lineup { display: flex; flex-wrap: wrap; gap: 12px 28px; margin-top: 14px; }
+.cast-lineup li { display: flex; align-items: center; gap: 10px; }
+.cast-lineup span { display: grid; font-size: 13px; color: var(--muted); }
+.cast-lineup b { font-size: 14px; font-weight: 600; color: var(--ink); }
+@media (max-width: 480px) { .trust-intro { align-items: flex-start; gap: 14px; margin-top: 14px; } .cast-lineup { display: grid; grid-template-columns: 1fr 1fr; } }
+.foot-link { color: inherit; text-decoration: underline; text-decoration-color: var(--sand); text-underline-offset: 2px; }

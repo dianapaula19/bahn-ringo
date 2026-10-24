@@ -35,7 +35,7 @@ export function AppFrame({ children, section, snapshotAt, board = false }: { chi
           </Link>)}
         </div>)}
       </nav>
-      <div className="sidebar-foot">{snapshotAt ? `Snapshot ${fmtDateTime(snapshotAt)}` : "Fictional snapshot"}<br />Fictional data · calls and drivers simulated</div>
+      <div className="sidebar-foot">{snapshotAt && <>Snapshot {fmtDateTime(snapshotAt)}<br /></>}Fictional data · calls and drivers simulated<br /><Link href="/trust#crew" className="foot-link">Meet the crew</Link></div>
     </aside>
     <div className="main" id="main" tabIndex={-1}>{children}</div>
   </div>
