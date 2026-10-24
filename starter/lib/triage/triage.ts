@@ -154,7 +154,7 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const dsPending = dsProps.filter((p) => p.details.status === "PENDING_REVIEW")
   if (dsPending.length) return {
     reason: "RECORDED_PROPOSAL", severity: "medium", sources: dsPending.map((p) => ref("agent_proposals", p.id)),
-    why: `A recorded agent proposal waits for review: ${String(dsPending[0].details.summary)}`,
+    why: `Recorded proposal: ${String(dsPending[0].details.summary)}`,
   }
   // 7 CUSTOMER_CONTACT
   const identity = items.find((w) => w.details.kind === "IDENTITY_INPUT_REQUIRED")

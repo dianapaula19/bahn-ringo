@@ -8,8 +8,9 @@ import { withBase } from "@/lib/base"
 import { loadHandover, loadQueue } from "./_lib/agent-api"
 import { AppFrame } from "./components/app-frame"
 import { Icon } from "./components/icons"
-import { CAST } from "./components/ringo"
-import { Ago, When, agentStatus } from "./components/ring/bits"
+import { CAST, LizardFace } from "./components/ringo"
+import { Ago, When } from "./components/ring/bits"
+import { nextAction } from "@/lib/triage/next-action"
 
 const PAGE = 50
 const SEEN_KEY = "ring.lastSeen"
@@ -73,9 +74,9 @@ export default function NeedsYou() {
   const moving = queue ? queue.total - queue.needsYou.length : 0
 
   return <AppFrame section="queue" snapshotAt={queue?.snapshotAt ?? null}><main className="page queue-page">
-    <HandoverStrip now={queue?.now ?? null} />
+    <ShiftReport queue={queue} />
     <header className="queue-head">
-      <h1>Needs you{queue && queue.needsYou.length > 0 && <span className="queue-count num">{queue.needsYou.length}</span>}</h1>
+      <h1 id="needs-h">Needs you{queue && queue.needsYou.length > 0 && <span className="queue-count num">{queue.needsYou.length}</span>}</h1>
       <p className="queue-sub">{queue
         ? <>Checked <When at={queue.now} now={queue.now} /> · {queue.total} orders · <span className="kbd-hint">j / k to move, Enter to open</span></>
         : "Checking every order…"}</p>
@@ -88,14 +89,14 @@ export default function NeedsYou() {
       <div className="calm-cast" role="img" aria-label="Ringo with a pickup site, a customer and a driver">{(["ringo", "dealer", "customer", "driver"] as const).map((who) =>
         // eslint-disable-next-line @next/next/no-img-element -- a static svg needs no optimiser
         <img key={who} src={withBase(CAST[who].src)} alt="" width={107} height={120} />)}</div>
-      <div><p className="calm-title">Nothing needs you.</p><p className="calm-sub">Quiet on the lot. {moving} orders moving; one shows up here the moment a person is needed.</p></div>
+      <div><p className="calm-title">Nothing needs you.</p><p className="calm-sub">Quiet on the lot. {moving} orders moving.</p></div>
     </div>}
     {queue && queue.needsYou.length > 0 && <NeedsYouGroups items={queue.needsYou} now={queue.now} />}
 
     {queue && <section className="sec" aria-labelledby="ring-h">
       <div className="sec-head"><h2 id="ring-h">Ringo is on it</h2><span className="count num">{queue.ring.length || ""}</span>
-        <span className="note">Pickup checks Ringo can do by phone. Open one to run it.</span></div>
-      {queue.ring.length ? <Rows items={queue.ring} now={queue.now} label="Orders Ringo can work" /> : <p className="empty">Ringo has nothing to check right now.</p>}
+        <span className="note">He can phone these. Open one to start him.</span></div>
+      {queue.ring.length ? <Rows items={queue.ring} now={queue.now} label="Orders Ringo can work" /> : <p className="empty">Nothing for Ringo right now.</p>}
     </section>}
 
     {queue && <details className="fine">
@@ -108,13 +109,15 @@ export default function NeedsYou() {
   </main></AppFrame>
 }
 
-// Most urgent first: safety and high-severity cards on top, routine follow-ups below. Rank order is kept inside each group.
+const overdue = (q: QueueItem, now: string) => !!q.decideBy && q.decideBy < now
+
+// Now: safety, high severity, or past its time. The rest can wait a little. Rank order is kept inside each group.
 function NeedsYouGroups({ items, now }: { items: QueueItem[]; now: string }) {
-  const urgent = items.filter((q) => q.severity === "critical" || q.severity === "high")
+  const urgent = items.filter((q) => q.severity === "critical" || q.severity === "high" || overdue(q, now))
   const later = items.filter((q) => !urgent.includes(q))
   return <>
-    {urgent.length > 0 && <><h2 className="q-group">Now · {urgent.length}</h2><Rows items={urgent} now={now} label="Orders that need a person now" person /></>}
-    {later.length > 0 && <><h2 className="q-group">When you can · {later.length}</h2><Rows items={later} now={now} label="Routine follow-ups" person /></>}
+    {urgent.length > 0 && <><h2 className="q-group" id="now">Now · {urgent.length}</h2><Rows items={urgent} now={now} label="Orders that need a person now" person /></>}
+    {later.length > 0 && <><h2 className="q-group">When you can · {later.length}</h2><Rows items={later} now={now} label="Follow-ups" person /></>}
   </>
 }
 
@@ -123,12 +126,13 @@ function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: 
   return <>
     <ul className="q-list" aria-label={label}>
       {items.slice(0, shown).map((q) => {
-        const status = agentStatus(q)
-        return <li key={q.orderId}><Link data-row={q.orderId} className={`q-row sev-${q.severity}`} href={`/orders/${q.orderId}`} onClick={() => { try { sessionStorage.setItem(ROW_KEY, q.orderId) } catch {} }}>
-          <span className="q-sev" aria-label={`Severity ${q.severity}`} />
-          <span className="q-id"><span className="mono q-ref">{q.reference}</span><span className="q-vehicle">{q.vehicle}</span></span>
-          <span className="q-why" title={q.why}>{q.why}</span>
-          <span className={`q-status${status.tone === "accent" ? " tone-accent" : ""}`}>{status.text}</span>
+        const next = nextAction(q)
+        return <li key={q.orderId}><Link data-row={q.orderId} className={`q-row sev-${q.severity}${q.reason === "SAFETY" ? " is-safety" : ""}`} href={`/orders/${q.orderId}`} onClick={() => { try { sessionStorage.setItem(ROW_KEY, q.orderId) } catch {} }}>
+          <span className="q-main">
+            <span className="q-why" title={q.why}>{q.reason === "SAFETY" && <span className="sr-only">Safety: </span>}{q.why}</span>
+            <span className="q-meta"><span className="mono">{q.reference}</span> · {q.vehicle}</span>
+          </span>
+          {next ? <span className="q-next">{next}</span> : <span aria-hidden="true" />}
           <Due at={q.decideBy} now={now} person={person} />
         </Link></li>
       })}
@@ -141,14 +145,16 @@ function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: 
 function Due({ at, now, person }: { at: string | null; now: string; person: boolean }) {
   const rel = relativeTo(at, now)
   if (!at || !rel) return <span className="q-due" />
-  return <span className={`q-due${rel.past && person ? " tone-danger" : ""}`}>{rel.past ? <>Overdue by {rel.text.replace(/ ago$/, "")}</> : <>Decide <Ago at={at} now={now} /></>}</span>
+  return <span className={`q-due num${rel.past && person ? " tone-danger" : ""}`}>{rel.past ? <>Overdue {rel.text.replace(/ ago$/, "")}</> : <>Due <Ago at={at} now={now} /></>}</span>
 }
 
-function HandoverStrip({ now }: { now: string | null }) {
+/** Ringo's shift report: three plain lines over the queue and the handover. Counts come from the triaged rows
+ *  below; "Show what happened" opens the cited handover sentences, each one tied to its source rows. */
+function ShiftReport({ queue }: { queue: QueueResponse | null }) {
   const [since, setSince] = useState<string | null | undefined>(undefined)
   const [handover, setHandover] = useState<Handover | null>(null)
   const [error, setError] = useState(false)
-  const [all, setAll] = useState(false)
+  const [open, setOpen] = useState(false)
 
   useEffect(() => { setSince(readSeen()) }, [])
   useEffect(() => {
@@ -165,21 +171,33 @@ function HandoverStrip({ now }: { now: string | null }) {
   }, [since])
 
   const lines = handover?.sentences ?? []
-  return <section className="handover" aria-labelledby="handover-h">
-    <div className="handover-head">
-      <h2 id="handover-h">Since you left</h2>
-      {handover && <span className="handover-since">since <When at={handover.since} now={now} /></span>}
-      {since && <button type="button" className="link-btn" onClick={() => setSince(null)}>Show the last 3 hours</button>}
-    </div>
-    {!handover && !error && <div className="handover-skel" aria-busy="true"><span /><span /></div>}
-    {error && <p className="empty">The handover could not be loaded. The queue below is still current.</p>}
-    {handover && lines.length === 0 && <p className="empty">Nothing new happened while you were away.</p>}
-    {lines.length > 0 && <ul className="handover-list">
-      {(all ? lines : lines.slice(0, 3)).map((s, i) => <li key={i}>{s.orderId ? <Link href={`/orders/${s.orderId}`}>{s.text}</Link> : s.text}</li>)}
-    </ul>}
-    <div className="handover-foot">
-      {lines.length > 3 && <button type="button" className="link-btn" onClick={() => setAll((v) => !v)}>{all ? "Show less" : `Show all ${lines.length}`}</button>}
-      {handover && handover.dropped > 0 && <span className="handover-dropped">{handover.dropped} {handover.dropped === 1 ? "line was" : "lines were"} left out because the source could not be found.</span>}
+  const orders = new Set(lines.map((s) => s.orderId).filter(Boolean)).size
+  const now = queue?.now ?? null
+  const late = queue ? queue.needsYou.filter((q) => overdue(q, queue.now)).length : 0
+  const top = queue?.needsYou[0]
+  const ready = !!queue && (!!handover || error)
+
+  return <section className="shift" aria-labelledby="shift-h">
+    <LizardFace who="ringo" size={48} />
+    <div className="shift-body">
+      <h2 id="shift-h" className="sr-only">Ringo&apos;s shift report</h2>
+      <div className="bubble" aria-busy={!ready}>
+        {!ready ? <div className="handover-skel"><span /><span /></div> : <>
+          <p>{error ? "I couldn't load what happened while you were out. The queue below is current."
+            : lines.length ? <>Here&apos;s the lot since <When at={handover!.since} now={now} />: {lines.length} {lines.length === 1 ? "update" : "updates"} on {orders} {orders === 1 ? "order" : "orders"}.</>
+              : <>Nothing new since <When at={handover!.since} now={now} />.</>}</p>
+          <p>{top ? <><a href="#needs-h">{queue!.needsYou.length} need you</a>{late > 0 && <>, <a href="#now">{late} overdue</a></>}. Start with the {top.vehicle}.</> : "Nothing needs you. Enjoy the coffee."}</p>
+          {queue!.ring.length > 0 && <p><a href="#ring-h">{queue!.ring.length} I can phone myself</a>. Open one and say the word.</p>}
+        </>}
+      </div>
+      {(lines.length > 0 || since) && <div className="shift-foot">
+        {lines.length > 0 && <button type="button" className="link-btn" aria-expanded={open} aria-controls="shift-log" onClick={() => setOpen((v) => !v)}>{open ? "Hide what happened" : "Show what happened"}</button>}
+        {since && <button type="button" className="link-btn" onClick={() => setSince(null)}>Last 3 hours instead</button>}
+      </div>}
+      {open && <div id="shift-log">
+        <ul className="handover-list">{lines.map((s, i) => <li key={i}>{s.orderId ? <Link href={`/orders/${s.orderId}`}>{s.text}</Link> : s.text}</li>)}</ul>
+        {handover && handover.dropped > 0 && <p className="handover-dropped">{handover.dropped} {handover.dropped === 1 ? "line was" : "lines were"} left out: no source found.</p>}
+      </div>}
     </div>
   </section>
 }

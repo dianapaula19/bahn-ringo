@@ -1,6 +1,6 @@
 "use client"
 
-import type { ActionType, EvidenceLevel, Fact, QueueItem, StoryEntry, TriageReason, TrustMode } from "@/lib/contract"
+import type { ActionType, EvidenceLevel, Fact, StoryEntry, TrustMode } from "@/lib/contract"
 import { dayKey, fmtClock, fmtDateTime, fmtLong, relativeTo } from "@/lib/present/time"
 import type { Tone } from "@/lib/present/types"
 import { LizardFace, type Lizard } from "../ringo"
@@ -37,23 +37,6 @@ export const MODE: Record<TrustMode, { label: string; tone: Tone }> = {
   ask: { label: "Ask a person first", tone: "warn" },
   never: { label: "Never", tone: "danger" },
 }
-
-const STATUS: Record<TriageReason, { text: string; tone: Tone }> = {
-  SAFETY: { text: "Safety: a person owns it", tone: "danger" },
-  FAILED_ACTION: { text: "Failed: check first", tone: "danger" },
-  AUTHORITY_BLOCKED: { text: "Customer must clear it", tone: "warn" },
-  DECISION_WAITING: { text: "Ringo needs your decision", tone: "accent" },
-  RECORDED_PROPOSAL: { text: "Proposal to review", tone: "warn" },
-  DRIVER_WAITING: { text: "Driver is waiting", tone: "warn" },
-  CUSTOMER_CONTACT: { text: "Customer contact needed", tone: "warn" },
-  DUE_SOON: { text: "A person must act", tone: "warn" },
-  RING_CAN_CALL: { text: "Ringo can call", tone: "accent" },
-  RING_WORKING: { text: "Ringo is working", tone: "accent" },
-  WAITING_EXTERNAL: { text: "Waiting on a reply", tone: "neutral" },
-  QUIET: { text: "Fine", tone: "ok" },
-}
-
-export const agentStatus = (q: Pick<QueueItem, "reason">) => STATUS[q.reason]
 
 /** "08:24 UTC" when it is the same day as now, else "19 Oct 10:44 UTC". */
 export function When({ at, now }: { at: string | null | undefined; now?: string | null }) {

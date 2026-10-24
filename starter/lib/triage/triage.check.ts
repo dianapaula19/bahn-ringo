@@ -16,6 +16,7 @@ import { emptyRing, type RingOrderState } from "@/lib/agent/store"
 import type { Bundle } from "@/lib/present/bundle"
 import { loadOrder } from "@/lib/present/load"
 import { ringEvents, ringProposals } from "@/lib/ring-schema"
+import { nextAction } from "./next-action"
 import { ringEligibility, triage } from "./triage"
 
 const NOW = SNAPSHOT
@@ -64,6 +65,16 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     assert.equal(t("ord-00010", { ...emptyRing(), calls: [call] }).reason, "FAILED_ACTION")
     const job = { id: "job-x", status: "scheduled", dueAt: "2026-10-21T10:00:00.000Z", reason: "retry" } as never
     assert.equal(t("ord-00010", { ...emptyRing(), calls: [call], jobs: [job] }).reason, "RING_WORKING")
+  })
+  test("queue rows name a concrete next step, or none", () => {
+    const next = (id: string) => nextAction(t(id))
+    assert.equal(next("ord-00322"), "Decide: roadside or tow")
+    assert.equal(next("ord-00458"), "Confirm with customer")
+    assert.equal(next("ord-00593"), "Answer driver")
+    assert.equal(next("ord-00516"), "Run Ringo")
+    assert.equal(nextAction({ reason: "DUE_SOON", why: "Site, 08:10 UTC: “Who collects?”", oneDecision: null, sources: [] }), "Call site")
+    assert.equal(nextAction({ reason: "DUE_SOON", why: "A trade-in receipt shares a branch.", oneDecision: null, sources: [] }), null)
+    assert.equal(nextAction({ reason: "WAITING_EXTERNAL", why: "", oneDecision: null, sources: [] }), null)
   })
 })
 
