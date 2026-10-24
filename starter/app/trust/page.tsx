@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import posthog from "posthog-js"
 import type { TrustLedger, TrustMode, TrustRow } from "@/lib/contract"
 import { loadTrust, updateTrust } from "../_lib/agent-api"
@@ -85,6 +86,7 @@ export default function TrustPage() {
         </li>)}</ul>}
       </section>
     })}
+    <footer className="sec note-text"><Link href="/evals" className="foot-link">How we test Ringo</Link>: ten scripted situations, scored on what Ringo actually did.</footer>
   </main></AppFrame>
 }
 
