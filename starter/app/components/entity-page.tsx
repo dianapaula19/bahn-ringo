@@ -16,7 +16,7 @@ const INDEX: Record<EntityKind, { href: string; label: string; noun: string }> =
   site: { href: "/sites", label: "Places", noun: "place" },
 }
 
-export function EntityPage({ kind, params }: { kind: EntityKind; params: Promise<{ id: string }> }) {
+export function EntityPage({ kind, params, extra }: { kind: EntityKind; params: Promise<{ id: string }>; extra?: React.ReactNode }) {
   const { id } = use(params)
   const [view, setView] = useState<EntityView | null>(null)
   const [error, setError] = useState("")
@@ -41,6 +41,7 @@ export function EntityPage({ kind, params }: { kind: EntityKind; params: Promise
       <div className="panel panel-facts"><FactList facts={view.facts} /></div>
       {view.links.length > 0 && <div className="chips">{view.links.map((link) => <Link className="chip-fact link" href={link.href} key={link.href} title={link.hint ?? undefined}><Icon name={kind === "customer" ? "building" : "people"} size={13} />{link.label}</Link>)}</div>}
       {view.notes.map((note) => <p className="note-text" key={note}>{note}</p>)}
+      {extra}
       <section className="sec">
         <SectionHead title="Orders" count={view.cards.length} />
         {view.cards.length === 0 && <Empty>No order in this snapshot involves this {index.noun}.</Empty>}

@@ -316,6 +316,51 @@ Asked for: when a person edits or rejects one of Ringo's proposals, keep the dif
 - Putting the learned rules in Ringo's prompt. The gate's block message already tells him what to fix, and run 4 shows he does. The ceiling: a block costs one of his three proposal attempts.
 - Wiping corrections and learned rules on the demo reset. They are the review record the rules cite, so `reset()` keeps them. If a reset deletes a cited proposal, the correction row still holds the diff, the note and the order.
 
+## 6j. Calls: site playbooks, the escalation ladder, languages, Hear it (round 2, calls lane)
+
+**What we asked for.** Four things on Ringo's phone work: a playbook per site that the next call starts from; an escalation ladder with stop rules enforced in code; sites that answer in their own language, with an English translation beside every line; and an opt-in way to hear a call, plus a picture of the phone-menu path.
+
+**What we built**
+- **Site playbooks** (`ring_playbooks`, `lib/agent/playbook/playbook.ts`). After every call, code writes what it saw: the menu path that reached a person ("Stock control: Main menu → press 3 → Collections → press 2 → hold 35 s → Stock control → Ilona Alderbrook"), or where the line dropped. Ringo adds what the site said with a new tool, `note_playbook`, and each note must carry the site's exact words; code checks the quote against the transcript. Every note cites its call id and the time of the line it came from. Before dialling, Ringo must call `read_playbook` (a cheap read, enforced in `place_call`). The call then opens with "Started from the site playbook", and the call card says "Used the playbook from the 09:01 UTC call", linking to that call. A newer call replaces older, unedited notes on the same topic and rung. A person's edit is never overwritten. On `/sites/[id]` a person can edit a note (marked "edited by ops readiness, 09:07 UTC") or delete it (with a confirm step). The demo reset and `clearOrder` wipe playbook notes with their source calls, so no note points at a missing call.
+- **Escalation ladder** (`ladderCheck` in `lib/agent/sim/calls.ts`): site desk → stock control → branch manager. `place_call` must name its `rung`, and the code refuses a call when:
+  - it starts at the manager;
+  - it skips a rung;
+  - it climbs without a `why`;
+  - it would be a third attempt on the same rung for this order;
+  - it would be a fourth call in one run;
+  - the site is closed in its own timezone (it used to dial and get the "closed" message);
+  - it climbs on a safety case.
+
+  `call_input` also refuses a menu press that reaches a person or mailbox on a different rung from the call's. Every refusal starts with "Ladder stop:". The run panel shows the three rungs (not tried, on the line, answered, no answer) and one line on why Ringo stopped climbing.
+- **Languages** (`langForCountry`): DE German, DK Danish, FI Finnish, all others English. Velantora Helsinki (516, 593) now has a Finnish phone menu and Finnish-speaking staff. Kervalin Frankfurt (010) and Vellendor Berlin (023) are German, with no English-menu shortcut. The generic tree for any other site speaks the site's language. Every menu line has written English. Each person's line, and each of Ringo's own lines, is translated by the model at low effort. The transcript shows two columns, "Said, in Finnish" and "In English" with a "translated" label; on a phone the English sits under the original. A fact from a non-English call must carry `quote` in the original words, stored with the fact and shown under the claim.
+- **Speech gate on translations.** The no-mechanical-advice and no-promises rules are English regexes, so a German "Bitte starten Sie den Motor neu" passed them. Ringo's line is now checked on both the words and their English translation. With no translation, the line is not sent (fail closed).
+- **Hear it** (opt-in, never automatic): `speechSynthesis` with voices in the call's language. The site and the menu take the first voice and Ringo takes the second when there is one; with only one voice, his pitch is raised. The line being spoken is highlighted. When the device has no voice for the language, it falls back to highlighting each line in turn and says so: "No Finnish voice on this device, so I'll follow along on screen instead." **Phone-menu path**: `Main menu → [3] → Collections → [2] → hold 35 s → Stock control → Ilona Alderbrook`, built from the transcript.
+- **Menu type-ahead.** `press: "32"` walks the menu in one step. That is how a call "starts from the playbook" (593 used it).
+
+**What we checked**
+- `lib/agent/sim/calls.check.ts`: 9 node:test cases with no DB and no model, now part of `npm run ring:check`. They cover the language map, every ladder rule, the menu walk, the path text, the quote check (a paraphrase is not a quote; menu lines don't count) and the German speech-gate case.
+- The guards through the real tool code, without a Ringo run (one translation call). Each refusal came back as expected: dialling before `read_playbook`, the manager after the desk, stock control without a `why`, pressing 9 on a desk call, the German restart line, and a third desk call on one order.
+- **Live runs (5, `claude-sonnet-5-5`):**
+  1. 516 Finnish: Ringo read an empty playbook, dialled stock control, spoke Finnish, recorded two quoted facts with Finnish quotes, and wrote 4 notes plus the path. Proposal ready.
+  2. 593, same site: "Read Velantora Helsinki's playbook: 5 notes", pressed "32" in one go, and Ilona answered.
+  3. 010 German: the first call dropped in the transfer by script. Code wrote "the line dropped here once"; Ringo re-read and scheduled a callback.
+  4. The 010 callback: Ringo started from that note, carried `reconciled`, and held a German call with Mareike. Proposal ready.
+  5. 023 in the browser with the message "Ring the branch manager first": Ringo kept to the ladder itself ("ladder starts at the desk") and held a German call, while the rung strip pulsed "on the line".
+- Screenshots at 1440 and 390 of the call card (Finnish and German), the replay with the ladder strip, a live run mid-call, Hear it in fallback mode, the site playbook (full, edit, delete confirm, empty). No horizontal scroll, no failed requests. `typecheck`, `ring:check` (20 + 9), `build` pass.
+- Replay fixtures for 516 and 010 were re-recorded from runs 1, 3 and 4, so Replay shows the Finnish and German calls.
+
+**What we threw away**
+- **A separate table or new run-event types for rung and playbook use.** `CallTurn` and `RunEvent` are fixed in `contract.ts`, so the rung and the playbook marker ride as the call's first system turns (extra jsonb fields: `rung`, `why`, `playbook`; `lang`, `en`, `who`, `label`, `seconds` on lines). The UI shows them in the call's head, not as transcript lines.
+- **A per-call summariser model call to write the playbook.** Code writes what it observed and Ringo writes what was said, with a quote check. An extra model call would have been a third writer with no evidence check.
+- **Translating with Ringo's own gloss** (a `sayEnglish` field). The speech gate would then trust the speaker to describe their own words, so an independent translation is used instead.
+- **Keeping the English menu option at Vellendor Berlin** (press 9 for English). The rule is that a site answers in its own language.
+- **A new 593 fixture.** Run 2 did not ask the driver, which the recorded 593 run does and `eval:ring` asserts, so the old fixture stays.
+
+**Contract drift (for the integrator):**
+- `ToolName` lacks `read_playbook` and `note_playbook`; the code widens it locally as `RingTool`.
+- `place_call` now requires `rung`.
+- Outside opening hours, a call is refused before dialling, not dialled to the "closed" message.
+
 ## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, and so on) are unverified. Serving under `/apps/<slug>` works in a local production build with the base path; whether the gateway keeps or strips the prefix on a real box is not checked.

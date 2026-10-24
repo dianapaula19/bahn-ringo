@@ -11,6 +11,9 @@ import { ACTION, FactChip, LIZARD, MODE, Simulated, When, factLizard } from "./b
 import { LizardFace, RingoFace } from "../ringo"
 import { withBase } from "@/lib/base"
 import type { Detail } from "../order-detail"
+import { CallView } from "./call-view"
+
+export { CallView }
 
 // ---------------------------------------------------------------- plain-words payloads
 
@@ -258,9 +261,6 @@ export function FactsPanel({ story }: { story: OrderStory }) {
 
 // ---------------------------------------------------------------- timeline + calls
 
-const OUTCOME: Record<string, string> = { ANSWERED: "Answered", NO_ANSWER: "No answer", VOICEMAIL: "Voicemail", CLOSED: "Site closed", DROPPED_UNKNOWN: "Dropped, outcome unknown" }
-const SPEAKER = { ivr: "Phone menu", ring: "Ringo", site: "Site", system: "Line" } as const
-
 const RECENT = 10
 
 export function Timeline({ story }: { story: OrderStory }) {
@@ -295,40 +295,4 @@ function TimelineEntry({ entry: e, now, facts, call }: { entry: StoryEntry; now:
       {call && open && <CallView call={call} now={now} />}
     </div>
   </li>
-}
-
-export function CallView({ call, now, live = false }: { call: CallRecord | { id: string; transcript: CallRecord["transcript"]; outcome: CallRecord["outcome"]; purpose?: string; reconciledFrom?: CallRecord["reconciledFrom"] }; now: string | null; live?: boolean }) {
-  const [speaking, setSpeaking] = useState(false)
-  const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window
-  useEffect(() => () => { if (canSpeak) window.speechSynthesis.cancel() }, [canSpeak])
-
-  function listen() {
-    const synth = window.speechSynthesis
-    if (speaking) { synth.cancel(); setSpeaking(false); return }
-    synth.cancel()
-    call.transcript.forEach((t, i) => {
-      const u = new SpeechSynthesisUtterance(t.text)
-      u.pitch = t.speaker === "ring" ? 1.1 : t.speaker === "ivr" ? 0.8 : 1
-      u.rate = 1.05
-      if (i === call.transcript.length - 1) u.onend = () => setSpeaking(false)
-      synth.speak(u)
-    })
-    setSpeaking(true)
-  }
-
-  return <div className="call">
-    <div className="call-head">
-      <Simulated>Simulated call</Simulated>
-      {call.purpose && <span className="call-purpose">{call.purpose}</span>}
-      {call.outcome ? <span className={`chip tone-${call.outcome === "ANSWERED" ? "ok" : "warn"}`}>{OUTCOME[call.outcome]}</span> : live ? <span className="chip tone-accent"><span className="chip-dot live-dot" />On the line</span> : null}
-      {canSpeak && call.transcript.length > 0 && <button type="button" className="btn small" onClick={listen} aria-pressed={speaking}>{speaking ? "Stop" : "Listen"}</button>}
-    </div>
-    {call.reconciledFrom && <p className="call-reconciled"><b>Before redialling, Ringo checked:</b> {call.reconciledFrom.finding}</p>}
-    {call.transcript.length === 0 && <p className="empty">Dialling…</p>}
-    <ol className="transcript">{call.transcript.map((t, i) => <li key={i} className={`turn sp-${t.speaker}`}>
-      <span className="turn-who">{SPEAKER[t.speaker]}</span>
-      <span className="turn-text">{t.dtmf ? <><span className="dtmf">Pressed {t.dtmf}</span> </> : null}{t.dtmf && t.text.startsWith("Pressed") ? null : t.text}</span>
-      <span className="turn-at"><When at={t.at} now={now} /></span>
-    </li>)}</ol>
-  </div>
 }

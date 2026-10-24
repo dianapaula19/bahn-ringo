@@ -8,9 +8,11 @@ import { Icon } from "../icons"
 import { withBase } from "@/lib/base"
 import { RingoFace } from "../ringo"
 import { FactChip, Simulated, When } from "./bits"
-import { CallView } from "./story"
+import { CallView } from "./call-view"
+import { callRung, LADDER_STOP, RUNG_LABEL, RUNGS, type Rung } from "@/lib/agent/sim/calls"
 
-const DOING: Record<ToolName, string> = {
+const DOING: Record<ToolName | "read_playbook" | "note_playbook", string> = {
+  read_playbook: "Reading the site's playbook", note_playbook: "Writing notes for next time",
   read_order: "Reading the order", read_messages: "Reading messages and calls", read_docs: "Reading documents and site rules",
   record_fact: "Writing down what he learned", place_call: "Calling the site", call_input: "On the call",
   send_driver_message: "Messaging the driver", propose_action: "Drafting a proposal", schedule_callback: "Scheduling a callback", stop_with_decision: "Wrapping up",
@@ -118,6 +120,8 @@ export function RunPanel({ story, onDone, heroRun = false, runRequest = 0, onRun
   const site = lines.flatMap((l) => l.kind === "step" ? [/^Dialled (.+?) \(/.exec(l.text)?.[1]] : []).filter(Boolean).at(-1) ?? "the site"
   // The run ended with something for a person to review.
   const proposed = !running && lines.some((l) => l.kind === "event" && l.event.type === "proposal")
+  const ladderStop = lines.flatMap((l) => (l.kind === "step" && l.done && l.text.includes(LADDER_STOP) ? [l.text.slice(l.text.indexOf(LADDER_STOP) + LADDER_STOP.length).trim()] : [])).at(-1) ?? null
+  const ladderCalls = lines.flatMap((l) => (l.kind === "call" ? [{ rung: callRung(l.turns), outcome: l.record?.outcome ?? null, live: !l.record }] : []))
 
   return <section className="ring-panel" aria-labelledby="ring-h" ref={panel}>
     <div className="sec-head"><RingoFace size={40} /><h2 id="ring-h">Ringo</h2>
@@ -142,9 +146,28 @@ export function RunPanel({ story, onDone, heroRun = false, runRequest = 0, onRun
       {lines.map((l, i) => <li key={i} className={`step-line kind-${l.kind}`}><LineView line={l} now={story.now} live={running} acted={lines.slice(0, i).some((x) => x.kind === "step" || x.kind === "call")} /></li>)}
       <li ref={end} aria-hidden="true" />
     </ul>}
+    {(ladderCalls.some((c) => c.rung) || ladderStop) && <Ladder calls={ladderCalls} stop={ladderStop} ended={!running} />}
     {callOpen && <p className="ringo-ringing" role="status"><span className="ring-pulse"><RingoFace size={32} /></span>Ringo is ringing {site}…</p>}
     {proposed && <p className="ringo-done" role="status"><span className="ringo-thumb" aria-hidden="true">{/* eslint-disable-next-line @next/next/no-img-element -- a static svg */}<img src={withBase("/ringo.svg")} alt="" /></span>Done. Over to you.</p>}
   </section>
+}
+
+const TRIED: Record<string, string> = { ANSWERED: "answered", NO_ANSWER: "no answer", VOICEMAIL: "voicemail", CLOSED: "closed", DROPPED_UNKNOWN: "line dropped" }
+
+/** The escalation ladder for this run: which rung each call reached, the current one, and why Ringo stopped climbing. */
+function Ladder({ calls, stop, ended }: { calls: { rung: Rung | null; outcome: string | null; live: boolean }[]; stop: string | null; ended: boolean }) {
+  const last = calls.filter((c) => c.rung).at(-1)
+  const why = stop ?? (ended && last ? (last.outcome === "ANSWERED" ? `someone at ${RUNG_LABEL[last.rung!].toLowerCase()} answered, so there was no need to climb.` : `${RUNG_LABEL[last.rung!].toLowerCase()}: ${TRIED[last.outcome ?? ""] ?? "no answer"}. Climbing further is a person's call.`) : null)
+  return <div className="ladder" aria-label="Escalation ladder">
+    <ol>{RUNGS.map((r) => {
+      const mine = calls.filter((c) => c.rung === r)
+      const now = mine.some((c) => c.live)
+      const state = now ? "on the line" : mine.length ? mine.map((c) => TRIED[c.outcome ?? ""] ?? "tried").join(", ") : "not tried"
+      return <li key={r} className={`rung${now ? " now" : mine.length ? " tried" : ""}${last?.rung === r ? " current" : ""}`} aria-current={last?.rung === r ? "step" : undefined}>
+        <span className="rung-dot" aria-hidden="true" /><b>{RUNG_LABEL[r]}</b><small>{state}</small></li>
+    })}</ol>
+    {why && <p className="ladder-why"><b>{stop ? "Why I stopped climbing:" : "Where I stopped:"}</b> {why.replace(/^\w/, (c) => c.toUpperCase())}</p>}
+  </div>
 }
 
 function LineView({ line: l, now, live, acted }: { line: Line; now: string; live: boolean; acted: boolean }) {

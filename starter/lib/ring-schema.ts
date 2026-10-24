@@ -165,3 +165,26 @@ export const ringLearnedRules = pgTable("ring_learned_rules", {
   updatedAt: ts("updated_at").notNull(),
   updatedBy: text("updated_by").notNull(),
 })
+
+// Site playbooks: what Ringo learned about a site's phone line and handover,
+// one row per note, each sourced to the Ringo call (and the moment) it came from.
+// A person can edit or delete a note on the site page. Wiped by the demo reset.
+export const ringPlaybooks = pgTable("ring_playbooks", {
+  id: text("id").primaryKey(),
+  siteId: text("site_id").notNull(),
+  /** phone_path | people | keys | handover | hours | quirk */
+  topic: text("topic").notNull(),
+  /** Which ladder rung a phone_path reaches (site_desk | stock_control | branch_manager). */
+  rung: text("rung"),
+  note: text("note").notNull(),
+  /** The site's own words, in the language they were said. Null for code-observed notes. */
+  quote: text("quote"),
+  language: text("language"),
+  level: text("level").notNull(),
+  sourceCallId: text("source_call_id").notNull(),
+  orderId: text("order_id").notNull(),
+  sourceAt: ts("source_at").notNull(),
+  createdAt: ts("created_at").notNull(),
+  editedBy: text("edited_by"),
+  editedAt: ts("edited_at"),
+})
