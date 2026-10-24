@@ -32,7 +32,7 @@ export const ACTION: Record<ActionType, string> = {
 }
 
 export const MODE: Record<TrustMode, { label: string; tone: Tone }> = {
-  auto: { label: "Ring does it", tone: "ok" },
+  auto: { label: "Ringo does it", tone: "ok" },
   ask: { label: "Ask a person first", tone: "warn" },
   never: { label: "Never", tone: "danger" },
 }
@@ -41,13 +41,13 @@ const STATUS: Record<TriageReason, { text: string; tone: Tone }> = {
   SAFETY: { text: "Safety: a person owns it", tone: "danger" },
   FAILED_ACTION: { text: "Failed: check first", tone: "danger" },
   AUTHORITY_BLOCKED: { text: "Customer must clear it", tone: "warn" },
-  DECISION_WAITING: { text: "Ring needs your decision", tone: "accent" },
+  DECISION_WAITING: { text: "Ringo needs your decision", tone: "accent" },
   RECORDED_PROPOSAL: { text: "Proposal to review", tone: "warn" },
   DRIVER_WAITING: { text: "Driver is waiting", tone: "warn" },
   CUSTOMER_CONTACT: { text: "Customer contact needed", tone: "warn" },
   DUE_SOON: { text: "A person must act", tone: "warn" },
-  RING_CAN_CALL: { text: "Ring can call", tone: "accent" },
-  RING_WORKING: { text: "Ring is working", tone: "accent" },
+  RING_CAN_CALL: { text: "Ringo can call", tone: "accent" },
+  RING_WORKING: { text: "Ringo is working", tone: "accent" },
   WAITING_EXTERNAL: { text: "Waiting on a reply", tone: "neutral" },
   QUIET: { text: "Fine", tone: "ok" },
 }
@@ -75,7 +75,7 @@ export function Level({ level }: { level: EvidenceLevel }) {
 const KIND: Partial<Record<Fact["sourceKind"], string>> = {
   message: "message", order_note: "order note", endpoint_detail: "pickup/delivery record", endpoint_claim: "address claim", site_profile: "site profile",
   alert: "alert", incident: "incident", work_item: "task", time_window: "slot record", work_assignment: "assignment", travel_option: "travel quote",
-  travel_reservation: "booking", tracking: "driver app", proof: "proof", document: "document", event: "order event", ring_call: "Ring call", ring_driver_message: "driver chat",
+  travel_reservation: "booking", tracking: "driver app", proof: "proof", document: "document", event: "order event", ring_call: "Ringo call", ring_driver_message: "driver chat",
 }
 
 /** A fact with its level, who said it, from which record, and when. Superseded facts are struck through.

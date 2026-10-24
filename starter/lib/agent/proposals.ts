@@ -70,7 +70,7 @@ export async function propose(b: Bundle, runId: string | null, input: ProposeInp
   const gate = runGate({ command: input.command, actionType: input.actionType, payload: input.payload, summary: input.summary, evidenceRefs: input.evidenceRefs, createdAt: now }, gateContext(b), now)
   if (!gate.passed) return { blocked: gate, reason: "The Reviewer gate blocked it." }
   const mode = await trustMode(input.actionType)
-  if (mode === "never") return { blocked: gate, reason: `${input.actionType} is never allowed for Ring (${TRUST_DEFAULTS[input.actionType].lockedReason}).` }
+  if (mode === "never") return { blocked: gate, reason: `${input.actionType} is never allowed for Ringo (${TRUST_DEFAULTS[input.actionType].lockedReason}).` }
   const row = {
     id: newId("prop"), orderId: b.order.id, runId, command: input.command, actionType: input.actionType, targetType: input.targetType,
     targetId: input.targetId, alertId: input.alertId ?? null, proposedPayload: input.payload, rationale: input.rationale, summary: input.summary,
@@ -95,7 +95,7 @@ async function execute(b: Bundle, p: Proposal, payload: Record<string, unknown>,
     .filter((r) => r.id !== p.id && r.actionType !== p.actionType).map((r) => r.id)) : new Set<string>()
   const latest = await latestEventId(b, siblings)
   if (latest !== p.dependency.basisEventId) {
-    const execution: Execution = { attemptedAt: now, status: "STALE", error: `The order changed since Ring read it (newer event ${latest}). Nothing was changed; Ring must re-read.`, effectEventIds: [] }
+    const execution: Execution = { attemptedAt: now, status: "STALE", error: `The order changed since Ringo read it (newer event ${latest}). Nothing was changed; Ringo must re-read.`, effectEventIds: [] }
     await db.update(ringProposals).set({ status: "APPROVED_AWAITING_EXECUTION", execution }).where(eq(ringProposals.id, p.id))
     return execution
   }
@@ -150,11 +150,11 @@ export async function review(id: string, req: ReviewRequest): Promise<{ status: 
   if (req.decision === "REJECTED") {
     await db.update(ringProposals).set({ status: "REJECTED", review: reviewRow }).where(eq(ringProposals.id, id))
     const proposal = toProposal((await db.select().from(ringProposals).where(eq(ringProposals.id, id)))[0])
-    return { status: 200, body: { proposal, execution: null, next: p.onReject ?? "Nothing changes. Ring notes the reason." } }
+    return { status: 200, body: { proposal, execution: null, next: p.onReject ?? "Nothing changes. Ringo notes the reason." } }
   }
   await db.update(ringProposals).set({ status: "APPROVED_AWAITING_EXECUTION", review: reviewRow }).where(eq(ringProposals.id, id))
   const execution = await execute(loaded.bundle, { ...p, review: reviewRow }, finalPayload, req.reviewerId)
   const proposal = toProposal((await db.select().from(ringProposals).where(eq(ringProposals.id, id)))[0])
-  const next = execution.status === "STALE" ? "The order changed after Ring read it, so nothing was changed. Run Ring again to re-read." : (p.onApprove ?? "Done.")
+  const next = execution.status === "STALE" ? "The order changed after Ringo read it, so nothing was changed. Run Ringo again to re-read." : (p.onApprove ?? "Done.")
   return { status: 200, body: { proposal, execution, next } }
 }

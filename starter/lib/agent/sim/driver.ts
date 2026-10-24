@@ -9,9 +9,9 @@ export async function driverReply(input: {
   const d = input.scenario?.driver
   const knows = d?.knows ?? input.recent.map((m) => `You wrote earlier: "${m}"`)
   const system = [
-    `You are ${d?.persona ?? `${input.driverName}, a freelance car delivery driver`}. This is a simulated driver chat in a training system; the sender is "Ring", the operations assistant.`,
+    `You are ${d?.persona ?? `${input.driverName}, a freelance car delivery driver`}. This is a simulated driver chat in a training system; the sender is "Ringo", the operations assistant.`,
     "Reply in one or two short chat sentences. Answer only from what you know; otherwise say you don't know. Never invent places, times or names.",
     `What you know:\n- ${knows.join("\n- ") || "Nothing beyond the job you accepted."}`,
   ].join("\n\n")
-  return (await shortReply(system, `Ring asks: ${input.question}`, "low", input.ai ?? undefined)) ?? "Sorry, bad signal here. Will reply soon."
+  return (await shortReply(system, `Ringo asks: ${input.question}`, "low", input.ai ?? undefined)) ?? "Sorry, bad signal here. Will reply soon."
 }

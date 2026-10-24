@@ -13,7 +13,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params
   const body = (await request.json().catch(() => ({}))) as Partial<RunRequest>
   if (!(await loadOrder(id))) return NextResponse.json({ error: "Order not found", code: "NOT_FOUND" }, { status: 404 })
-  if (body.trigger !== "replay" && (await liveRun(id))) return NextResponse.json({ error: "Ring is already working on this order.", code: "RUN_LIVE" }, { status: 409 })
+  if (body.trigger !== "replay" && (await liveRun(id))) return NextResponse.json({ error: "Ringo is already working on this order.", code: "RUN_LIVE" }, { status: 409 })
   const runMode = body.trigger === "replay" ? "replay" : "operator"
   ringLogsLogger?.emit({
     body: "ring_run_stream_started",

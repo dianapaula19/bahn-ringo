@@ -1,4 +1,4 @@
-// Ring's own tables. No foreign keys to starter tables: the starter's reseed
+// Ringo's own tables. No foreign keys to starter tables: the starter's reseed
 // TRUNCATEs its tables and must keep working. Order ids are plain text.
 import { boolean, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core"
 

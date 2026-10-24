@@ -30,7 +30,7 @@ export default function OrderStoryPage({ params }: { params: Promise<{ id: strin
 
   const h = detail?.view.header
   const reference = story?.reference ?? h?.reference ?? null
-  useEffect(() => { if (reference) document.title = `${reference} · ${h?.vehicle?.title ?? "Order"} · Ring` }, [reference, h])
+  useEffect(() => { if (reference) document.title = `${reference} · ${h?.vehicle?.title ?? "Order"} · Ringo` }, [reference, h])
   const callbacks = story?.callbacks.filter((j) => j.status === "scheduled") ?? []
 
   return <AppFrame section="queue" snapshotAt={detail?.view.snapshotAt ?? null}><main className="page story-page">
@@ -45,7 +45,7 @@ export default function OrderStoryPage({ params }: { params: Promise<{ id: strin
           <Link className="link-quiet" href={`/orders/${id}/record`}>Full record</Link></p>}
       </header>
       <DecisionPanel story={story} onChanged={() => refresh()} />
-      {callbacks.length > 0 && <p className="callbacks"><Icon name="waiting" size={14} />{callbacks.map((j) => <span key={j.id}>Ring calls back <When at={j.dueAt} now={story.now} />: {j.reason}</span>)}</p>}
+      {callbacks.length > 0 && <p className="callbacks"><Icon name="waiting" size={14} />{callbacks.map((j) => <span key={j.id}>Ringo calls back <When at={j.dueAt} now={story.now} />: {j.reason}</span>)}</p>}
       <RunPanel story={story} onDone={() => refresh()} />
       <FactsPanel story={story} />
       <Timeline story={story} />

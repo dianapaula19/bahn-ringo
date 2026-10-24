@@ -77,9 +77,9 @@ export default function NeedsYou() {
     {queue && queue.needsYou.length > 0 && <NeedsYouGroups items={queue.needsYou} now={queue.now} />}
 
     {queue && <section className="sec" aria-labelledby="ring-h">
-      <div className="sec-head"><h2 id="ring-h">Ring is on it</h2><span className="count num">{queue.ring.length || ""}</span>
-        <span className="note">Pickup checks Ring can do by phone. Open one to run it.</span></div>
-      {queue.ring.length ? <Rows items={queue.ring} now={queue.now} label="Orders Ring can work" /> : <p className="empty">Ring has nothing to check right now.</p>}
+      <div className="sec-head"><h2 id="ring-h">Ringo is on it</h2><span className="count num">{queue.ring.length || ""}</span>
+        <span className="note">Pickup checks Ringo can do by phone. Open one to run it.</span></div>
+      {queue.ring.length ? <Rows items={queue.ring} now={queue.now} label="Orders Ringo can work" /> : <p className="empty">Ringo has nothing to check right now.</p>}
     </section>}
 
     {queue && <details className="fine">
@@ -121,7 +121,7 @@ function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: 
   </>
 }
 
-// Only an overdue card that needs a person is red; Ring's and waiting rows stay calm.
+// Only an overdue card that needs a person is red; Ringo's and waiting rows stay calm.
 function Due({ at, now, person }: { at: string | null; now: string; person: boolean }) {
   const rel = relativeTo(at, now)
   if (!at || !rel) return <span className="q-due" />

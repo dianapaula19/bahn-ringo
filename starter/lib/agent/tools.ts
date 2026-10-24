@@ -1,4 +1,4 @@
-// Ring's 10 tools: schemas for the model and executors with code-enforced
+// Ringo's 10 tools: schemas for the model and executors with code-enforced
 // guards (CONTRACT §5). The model decides what to read, whom to call, what to
 // ask; these functions decide what is allowed and what it means.
 import { and, eq, isNull } from "drizzle-orm"
@@ -53,7 +53,7 @@ const LOOSE: string[] = ["record_fact", "propose_action", "stop_with_decision"]
 
 export const TOOLS: Anthropic.Tool[] = ([
   ["read_order", "Read the order: status, route, pickup and delivery details, selected slot, driver, open alerts, incidents, work items, recorded proposals, existing facts and the triage result. Every item has an id you can cite. Always call this first.", S({ orderId: str }, ["orderId"])],
-  ["read_messages", "Read the order's messages (customer, site, driver, operator), plus Ring's earlier calls with transcripts and driver chats. Call before dialling and again after any call that ended without an answer.", S({ orderId: str, sinceIso: str }, ["orderId"])],
+  ["read_messages", "Read the order's messages (customer, site, driver, operator), plus Ringo's earlier calls with transcripts and driver chats. Call before dialling and again after any call that ended without an answer.", S({ orderId: str, sinceIso: str }, ["orderId"])],
   ["read_docs", "Read documents, proofs, attachment list and the pickup site's profile rules (release rule, signed release, hours, notice, access notes).", S({ orderId: str }, ["orderId"])],
   ["record_fact", "Record one fact on the evidence ladder. Cite a real source id. The level is capped by the source type: a customer or driver message is at most claimed, a site call or site message at most quoted. Never verified. To overturn an earlier fact, record what the new source says and pass supersedesFactId with effect 'refutes' (contradicted) or 'replaces' (newer information).",
     S({ subject: { type: "string", description: "Stable key, e.g. pickup.key_holder, pickup.access_route, pickup.contact, pickup.address, car.location" },
@@ -72,7 +72,7 @@ export const TOOLS: Anthropic.Tool[] = ([
       rationale: str, summary: str, evidenceRefs: { type: "array", items: ref },
       onApprove: { type: "string", description: "What happens after approval, one sentence the reviewer reads before clicking." }, onReject: str },
       ["command", "actionType", "targetType", "targetId", "payload", "rationale", "summary", "evidenceRefs", "onApprove", "onReject"])],
-  ["schedule_callback", "Schedule Ring to try again later (within the site's opening hours), e.g. after a dropped or unanswered call.", S({ orderId: str, dueAt: { type: "string", description: "UTC ISO time" }, reason: str }, ["orderId", "dueAt", "reason"])],
+  ["schedule_callback", "Schedule Ringo to try again later (within the site's opening hours), e.g. after a dropped or unanswered call.", S({ orderId: str, dueAt: { type: "string", description: "UTC ISO time" }, reason: str }, ["orderId", "dueAt", "reason"])],
   ["stop_with_decision", "End the run with one clear outcome for a person. Use outcome proposal_ready only when a proposal is pending.",
     S({ outcome: { type: "string", enum: ["proposal_ready", "needs_person", "waiting", "done", "failed"] }, headline: { type: "string", description: "At most 120 characters." },
       oneDecision: { type: ["string", "null"] }, options: { type: "array", items: S({ label: str, proposalId: { type: ["string", "null"] } }, ["label", "proposalId"]) },
@@ -107,7 +107,7 @@ async function readOrder(ctx: RunCtx): Promise<ToolOutcome> {
     vehicle: bundle.items.map((i) => ({ role: i.role, car: `${i.vehicle.make} ${i.vehicle.model} ${i.vehicle.year ?? ""}`.trim(), vin: i.vehicle.vin, plate: i.vehicle.registration })),
     pickup: { address: ctx.loaded.pickup && { id: ctx.loaded.pickup.id, name: ctx.loaded.pickup.name, city: ctx.loaded.pickup.city, line1: ctx.loaded.pickup.details.address_line1 ?? null, rawInput: ctx.loaded.pickup.details.raw_input ?? null },
       site: ps && { id: ps.id, name: ps.name, city: ps.city, timezone: ps.details.timezone, openingHours: ps.details.opening_hours, customerId: ps.details.customer_id } },
-    delivery: { city: ctx.loaded.delivery?.city ?? null, note: "Delivery contacts and the customer are never called by Ring." },
+    delivery: { city: ctx.loaded.delivery?.city ?? null, note: "Delivery contacts and the customer are never called by Ringo." },
     callableSites: ps ? [{ siteId: ps.id, name: ps.name, number: `sim:${ps.id}`, basis: bundle.order.pickupSiteId ? "pickup site" : "pickup contact handle" }] : [],
     endpointDetails: rows(bundle, "order_endpoint_details").map((e) => ({ id: e.id, ...e.details })),
     timeWindows: rows(bundle, "time_windows").map((w) => ({ id: w.id, purpose: w.details.purpose, selected: w.details.is_selected, start: w.details.start_at, end: w.details.end_at, timezone: w.details.timezone, source: w.details.source })),
@@ -143,7 +143,7 @@ async function readMessages(ctx: RunCtx, input: { sinceIso?: string }): Promise<
   const last = msgs[msgs.length - 1]
   return {
     ok: true, content: { now, messages: msgs, ringCalls: calls, ringDriverMessages: chats },
-    summary: `Read ${msgs.length} message${msgs.length === 1 ? "" : "s"}${last ? ` (latest: ${String(last.channel).replace(/_/g, " ")} ${hhmm(last.at)})` : ""}${calls.length ? `, ${calls.length} earlier Ring call${calls.length === 1 ? "" : "s"}` : ""}`,
+    summary: `Read ${msgs.length} message${msgs.length === 1 ? "" : "s"}${last ? ` (latest: ${String(last.channel).replace(/_/g, " ")} ${hhmm(last.at)})` : ""}${calls.length ? `, ${calls.length} earlier Ringo call${calls.length === 1 ? "" : "s"}` : ""}`,
   }
 }
 
@@ -197,9 +197,9 @@ async function placeCall(ctx: RunCtx, input: { siteId: string; purpose: string; 
   if (!ctx.reads.order || !ctx.reads.messages) return fail("Read first: call read_order and read_messages before dialling.")
   if (ctx.liveCallId) return fail(`Call ${ctx.liveCallId} is still live. Hang up first.`)
   const allowed = pickupSiteId(bundle)
-  if (input.siteId !== allowed) return fail(`Ring may call only this order's pickup site or pickup contact${allowed ? ` (${allowed})` : ""}. Never a customer or a delivery contact.`)
+  if (input.siteId !== allowed) return fail(`Ringo may call only this order's pickup site or pickup contact${allowed ? ` (${allowed})` : ""}. Never a customer or a delivery contact.`)
   const s = scenario(ctx)!
-  if (s.site.details.customer_id === bundle.customer.id) return fail("This pickup site belongs to the paying customer. Ring never contacts a customer.")
+  if (s.site.details.customer_id === bundle.customer.id) return fail("This pickup site belongs to the paying customer. Ringo never contacts a customer.")
   const ring = await ringFor(ctx.orderId)
   const prior = ring.calls.filter((c) => c.siteId === input.siteId && c.status === "ended")
   const last = ring.calls.filter((c) => c.status === "ended").pop()

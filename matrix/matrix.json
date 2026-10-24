@@ -1,7 +1,7 @@
 {
-  "name": "Ring Control Room",
+  "name": "Ringo Control Room",
   "slug": "bahn-ring",
-  "description": "Bahn car delivery control room with the Ring pickup-readiness agent. Synthetic data, simulated calls.",
+  "description": "Bahn car delivery control room with the Ringo pickup-readiness agent. Synthetic data, simulated calls.",
   "category": "productivity",
   "author": "hackathon-04",
   "version": "0.1.0",

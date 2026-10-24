@@ -1,10 +1,10 @@
-# Ring: Bahn control room + pickup readiness agent
+# Ringo: Bahn control room + pickup readiness agent
 
 This is our entry for Bahn's Car Delivery Control Room challenge (Prompt Operations Hackathon, 24 to 25 Oct 2026). The hand-in is due Sun 25 Oct at 15:00: a 2 to 3 minute video plus a public repo that runs from a fresh clone.
 
 **What we build:**
 - **The control room:** one queue that shows only the orders that need a person, and says why. Each order page reads as a story, where every fact shows its source, time and evidence level.
-- **Ring:** a real LLM agent for pickup readiness. It reads first, rings the pickup site through a phone menu (simulated), can ask the assigned driver (simulated), and grades what it learns on the evidence ladder. Then it either finishes or stops with one clear decision for a person.
+- **Ringo:** a real LLM agent for pickup readiness. It reads first, rings the pickup site through a phone menu (simulated), can ask the assigned driver (simulated), and grades what it learns on the evidence ladder. Then it either finishes or stops with one clear decision for a person.
 - **Grafts:**
   - Reconcile before retry.
   - A deterministic case-law Reviewer gate with a leave-one-out eval.
@@ -21,14 +21,14 @@ This is our entry for Bahn's Car Delivery Control Room challenge (Prompt Operati
 
 ## Hard rules: NEVER violate
 
-1. **Ring never contacts a customer.** A customer is anyone who pays. Ring may call pickup sites and pickup contacts, and message the order's assigned driver. It may not contact delivery recipients or customers. This is enforced in code (tool guards + gate rule CL-10), not only in the prompt.
+1. **Ringo never contacts a customer.** A customer is anyone who pays. Ringo may call pickup sites and pickup contacts, and message the order's assigned driver. It may not contact delivery recipients or customers. This is enforced in code (tool guards + gate rule CL-10), not only in the prompt.
 2. **A person approves before anything changes a booking, a date, a cost, or sends a message to a customer.** These trust rows are locked to "ask" and can never be promoted. Asking questions and looking things up need no approval.
-3. **No mechanical advice, no diagnosis, no blame.** Ring never tells a driver to restart, reset or drive on. It never assigns fault from photos.
-4. **A quote is not a booking, a booking is not a movement, and a claim is not a fact.** Every fact carries a level (`claimed / quoted / reserved / observed / verified / stale / refuted`). Code caps the level by source type, and Ring may never write `verified`.
+3. **No mechanical advice, no diagnosis, no blame.** Ringo never tells a driver to restart, reset or drive on. It never assigns fault from photos.
+4. **A quote is not a booking, a booking is not a movement, and a claim is not a fact.** Every fact carries a level (`claimed / quoted / reserved / observed / verified / stale / refuted`). Code caps the level by source type, and Ringo may never write `verified`.
 5. **Every fact shown in the UI has a source and a time.** A fact without a resolvable source id is dropped, never shown, and the same goes for handover sentences.
-6. **Read before you dial; reconcile before you retry.** Ring never redials after an unknown outcome (dropped call, timeout) without re-reading and stating what it found. It never retries a failed action blind.
+6. **Read before you dial; reconcile before you retry.** Ringo never redials after an unknown outcome (dropped call, timeout) without re-reading and stating what it found. It never retries a failed action blind.
 7. **Recheck before write.** Every proposal records `dependency.basisEventId`. If the order changed before approval, execution is `STALE` and nothing changes.
-8. **Prepare, don't cancel.** Ring never cancels or double-books, and never represents a backup as booked.
+8. **Prepare, don't cancel.** Ringo never cancels or double-books, and never represents a backup as booked.
 9. **Synthetic data only.** Do not add real people, companies, phone numbers, addresses or messages. Sim numbers are `sim:<siteId>`. Sim people get fictional names in the dataset's style. Everything simulated is labelled "Simulated" in the UI.
 10. **Never contact the outside world.** There are no real calls, emails, bookings or webhooks to real services. The only external calls are the Anthropic API and PostHog product analytics (decided 24 Oct; optional: with no `NEXT_PUBLIC_POSTHOG_*` env vars nothing is sent and the app must still run). Test traffic is tagged `synthetic_tester`.
 11. **This is an ops tool, not a dev tool.**
@@ -38,7 +38,7 @@ This is our entry for Bahn's Car Delivery Control Room challenge (Prompt Operati
     - Every panel has an empty state and a loading state.
     - Audio never autoplays.
     - Use the starter's birch/asphalt/sand palette and fonts.
-12. **Never print, log or commit `ANTHROPIC_API_KEY`.** It is loaded from `starter/.env.local` (gitignored). When the key is empty, Ring shows "offline" and offers Replay.
+12. **Never print, log or commit `ANTHROPIC_API_KEY`.** It is loaded from `starter/.env.local` (gitignored). When the key is empty, Ringo shows "offline" and offers Replay.
 13. **Do not modify the dataset, the attachments or the starter's seed and schema.** Our tables live in `starter/lib/ring-schema.ts` with no foreign keys to starter tables.
 14. **Do not git commit or push.** The integrator does.
 

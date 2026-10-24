@@ -74,7 +74,7 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
         setLines((ls) => fold(ls, e))
       }, c.signal)
     } catch {
-      setLines((ls) => [...ls, { kind: "text", text: "The connection to Ring was lost. Nothing is retried on its own; reload the order to see what was saved.", tone: "danger" }])
+      setLines((ls) => [...ls, { kind: "text", text: "The connection to Ringo was lost. Nothing is retried on its own; reload the order to see what was saved.", tone: "danger" }])
     }
     if (!c.signal.aborted) { setRunning(false); onDone() }
   }
@@ -82,27 +82,27 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
   const last = [...story.runs].sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0]
 
   if (!story.ringEligible) return <section className="ring-panel" aria-labelledby="ring-h">
-    <div className="sec-head"><h2 id="ring-h">Ring</h2></div>
-    <p className="empty">{story.ringIneligibleReason ?? "Ring does not work this kind of order."} Ring will not call or message anyone here.</p>
+    <div className="sec-head"><h2 id="ring-h">Ringo</h2></div>
+    <p className="empty">{story.ringIneligibleReason ?? "Ringo does not work this kind of order."} Ringo will not call or message anyone here.</p>
   </section>
 
   return <section className="ring-panel" aria-labelledby="ring-h">
-    <div className="sec-head"><h2 id="ring-h">Ring</h2>
-      <span className="note">Ring reads first, then rings the pickup site or asks the driver. It never contacts the customer.</span></div>
+    <div className="sec-head"><h2 id="ring-h">Ringo</h2>
+      <span className="note">Ringo reads first, then rings the pickup site or asks the driver. It never contacts the customer.</span></div>
     <div className="ring-controls">
-      <button type="button" className="btn primary" disabled={running} onClick={() => start("operator")}><Icon name="bot" size={15} /> {running ? "Ring is working…" : "Run Ring"}</button>
+      <button type="button" className="btn primary" disabled={running} onClick={() => start("operator")}><Icon name="bot" size={15} /> {running ? "Ringo is working…" : "Run Ringo"}</button>
       <button type="button" className="btn" disabled={running} onClick={() => start("replay")}>Watch a recorded run</button>
       {running && <button type="button" className="btn" onClick={() => { posthog.capture("ring_run_stopped"); abort.current?.abort(); setRunning(false); onDone() }}>Stop watching</button>}
     </div>
     <form className="ring-chat" onSubmit={(e) => { e.preventDefault(); const t = message.trim(); if (t && !running) { setMessage(""); start("operator", t) } }}>
-      <label className="sr-only" htmlFor="ring-msg">Tell Ring something</label>
-      <textarea id="ring-msg" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Tell Ring something, e.g. “call stock control again” or “don't call before 10:00”"
+      <label className="sr-only" htmlFor="ring-msg">Tell Ringo something</label>
+      <textarea id="ring-msg" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Tell Ringo something, e.g. “call stock control again” or “don't call before 10:00”"
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit() } }} />
       <button type="submit" className="btn" disabled={running || !message.trim()}>Send</button>
     </form>
 
-    {offline && <p className="result tone-warn" role="status">Ring is offline right now (no model key). You can still watch a recorded run. <button type="button" className="link-btn" onClick={() => start("replay")}>Replay</button></p>}
-    {lines.length === 0 && !running && !offline && <p className="empty">{last ? <>Ring last ran <When at={last.startedAt} now={story.now} />{last.decision ? <>: {last.decision.headline}</> : null}</> : "Ring has not run on this order yet."}</p>}
+    {offline && <p className="result tone-warn" role="status">Ringo is offline right now (no model key). You can still watch a recorded run. <button type="button" className="link-btn" onClick={() => start("replay")}>Replay</button></p>}
+    {lines.length === 0 && !running && !offline && <p className="empty">{last ? <>Ringo last ran <When at={last.startedAt} now={story.now} />{last.decision ? <>: {last.decision.headline}</> : null}</> : "Ringo has not run on this order yet."}</p>}
     {lines.length === 0 && running && <ul className="steps" aria-busy="true"><li className="step-line pending"><span className="spin" />Starting…</li></ul>}
     {lines.length > 0 && <ul className="steps" aria-live="polite">
       {lines.map((l, i) => <li key={i} className={`step-line kind-${l.kind}`}><LineView line={l} now={story.now} live={running} /></li>)}
@@ -122,7 +122,7 @@ function LineView({ line: l, now, live }: { line: Line; now: string; live: boole
     case "gate": return <p className={e.result.passed ? "" : "tone-warn"}><Icon name={e.result.passed ? "check" : "alert"} size={14} />Reviewer check {e.result.passed ? "passed" : "blocked it"}
       {e.result.findings.length > 0 && <>: {e.result.findings.map((f) => f.message).join(" ")}</>}</p>
     case "proposal": return <p className="tone-accent"><Icon name="proposal" size={14} />Proposal ready for you: {e.proposal.summary}</p>
-    case "driver_message": return <p><Simulated>Simulated driver</Simulated> <b>{e.message.direction === "out" ? "Ring to driver:" : "Driver:"}</b> {e.message.body}</p>
+    case "driver_message": return <p><Simulated>Simulated driver</Simulated> <b>{e.message.direction === "out" ? "Ringo to driver:" : "Driver:"}</b> {e.message.body}</p>
     case "callback_scheduled": return <p><Icon name="waiting" size={14} />Will call back <When at={e.job.dueAt} now={now} />: {e.job.reason}</p>
     case "stop": return <div className="stop"><p className="stop-head">{e.decision.headline}</p>{e.decision.oneDecision && <p>{e.decision.oneDecision}</p>}</div>
     case "error": return <p className="tone-danger"><Icon name="alert" size={14} />{e.message}</p>

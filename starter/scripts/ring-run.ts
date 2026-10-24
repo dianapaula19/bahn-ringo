@@ -1,4 +1,4 @@
-// Run Ring once on an order from the terminal and print the stream in plain words.
+// Run Ringo once on an order from the terminal and print the stream in plain words.
 //   npm run ring:run -- ord-00516 ["operator message"]
 // Replay fixtures are written from stored runs by scripts/ring-record.ts.
 import type { RunEvent } from "../lib/contract"

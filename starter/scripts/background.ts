@@ -1,7 +1,7 @@
-// Ring's background runner, no cron library.
+// Ringo's background runner, no cron library.
 //   npm run ring:background            one pass (what an external cron calls)
 //   npm run ring:background -- --loop  stay up: triage every 5 min, due callbacks every minute
-//   --autorun                          also start Ring on "Ring can call" orders it has never worked (max 2 per pass)
+//   --autorun                          also start Ringo on "Ringo can call" orders it has never worked (max 2 per pass)
 // A pass: triage every order (printed as a short summary), then fire due callbacks.
 import type { Triage } from "../lib/contract"
 import { runDue } from "../lib/agent/jobs"
@@ -16,14 +16,14 @@ async function triagePass() {
   const now = await simNow()
   const all = await triageAll(now)
   const by = (bucket: Triage["bucket"]) => all.filter((a) => a.triage.bucket === bucket)
-  log(`triage at sim ${now}: needs you ${by("needs_you").length}, Ring ${by("ring").length}, waiting ${by("waiting").length}, quiet ${by("quiet").length}`)
+  log(`triage at sim ${now}: needs you ${by("needs_you").length}, Ringo ${by("ring").length}, waiting ${by("waiting").length}, quiet ${by("quiet").length}`)
   for (const { triage: t } of by("needs_you")) log(`  needs you  ${t.reference}  ${t.reason}  ${t.why}`)
   if (!args.has("--autorun")) return
   const fresh = by("ring").filter((a) => a.triage.reason === "RING_CAN_CALL" && a.ring.runs.length === 0).slice(0, 2)
   for (const { bundle } of fresh) {
     if (await liveRun(bundle.order.id)) continue
     const run = await runRing({ orderId: bundle.order.id, trigger: "triage" })
-    log(`  Ring ran on ${bundle.order.reference}: ${run.decision?.outcome ?? run.status} ${run.decision?.headline ?? run.error ?? ""}`)
+    log(`  Ringo ran on ${bundle.order.reference}: ${run.decision?.outcome ?? run.status} ${run.decision?.headline ?? run.error ?? ""}`)
   }
 }
 

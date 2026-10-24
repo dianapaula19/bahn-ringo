@@ -1,5 +1,5 @@
 // Dataset facts: derived from structured rows only (CONTRACT §3). Facts read
-// from message text come only from Ring's record_fact.
+// from message text come only from Ringo's record_fact.
 import type { EvidenceLevel, Fact } from "@/lib/contract"
 import { effectiveLevel } from "@/lib/agent/facts"
 import type { RingOrderState } from "@/lib/agent/store"

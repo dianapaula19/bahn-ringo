@@ -1,5 +1,5 @@
 // Evidence ladder rules, enforced in code: the citation sanitizer (source ids
-// must resolve), level caps by source type, no "verified" from Ring, and
+// must resolve), level caps by source type, no "verified" from Ringo, and
 // refutations must cite a later source. CONTRACT §3.
 import { inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
@@ -98,7 +98,7 @@ export type FactInput = {
 }
 
 /**
- * Check a fact Ring wants to record. Returns the fact to store or a plain error
+ * Check a fact Ringo wants to record. Returns the fact to store or a plain error
  * the model reads. `known` are the order's current facts (dataset + ring).
  */
 export function checkFact(orderId: string, input: FactInput, info: SourceInfo | undefined, known: Fact[]):
@@ -106,7 +106,7 @@ export function checkFact(orderId: string, input: FactInput, info: SourceInfo | 
   if (!info) return { error: `Source ${input.sourceId} does not exist. Cite a real row id from read_order or read_messages.` }
   if (info.orderId && info.orderId !== orderId) return { error: `Source ${input.sourceId} belongs to another order.` }
   if (!KIND_TABLES[input.sourceKind]?.includes(info.table)) return { error: `Source ${input.sourceId} is a ${info.table} row, not a ${input.sourceKind}.` }
-  if (input.level === "verified") return { error: "Ring may never record a verified fact. Only a person's check or an approved proof is verified." }
+  if (input.level === "verified") return { error: "Ringo may never record a verified fact. Only a person's check or an approved proof is verified." }
   const old = input.supersedesFactId ? known.find((f) => f.id === input.supersedesFactId) : null
   if (input.supersedesFactId && !old) return { error: `Fact ${input.supersedesFactId} is not a fact on this order.` }
   const at = info.at ?? input.at ?? null

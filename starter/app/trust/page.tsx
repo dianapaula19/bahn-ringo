@@ -9,9 +9,9 @@ import { Icon } from "../components/icons"
 import { ACTION, MODE, When } from "../components/ring/bits"
 
 const GROUPS: { mode: TrustMode; title: string; note: string }[] = [
-  { mode: "auto", title: "Ring does these on its own", note: "Asking and looking things up. Nothing changes on the order." },
-  { mode: "ask", title: "Ring asks a person first", note: "Ring prepares it; a person accepts, edits or rejects." },
-  { mode: "never", title: "Ring never does these", note: "Not even with approval." },
+  { mode: "auto", title: "Ringo does these on its own", note: "Asking and looking things up. Nothing changes on the order." },
+  { mode: "ask", title: "Ringo asks a person first", note: "Ringo prepares it; a person accepts, edits or rejects." },
+  { mode: "never", title: "Ringo never does these", note: "Not even with approval." },
 ]
 
 export default function TrustPage() {
@@ -41,8 +41,8 @@ export default function TrustPage() {
   }
 
   return <AppFrame section="trust"><main className="page">
-    <h1 className="page-title small">What Ring may do</h1>
-    <p className="intro">Ring earns trust one kind of action at a time. When a person has accepted five in a row without changes, you can let Ring do that kind on its own. Bookings, dates, costs, address changes and anything sent to a customer always need a person.</p>
+    <h1 className="page-title small">What Ringo may do</h1>
+    <p className="intro">Ringo earns trust one kind of action at a time. When a person has accepted five in a row without changes, you can let Ringo do that kind on its own. Bookings, dates, costs, address changes and anything sent to a customer always need a person.</p>
     {error && <p className="board-error" role="alert">{error}.</p>}
     {msg && <p className="result tone-ok" role="status">{msg}</p>}
     {!ledger && !error && <div aria-busy="true">{[0, 1, 2].map((i) => <div className="q-skel" key={i} />)}</div>}
@@ -55,7 +55,7 @@ export default function TrustPage() {
           <div className="trust-main">
             <p className="trust-name">{ACTION[r.actionType]}{r.locked && <span className="chip tone-neutral" title={r.lockedReason ?? "Locked"}><Icon name="key" size={12} />Locked</span>}</p>
             <p className="trust-sub">{r.locked ? (r.lockedReason ?? "Always needs a person.")
-              : g.mode === "ask" ? (r.promotable ? "Clean record: ready to hand over to Ring." : "Needs five accepted-as-is reviews in a row before Ring can do it alone.")
+              : g.mode === "ask" ? (r.promotable ? "Clean record: ready to hand over to Ringo." : "Needs five accepted-as-is reviews in a row before Ringo can do it alone.")
               : r.updatedAt === ledger.now ? "Default setting." : <>Set <When at={r.updatedAt} now={ledger.now} /></>}</p>
           </div>
           {r.approvedUnchanged + r.edited + r.rejected === 0 ? <span className="trust-none">No reviews yet</span> : <dl className="trust-counts">
@@ -64,7 +64,7 @@ export default function TrustPage() {
             <div><dt>Rejected</dt><dd className="num">{r.rejected}</dd></div>
           </dl>}
           <div className="trust-act">
-            {!r.locked && r.mode === "ask" && r.promotable && <button type="button" className="btn primary" disabled={busy === r.actionType} onClick={() => change(r, "auto")}>Let Ring do it</button>}
+            {!r.locked && r.mode === "ask" && r.promotable && <button type="button" className="btn primary" disabled={busy === r.actionType} onClick={() => change(r, "auto")}>Let Ringo do it</button>}
             {!r.locked && r.mode === "auto" && <button type="button" className="btn" disabled={busy === r.actionType} onClick={() => change(r, "ask")}>Ask me first</button>}
           </div>
         </li>)}</ul>}

@@ -34,7 +34,7 @@ const turn = async (speaker: CallTurn["speaker"], text: string, extra: Partial<C
 
 function personaSystem(p: SimPersona, siteName: string): string {
   return [
-    `You are ${p.name}, ${p.role} at ${siteName}. This is a simulated phone call in a training system for a car delivery company; the caller is "Ring", the company's pickup readiness assistant.`,
+    `You are ${p.name}, ${p.role} at ${siteName}. This is a simulated phone call in a training system for a car delivery company; the caller is "Ringo", the company's pickup readiness assistant.`,
     `Speak ${({ en: "English", de: "German", fi: "Finnish", da: "Danish" })[p.language]}. At most 2 short sentences per reply. Style: ${p.style}`,
     "Answer only from what you know below. For anything else say you can't confirm that. Never invent names, phone numbers, addresses, times or prices.",
     `What you know:\n- ${p.knows.join("\n- ")}`,
@@ -113,7 +113,7 @@ export async function callStep(call: CallRecord, sc: SimScenario, action: CallAc
     const spoke = call.transcript.some((t) => t.speaker === "site")
     step = finish(call, turns, spoke ? "ANSWERED" : node.kind === "voicemail" ? "VOICEMAIL" : "NO_ANSWER", node.kind)
   } else if (inputs >= MAX_INPUTS) {
-    turns.push(await turn("system", "Call limit reached; Ring ended the call."))
+    turns.push(await turn("system", "Call limit reached; Ringo ended the call."))
     step = finish(call, turns, call.transcript.some((t) => t.speaker === "site") ? "ANSWERED" : "NO_ANSWER", node.kind)
   } else if (action.press !== undefined) {
     turns.push(await turn("ring", `Pressed ${action.press}`, { dtmf: action.press }))

@@ -1,4 +1,4 @@
-// The one place Ring builds an Anthropic client. The key comes from the env
+// The one place Ringo builds an Anthropic client. The key comes from the env
 // (starter/.env.local, loaded by Next and by scripts/ring-shim.cjs). It is never logged or returned.
 import AnthropicClient from "@anthropic-ai/sdk"
 import { Anthropic } from "@posthog/ai/anthropic"
@@ -55,7 +55,7 @@ export async function flushAiObservability() {
   try {
     await posthog.flush()
   } catch {
-    // Observability delivery must not change Ring's outcome.
+    // Observability delivery must not change Ringo's outcome.
   }
 }
 

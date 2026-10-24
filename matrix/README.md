@@ -1,10 +1,10 @@
-## Running Ring on Matrix OS
+## Running Ringo on Matrix OS
 
-Ring can run on an always-on [Matrix OS](https://github.com/HamedMP/matrix-os) box, so triage keeps going with the laptop closed.
+Ringo can run on an always-on [Matrix OS](https://github.com/HamedMP/matrix-os) box, so triage keeps going with the laptop closed.
 
 | piece | file | what it does |
 |---|---|---|
-| App manifest | `matrix/matrix.json` | Puts Ring in the Matrix launcher (`~/apps/bahn-ring/`, node runtime, `next start -p $PORT`) |
+| App manifest | `matrix/matrix.json` | Puts Ringo in the Matrix launcher (`~/apps/bahn-ring/`, node runtime, `next start -p $PORT`) |
 | Cron entry | `matrix/cron.json` | A Matrix cron job at 07:00 Helsinki time that tells the operator's Telegram the handover is coming |
 | Box loop | `matrix/box-loop.mjs` | Every 5 min it runs triage and due callbacks (`scripts/background.ts`, or `POST /api/agent/jobs/run-due` if that file is missing). At 07:00 it posts the live "Since you left" handover to Telegram through Matrix |
 | Deploy | `matrix/deploy.sh` | Packs the repo, uploads it to `~/projects/bahn-ring`, seeds, builds, and registers the app and cron. **Dry run unless `--apply`** |

@@ -1,4 +1,4 @@
-// Ring rows → contract shapes, plus one loader for everything Ring knows about
+// Ringo rows → contract shapes, plus one loader for everything Ringo knows about
 // one order (or all orders). Pure mapping, no business rules.
 import { asc, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
@@ -58,7 +58,7 @@ const toEvent = (r: typeof ringEvents.$inferSelect): RingEvent => ({
   ...r, at: iso(r.at)!, changes: r.changes as Record<string, unknown>, sourceRefs: r.sourceRefs as SourceRef[],
 })
 
-/** Everything Ring has recorded about one order. All lists oldest first. */
+/** Everything Ringo has recorded about one order. All lists oldest first. */
 export type RingOrderState = {
   runs: RunSummary[]; calls: CallRecord[]; driverMessages: DriverMessage[]; facts: Fact[]
   proposals: Proposal[]; events: RingEvent[]; jobs: CallbackJob[]

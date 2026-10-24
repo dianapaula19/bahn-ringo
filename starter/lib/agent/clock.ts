@@ -1,4 +1,4 @@
-// Sim clock: Ring's world starts at the dataset snapshot and runs forward.
+// Sim clock: Ringo's world starts at the dataset snapshot and runs forward.
 // simNow = SNAPSHOT + (Date.now() - epoch) * RING_CLOCK_SPEED. The epoch lives
 // in ring_meta so every process (Next, scripts, cron) shares one clock.
 import { eq } from "drizzle-orm"

@@ -34,17 +34,17 @@ async function items(since: string): Promise<Item[]> {
     ...evs.map((e) => ({ id: e.id, table: "operational_events", at: iso(e.recordedAt), orderId: e.orderId, text: `${R(e.orderId)}: ${humanize(e.command)}${e.details.actor_type ? ` by ${e.details.actor_id ?? e.details.actor_type}` : ""}` })),
     ...msgs.filter((m) => m.details.visibility !== "INTERNAL").map((m) => ({ id: m.id, table: "messages", at: iso(m.authoredAt), orderId: m.orderId, text: `${R(m.orderId)}: ${m.authorType} via ${String(m.details.channel ?? "").replace(/_/g, " ")}: "${m.body.slice(0, 220)}"` })),
     ...revs.map((e) => ({ id: e.id, table: "ring_events", at: iso(e.at), orderId: e.orderId, text: `${R(e.orderId)}: ${humanize(e.command)} committed by ${e.actorId} (simulated)` })),
-    ...runs.filter((r) => r.decision).map((r) => ({ id: r.id, table: "ring_runs", at: iso(r.endedAt ?? r.startedAt), orderId: r.orderId, text: `${R(r.orderId)}: Ring stopped (${(r.decision as { outcome: string }).outcome}): ${(r.decision as { headline: string }).headline}` })),
-    ...calls.filter((c) => c.outcome).map((c) => ({ id: c.id, table: "ring_calls", at: iso(c.startedAt), orderId: c.orderId, text: `${R(c.orderId)}: Ring called ${c.siteId} (simulated), outcome ${String(c.outcome).toLowerCase().replace(/_/g, " ")}` })),
+    ...runs.filter((r) => r.decision).map((r) => ({ id: r.id, table: "ring_runs", at: iso(r.endedAt ?? r.startedAt), orderId: r.orderId, text: `${R(r.orderId)}: Ringo stopped (${(r.decision as { outcome: string }).outcome}): ${(r.decision as { headline: string }).headline}` })),
+    ...calls.filter((c) => c.outcome).map((c) => ({ id: c.id, table: "ring_calls", at: iso(c.startedAt), orderId: c.orderId, text: `${R(c.orderId)}: Ringo called ${c.siteId} (simulated), outcome ${String(c.outcome).toLowerCase().replace(/_/g, " ")}` })),
     ...props.filter((p) => p.review && (p.review as { reviewedAt: string }).reviewedAt >= since).map((p) => {
       const r = p.review as { decision: string; reviewerId: string; reviewedAt: string; decisionNote: string | null }
-      return { id: p.id, table: "ring_proposals", at: r.reviewedAt, orderId: p.orderId, text: `${R(p.orderId)}: ${r.reviewerId} ${r.decision.toLowerCase()} Ring's proposal "${p.summary}"${r.decisionNote ? ` (${r.decisionNote})` : ""}` }
+      return { id: p.id, table: "ring_proposals", at: r.reviewedAt, orderId: p.orderId, text: `${R(p.orderId)}: ${r.reviewerId} ${r.decision.toLowerCase()} Ringo's proposal "${p.summary}"${r.decisionNote ? ` (${r.decisionNote})` : ""}` }
     }),
   ]
   return out.sort((a, b) => a.at.localeCompare(b.at))
 }
 
-const SCRIBE = `You write the "Since you left" handover for a shift lead in a car delivery control room. From the numbered items, write at most 7 short sentences, most important first: decisions waiting, safety, blocks, and what Ring found or did. Plain words. Name orders by their CD- reference, never by row ids; times as HH:MM UTC. Each sentence must list the ids of the items it is based on in sourceIds (copy them exactly). Do not state anything the items do not say. Simulated calls are simulated: say so.`
+const SCRIBE = `You write the "Since you left" handover for a shift lead in a car delivery control room. From the numbered items, write at most 7 short sentences, most important first: decisions waiting, safety, blocks, and what Ringo found or did. Plain words. Name orders by their CD- reference, never by row ids; times as HH:MM UTC. Each sentence must list the ids of the items it is based on in sourceIds (copy them exactly). Do not state anything the items do not say. Simulated calls are simulated: say so.`
 
 const SCHEMA = {
   type: "object", additionalProperties: false, required: ["sentences"],

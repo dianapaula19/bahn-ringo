@@ -112,7 +112,7 @@ export function scenarioFor(orderId: string, site: SiteLike): SimScenario {
           hold("transfer", "de", "Sie werden verbunden. Bitte warten Sie.", 15, "desk"),
           human("desk", "de", desk.id),
         ], "Kervalin Frankfurt ist geschlossen. Öffnungszeiten: Montag bis Freitag 08:30 bis 19:00, Samstag 10:00 bis 14:00.", "de"),
-        // The first attempt drops during the transfer: outcome unknown, so Ring must reconcile before it redials.
+        // The first attempt drops during the transfer: outcome unknown, so Ringo must reconcile before it redials.
         script: [{ attempt: 1, atNode: "transfer", event: "drop" }],
       }
     }
@@ -157,7 +157,7 @@ export function scenarioFor(orderId: string, site: SiteLike): SimScenario {
   }
 }
 
-/** Any other pickup site: main menu → vehicle collections → hold → voicemail. Ring learns nothing from it. */
+/** Any other pickup site: main menu → vehicle collections → hold → voicemail. Ringo learns nothing from it. */
 function genericTree(site: SiteLike, persona: SimPersona | null): IvrTree {
   return tree(site, "main", [
     menu("main", "en", `Welcome to ${site.name}. For sales, press 1. For vehicle collections, press 2.`,

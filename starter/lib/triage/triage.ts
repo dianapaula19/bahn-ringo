@@ -19,7 +19,7 @@ const openItems = (b: Bundle) => rows(b, "work_items").filter((w) => w.details.s
 const openAlerts = (b: Bundle) => b.alerts.filter((a) => a.status === "OPEN" || a.status === "ACKNOWLEDGED")
 const openIncidents = (b: Bundle) => rows(b, "incidents").filter((i) => !i.details.resolved_at)
 
-/** The pickup site Ring may call: the order's pickup site, or the site behind the pickup contact handle. */
+/** The pickup site Ringo may call: the order's pickup site, or the site behind the pickup contact handle. */
 export function pickupSiteId(b: Bundle): string | null {
   if (b.order.pickupSiteId) return b.order.pickupSiteId
   const ep = rows(b, "order_endpoint_details").find((e) => e.details.boundary === "PICKUP")
@@ -30,7 +30,7 @@ export function pickupSiteId(b: Bundle): string | null {
 export function ringEligibility(b: Bundle): { ok: boolean; reason: string | null } {
   if (openAlerts(b).some((a) => a.signal === "SAFETY_STOP") || openIncidents(b).some((i) => i.details.kind === "VEHICLE_WARNING"))
     return { ok: false, reason: "On-the-road safety: a person owns this." }
-  if (!RING_STATUSES.includes(b.order.status)) return { ok: false, reason: "Ring works pickup readiness before collection only." }
+  if (!RING_STATUSES.includes(b.order.status)) return { ok: false, reason: "Ringo works pickup readiness before collection only." }
   if (!pickupSiteId(b)) return { ok: false, reason: "No pickup site or pickup contact to call." }
   return { ok: true, reason: null }
 }
@@ -120,9 +120,9 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   if (lastCall?.outcome === "DROPPED_UNKNOWN" && !ring.jobs.some((j) => j.status === "scheduled")) failed.push(ref("ring_calls", lastCall.id))
   if (failed.length) return {
     reason: "FAILED_ACTION", severity: "high", sources: failed,
-    why: failed[0].table === "ring_calls" ? "Ring's last call dropped with an unknown outcome and no reconciling call followed." :
+    why: failed[0].table === "ring_calls" ? "Ringo's last call dropped with an unknown outcome and no reconciling call followed." :
       failed[0].table === "agent_proposals" ? failedDataset(dsProps.find((p) => p.id === failed[0].id)!) :
-        "An approved change could not run because the order changed. Ring must re-read first.",
+        "An approved change could not run because the order changed. Ringo must re-read first.",
   }
   // 3 AUTHORITY_BLOCKED
   const release = b.alerts.find((a) => a.status === "OPEN" && a.signal === "RELEASE_DOCUMENT_UNCLEAR")
@@ -138,7 +138,7 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const lastRun = ring.runs.filter((r) => r.status !== "running").pop()
   if (pending.length || lastRun?.decision?.outcome === "needs_person") return {
     reason: "DECISION_WAITING", severity: "high",
-    why: pending.length ? `Ring has ${pending.length === 1 ? "a proposal" : `${pending.length} proposals`} for you: ${pending[0].summary}` : lastRun!.decision!.headline,
+    why: pending.length ? `Ringo has ${pending.length === 1 ? "a proposal" : `${pending.length} proposals`} for you: ${pending[0].summary}` : lastRun!.decision!.headline,
     sources: pending.length ? pending.map((p) => ref("ring_proposals", p.id)) : [ref("ring_runs", lastRun!.id)],
     oneDecision: lastRun?.decision?.oneDecision ?? null,
   }
@@ -184,16 +184,16 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const job = ring.jobs.find((j) => j.status === "scheduled")
   if (live || job) return {
     reason: "RING_WORKING", severity: "low",
-    why: live ? "Ring is working on this now." : `Ring calls back at ${hhmm(job!.dueAt)} UTC: ${job!.reason}`,
+    why: live ? "Ringo is working on this now." : `Ringo calls back at ${hhmm(job!.dueAt)} UTC: ${job!.reason}`,
     sources: [live ? ref("ring_runs", live.id) : ref("ring_jobs", job!.id)],
   }
-  // 10 RING_CAN_CALL (skipped once a Ring change for this gap was executed)
+  // 10 RING_CAN_CALL (skipped once a Ringo change for this gap was executed)
   const gap = items.find((w) => RING_KINDS.includes(String(w.details.kind)))
   const access = b.alerts.find((a) => a.status === "OPEN" && a.signal === "SITE_ACCESS_UNCONFIRMED")
   const worked = ring.proposals.some((p) => p.status === "EXECUTED")
   if ((gap || access) && !worked && RING_STATUSES.includes(b.order.status) && pickupSiteId(b)) return {
     reason: "RING_CAN_CALL", severity: "low",
-    why: gap ? `Ring can call the site to ${lcFirst(String(gap.details.next_action ?? gap.details.summary))}` : `Ring can call the site: ${access!.summary}`,
+    why: gap ? `Ringo can call the site to ${lcFirst(String(gap.details.next_action ?? gap.details.summary))}` : `Ringo can call the site: ${access!.summary}`,
     sources: [...(gap ? [ref("work_items", gap.id)] : []), ...(access ? [ref("alerts", access.id)] : [])],
   }
   // 11 WAITING_EXTERNAL (an open lower alert is in hand, not quiet: the quiet count promises "no open alert")

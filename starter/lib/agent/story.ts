@@ -1,4 +1,4 @@
-// Queue and order story: dataset bundles + Ring rows → contract shapes.
+// Queue and order story: dataset bundles + Ringo rows → contract shapes.
 import { db } from "@/lib/db"
 import type { OrderStory, QueueItem, QueueResponse, StoryEntry, Triage } from "@/lib/contract"
 import { messages as messagesTable } from "@/lib/schema"
@@ -73,19 +73,19 @@ export async function buildStory(orderId: string): Promise<OrderStory | null> {
   }
   const siteName = (id: string) => b.sites.get(id)?.name ?? id
   for (const c of ring.calls) timeline.push({
-    at: c.startedAt, actor: "Ring", actorKind: "ring", ref: { table: "ring_calls", id: c.id }, factIds: factsBySource(c.id), channel: "Simulated call", simulated: true,
+    at: c.startedAt, actor: "Ringo", actorKind: "ring", ref: { table: "ring_calls", id: c.id }, factIds: factsBySource(c.id), channel: "Simulated call", simulated: true,
     text: `Called ${siteName(c.siteId)}: ${c.outcome ? humanize(c.outcome).toLowerCase() : "in progress"}. ${c.purpose}`,
   })
   for (const d of ring.driverMessages) timeline.push({
-    at: d.at, actor: d.direction === "out" ? "Ring" : (b.dir.driverName(d.driverId) ?? "Driver"), actorKind: d.direction === "out" ? "ring" : "driver",
+    at: d.at, actor: d.direction === "out" ? "Ringo" : (b.dir.driverName(d.driverId) ?? "Driver"), actorKind: d.direction === "out" ? "ring" : "driver",
     text: d.body, ref: { table: "ring_driver_messages", id: d.id }, factIds: factsBySource(d.id), channel: "Simulated driver chat", simulated: true,
   })
   for (const p of ring.proposals) {
-    timeline.push({ at: p.createdAt, actor: "Ring", actorKind: "ring", text: `Proposed: ${p.summary}`, ref: { table: "ring_proposals", id: p.id }, factIds: [], channel: null, simulated: false })
+    timeline.push({ at: p.createdAt, actor: "Ringo", actorKind: "ring", text: `Proposed: ${p.summary}`, ref: { table: "ring_proposals", id: p.id }, factIds: [], channel: null, simulated: false })
     if (p.review) timeline.push({ at: p.review.reviewedAt, actor: humanize(p.review.reviewerId), actorKind: "operator", text: `${humanize(p.review.decision)}: ${p.summary}${p.review.decisionNote ? ` (${p.review.decisionNote})` : ""}`, ref: { table: "ring_proposals", id: p.id }, factIds: [], channel: null, simulated: false })
   }
-  for (const e of ring.events) timeline.push({ at: e.at, actor: e.actorType === "agent" ? "Ring" : humanize(e.actorId), actorKind: e.actorType === "agent" ? "ring" : "operator", text: `${humanize(e.command)} recorded (simulated)`, ref: { table: "ring_events", id: e.id }, factIds: factsBySource(e.id), channel: null, simulated: true })
-  for (const r of ring.runs) if (r.decision && r.endedAt) timeline.push({ at: r.endedAt, actor: "Ring", actorKind: "ring", text: r.decision.headline, ref: { table: "ring_runs", id: r.id }, factIds: r.decision.found, channel: null, simulated: false })
+  for (const e of ring.events) timeline.push({ at: e.at, actor: e.actorType === "agent" ? "Ringo" : humanize(e.actorId), actorKind: e.actorType === "agent" ? "ring" : "operator", text: `${humanize(e.command)} recorded (simulated)`, ref: { table: "ring_events", id: e.id }, factIds: factsBySource(e.id), channel: null, simulated: true })
+  for (const r of ring.runs) if (r.decision && r.endedAt) timeline.push({ at: r.endedAt, actor: "Ringo", actorKind: "ring", text: r.decision.headline, ref: { table: "ring_runs", id: r.id }, factIds: r.decision.found, channel: null, simulated: false })
   timeline.sort((x, y) => x.at.localeCompare(y.at))
   const eligible = ringEligibility(b)
   const lastDecision = [...ring.runs].reverse().find((r) => r.decision)?.decision ?? null

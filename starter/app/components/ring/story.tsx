@@ -36,10 +36,10 @@ export function DecisionPanel({ story, onChanged }: { story: OrderStory; onChang
     <p className="decision-label" id="decision-h">{ask ? "The decision" : triage.bucket === "needs_you" ? "Why this needs you" : "Where this stands"}</p>
     <p className="decision-text">{ask ?? triage.why}</p>
     {ask && <p className="decision-why">{decision?.headline ?? triage.why}</p>}
-    {!story.ringEligible && story.ringIneligibleReason && <p className="decision-note"><Icon name="note" size={14} /> Not a Ring order. {story.ringIneligibleReason}</p>}
+    {!story.ringEligible && story.ringIneligibleReason && <p className="decision-note"><Icon name="note" size={14} /> Not a Ringo order. {story.ringIneligibleReason}</p>}
     {triage.overtaken.length > 0 && <ul className="overtaken">{triage.overtaken.map((o) => <li key={o.ref.id}><s>{o.label}</s> overtaken by a later signal at <When at={o.overtakenAt} now={story.now} /></li>)}</ul>}
     {decision && (decision.did.length > 0 || decision.whatNext) && <div className="decision-did">
-      {decision.did.length > 0 && <><p className="sub">What Ring did</p><ul>{decision.did.map((d, i) => <li key={i}>{d}</li>)}</ul></>}
+      {decision.did.length > 0 && <><p className="sub">What Ringo did</p><ul>{decision.did.map((d, i) => <li key={i}>{d}</li>)}</ul></>}
       {decision.whatNext && <p className="decision-next"><b>Next:</b> {decision.whatNext}</p>}
     </div>}
     {pending.map((p) => <ProposalCard key={p.id} proposal={p} story={story} onChanged={onChanged} />)}
@@ -63,7 +63,7 @@ export function ProposalCard({ proposal: p, story, onChanged }: { proposal: Prop
     const r: ReviewResponse = await reviewProposal(p.id, { decision, note: note.trim() || null, finalPayload: decision === "EDITED" ? draft : undefined, reviewerId: DESK })
     setBusy(false)
     if ("error" in r) { setResult({ text: r.error, tone: "danger" }); return }
-    if (r.execution?.status === "STALE") setResult({ text: "The order changed after Ring wrote this, so nothing was changed. Run Ring again so it re-reads first.", tone: "warn" })
+    if (r.execution?.status === "STALE") setResult({ text: "The order changed after Ringo wrote this, so nothing was changed. Run Ringo again so it re-reads first.", tone: "warn" })
     else if (r.execution?.status === "FAILED") setResult({ text: `It did not go through: ${r.execution.error ?? "unknown error"}. Check before trying again.`, tone: "danger" })
     else setResult({ text: r.next, tone: "ok" })
     posthog.capture("proposal_reviewed", {
@@ -102,7 +102,7 @@ export function ProposalCard({ proposal: p, story, onChanged }: { proposal: Prop
       <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
     </label>}
 
-    {readOnly ? <p className="proposal-foot">Recorded before Ring. Shown for context with the reviewer check's opinion; it cannot be reviewed here.</p>
+    {readOnly ? <p className="proposal-foot">Recorded before Ringo. Shown for context with the reviewer check's opinion; it cannot be reviewed here.</p>
       : <div className="actions">
         {mode === "idle" && <>
           <button type="button" className="btn primary" disabled={busy || blocks.length > 0} onClick={() => send("APPROVED")}>Accept</button>
@@ -136,7 +136,7 @@ export function FactsPanel({ story }: { story: OrderStory }) {
 // ---------------------------------------------------------------- timeline + calls
 
 const OUTCOME: Record<string, string> = { ANSWERED: "Answered", NO_ANSWER: "No answer", VOICEMAIL: "Voicemail", CLOSED: "Site closed", DROPPED_UNKNOWN: "Dropped, outcome unknown" }
-const SPEAKER = { ivr: "Phone menu", ring: "Ring", site: "Site", system: "Line" } as const
+const SPEAKER = { ivr: "Phone menu", ring: "Ringo", site: "Site", system: "Line" } as const
 
 const RECENT = 10
 
@@ -199,7 +199,7 @@ export function CallView({ call, now, live = false }: { call: CallRecord | { id:
       {call.outcome ? <span className={`chip tone-${call.outcome === "ANSWERED" ? "ok" : "warn"}`}>{OUTCOME[call.outcome]}</span> : live ? <span className="chip tone-accent"><span className="chip-dot live-dot" />On the line</span> : null}
       {canSpeak && call.transcript.length > 0 && <button type="button" className="btn small" onClick={listen} aria-pressed={speaking}>{speaking ? "Stop" : "Listen"}</button>}
     </div>
-    {call.reconciledFrom && <p className="call-reconciled"><b>Before redialling, Ring checked:</b> {call.reconciledFrom.finding}</p>}
+    {call.reconciledFrom && <p className="call-reconciled"><b>Before redialling, Ringo checked:</b> {call.reconciledFrom.finding}</p>}
     {call.transcript.length === 0 && <p className="empty">Dialling…</p>}
     <ol className="transcript">{call.transcript.map((t, i) => <li key={i} className={`turn sp-${t.speaker}`}>
       <span className="turn-who">{SPEAKER[t.speaker]}</span>

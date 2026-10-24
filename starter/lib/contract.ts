@@ -1,4 +1,4 @@
-// Ring contract: every shape that crosses the line between Lane UI and Lane AGENT.
+// Ringo contract: every shape that crosses the line between Lane UI and Lane AGENT.
 // Owned by the tech lead. Lanes import from here and never edit it; ask the
 // integrator for a change. See ../../CONTRACT.md for the rules behind each type.
 // Pure types only: safe to import from client components.
@@ -62,13 +62,13 @@ export type TriageReason =
   | "SAFETY"               // critical alert or open vehicle incident
   | "FAILED_ACTION"        // a proposal or provider action failed / outcome unknown: reconcile, never retry blind
   | "AUTHORITY_BLOCKED"    // release authority or seller hold missing; only the customer/seller can clear it
-  | "DECISION_WAITING"     // a Ring proposal awaits review, or Ring stopped with needs_person
+  | "DECISION_WAITING"     // a Ringo proposal awaits review, or Ringo stopped with needs_person
   | "RECORDED_PROPOSAL"    // a dataset agent_proposal is PENDING_REVIEW
   | "DRIVER_WAITING"       // driver on site / empty pickup / driver asked a question nobody answered
   | "CUSTOMER_CONTACT"     // the next step is contacting the customer, which only a person may do
-  | "DUE_SOON"             // owned work due within 60 min of now that Ring cannot do
-  | "RING_CAN_CALL"        // readiness gap Ring can work by phone (bucket "ring")
-  | "RING_WORKING"         // Ring run in progress or callback scheduled (bucket "ring")
+  | "DUE_SOON"             // owned work due within 60 min of now that Ringo cannot do
+  | "RING_CAN_CALL"        // readiness gap Ringo can work by phone (bucket "ring")
+  | "RING_WORKING"         // Ringo run in progress or callback scheduled (bucket "ring")
   | "WAITING_EXTERNAL"     // owned and waiting on a site/customer/driver reply (bucket "waiting")
   | "QUIET"
 
@@ -173,9 +173,9 @@ export type CallTurn = {
   at: Iso
   speaker: CallSpeaker
   text: string
-  /** Digits Ring pressed, when speaker is "ring". */
+  /** Digits Ringo pressed, when speaker is "ring". */
   dtmf?: string
-  /** What Ring classified the line as when this turn arrived. */
+  /** What Ringo classified the line as when this turn arrived. */
   heard?: IvrNodeKind
   nodeId?: string
 }
@@ -195,7 +195,7 @@ export type CallRecord = {
   transcript: CallTurn[]
   startedAt: Iso
   endedAt: Iso | null
-  /** Set when this call was placed after an unknown-outcome call: what Ring re-read and found first. */
+  /** Set when this call was placed after an unknown-outcome call: what Ringo re-read and found first. */
   reconciledFrom: { callId: string; finding: string } | null
   simulated: true
 }
@@ -290,13 +290,13 @@ export type Review = {
 
 export type Execution = {
   attemptedAt: Iso
-  /** STALE = the basis changed since the proposal was written; nothing was changed, Ring must re-read. */
+  /** STALE = the basis changed since the proposal was written; nothing was changed, Ringo must re-read. */
   status: "SUCCEEDED" | "FAILED" | "STALE"
   error: string | null
   effectEventIds: string[]
 }
 
-/** Mirrors dataset agent_proposals (camelCased) plus Ring extras. */
+/** Mirrors dataset agent_proposals (camelCased) plus Ringo extras. */
 export type Proposal = {
   id: string
   origin: "dataset" | "ring"
@@ -317,9 +317,9 @@ export type Proposal = {
   execution: Execution | null
   supersededByProposalId: string | null
   createdAt: Iso
-  /** Ring: what happens after approve, in one sentence the reviewer reads before clicking. */
+  /** Ringo: what happens after approve, in one sentence the reviewer reads before clicking. */
   onApprove: string | null
-  /** Ring: what happens after reject. */
+  /** Ringo: what happens after reject. */
   onReject: string | null
   gate: GateResult | null
   trustMode: TrustMode | null
@@ -356,7 +356,7 @@ export type StopDecision = {
   found: string[]
   /** Short past-tense lines: "Called Velantora Helsinki stock control (2 min)". */
   did: string[]
-  /** What happens after the person decides, or what Ring will do next by itself. */
+  /** What happens after the person decides, or what Ringo will do next by itself. */
   whatNext: string
   nextCheckAt: Iso | null
   ownerDesk: Desk | null
@@ -399,7 +399,7 @@ export type RunEvent =
 /** POST /api/agent/orders/:id/run → 200 application/x-ndjson stream of RunEvent. */
 export type RunRequest = {
   trigger: "operator" | "replay"
-  /** What the person typed to Ring ("call stock control again", "don't call before 10:00"). */
+  /** What the person typed to Ringo ("call stock control again", "don't call before 10:00"). */
   message?: string
   operatorId?: Desk
 }
@@ -421,7 +421,7 @@ export type CallbackJob = {
 
 export type StoryEntry = {
   at: Iso
-  /** Who acted, in words: "Customer", "Velantora Helsinki", "Ring", "Shift lead". */
+  /** Who acted, in words: "Customer", "Velantora Helsinki", "Ringo", "Shift lead". */
   actor: string
   actorKind: "customer" | "site" | "driver" | "operator" | "agent" | "ring" | "system"
   text: string
@@ -439,7 +439,7 @@ export type OrderStory = {
   reference: string
   triage: Triage
   facts: Fact[]
-  /** Newest last. Dataset messages, events, alerts plus Ring calls, driver messages, reviews. */
+  /** Newest last. Dataset messages, events, alerts plus Ringo calls, driver messages, reviews. */
   timeline: StoryEntry[]
   proposals: Proposal[]
   runs: RunSummary[]
@@ -448,7 +448,7 @@ export type OrderStory = {
   callbacks: CallbackJob[]
   /** Latest stop decision, the "one decision" panel. */
   decision: StopDecision | null
-  /** Ring can be run on this order (pickup readiness scope and not a "never" case). */
+  /** Ringo can be run on this order (pickup readiness scope and not a "never" case). */
   ringEligible: boolean
   ringIneligibleReason: string | null
 }

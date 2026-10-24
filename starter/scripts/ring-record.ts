@@ -1,4 +1,4 @@
-// Record Replay fixtures from Ring's stored runs: for each order, all its runs
+// Record Replay fixtures from Ringo's stored runs: for each order, all its runs
 // (oldest first) become one stream in lib/agent/fixtures/<reference>.ndjson.
 // Intermediate run_ended/run_started lines are dropped so a two-run story
 // (drop → callback → reconciled call) replays as one stream.

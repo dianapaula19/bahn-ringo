@@ -43,8 +43,8 @@ export async function runRing(orderId: string, req: RunRequest, onEvent: (e: Run
   try {
     res = await fetch(`/api/agent/orders/${encodeURIComponent(orderId)}/run`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req), signal })
   } catch { if (!signal?.aborted) fail("Could not reach the control room.", true); return }
-  if (res.status === 409) return fail("Ring is already working on this order.", false)
-  if (!res.ok || !res.body) { const b = await res.json().catch(() => null); return fail(b?.error ?? "Ring could not start.", true) }
+  if (res.status === 409) return fail("Ringo is already working on this order.", false)
+  if (!res.ok || !res.body) { const b = await res.json().catch(() => null); return fail(b?.error ?? "Ringo could not start.", true) }
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
   let buf = ""
   for (;;) {

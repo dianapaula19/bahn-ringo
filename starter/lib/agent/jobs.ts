@@ -39,7 +39,7 @@ export async function reset(): Promise<ResetResponse> {
   return { now: await simNow(), cleared }
 }
 
-/** Remove Ring's rows for one order (eval and demo re-runs). The dataset is untouched. */
+/** Remove Ringo's rows for one order (eval and demo re-runs). The dataset is untouched. */
 export async function clearOrder(orderId: string): Promise<void> {
   const runs = await db.select({ id: ringRuns.id }).from(ringRuns).where(eq(ringRuns.orderId, orderId))
   for (const r of runs) await db.delete(ringSteps).where(eq(ringSteps.runId, r.id))

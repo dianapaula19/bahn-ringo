@@ -1,4 +1,4 @@
-// Ring's tool loop: Anthropic SDK, streamed, hand-written so guards and limits
+// Ringo's tool loop: Anthropic SDK, streamed, hand-written so guards and limits
 // run between turns. Every RunEvent is persisted to ring_steps and passed to
 // `onEvent` (the NDJSON stream, or a script's log).
 import { readFile } from "node:fs/promises"
@@ -14,7 +14,7 @@ import { newId, simNow } from "./clock"
 import { anthropic, BETAS, captureAiToolSpan, flushAiObservability, MODEL, newAiTrace } from "./llm"
 import { LIMITS, runTool, TOOLS, type RunCtx, type ToolOutcome } from "./tools"
 
-export const SYSTEM = `You are Ring, the pickup readiness agent in a car delivery control room. Your job on one order: find out whether the car can be collected (who has the keys, where the handover is, who releases it, which papers are needed), write down what you learn as graded facts, and then either finish or bring a person one clear decision.
+export const SYSTEM = `You are Ringo, the pickup readiness agent in a car delivery control room. Your job on one order: find out whether the car can be collected (who has the keys, where the handover is, who releases it, which papers are needed), write down what you learn as graded facts, and then either finish or bring a person one clear decision.
 
 Hard rules (code also enforces them; a refused tool call tells you why):
 - Never contact a customer or a delivery contact. You may call only the order's pickup site or pickup contact, and message only the assigned driver.
@@ -78,7 +78,7 @@ export async function runRing(input: {
   const runId = input.runId ?? newId("run")
   const onEvent = input.onEvent ?? (() => {})
   if (!client) {
-    const err: RunEvent = { type: "error", message: "Ring is offline: no model key", retryable: false, at: startedAt }
+    const err: RunEvent = { type: "error", message: "Ringo is offline: no model key", retryable: false, at: startedAt }
     await onEvent(err)
     await onEvent({ type: "run_ended", runId, status: "failed", at: startedAt })
     return { id: runId, orderId: input.orderId, trigger: input.trigger, status: "failed", startedAt, endedAt: startedAt, model: MODEL, decision: null, error: err.message, operatorMessage: input.message ?? null }
@@ -99,7 +99,7 @@ export async function runRing(input: {
   const eligibility = ringEligibility(loaded.bundle)
   try {
     if (!eligibility.ok) {
-      ctx.stopped = forcedStop(eligibility.reason ?? "Not a Ring order.", [], "This order needs a person.")
+      ctx.stopped = forcedStop(eligibility.reason ?? "Not a Ringo order.", [], "This order needs a person.")
     } else {
       await loop(client, ctx, input)
     }
@@ -107,8 +107,8 @@ export async function runRing(input: {
   } catch (e) {
     status = "failed"
     error = e instanceof Anthropic.APIError ? `Model error ${e.status ?? ""}: ${e.message.slice(0, 300)}` : e instanceof Error ? e.message : String(e)
-    await emit({ type: "error", message: `Ring stopped: ${error}`, retryable: e instanceof Anthropic.APIError && (e.status === 429 || (e.status ?? 0) >= 500), at: await simNow() })
-    ctx.stopped = forcedStop("Ring hit a problem and stopped. A person should look.", ctx.did, "Check the order by hand or run Ring again.")
+    await emit({ type: "error", message: `Ringo stopped: ${error}`, retryable: e instanceof Anthropic.APIError && (e.status === 429 || (e.status ?? 0) >= 500), at: await simNow() })
+    ctx.stopped = forcedStop("Ringo hit a problem and stopped. A person should look.", ctx.did, "Check the order by hand or run Ringo again.")
   }
   const decision = ctx.stopped!
   const endedAt = await simNow()
@@ -134,7 +134,7 @@ async function loop(client: Anthropic, ctx: RunCtx, input: { orderId: string; tr
   let nudges = 0
   for (;;) {
     if (ctx.toolCalls >= LIMITS.toolCalls) {
-      ctx.stopped = forcedStop("Ring reached its step limit before finishing. A person should take over.", ctx.did, "Read Ring's notes on this order and decide the next step.")
+      ctx.stopped = forcedStop("Ringo reached its step limit before finishing. A person should take over.", ctx.did, "Read Ringo's notes on this order and decide the next step.")
       return
     }
     ctx.ai = newAiTrace(ctx.runId)
@@ -148,7 +148,7 @@ async function loop(client: Anthropic, ctx: RunCtx, input: { orderId: string; tr
     } as unknown as Anthropic.Beta.MessageCreateParamsStreaming)
     const msg = await stream.finalMessage()
     if (msg.stop_reason === "refusal") {
-      ctx.stopped = forcedStop("Ring could not continue on this order. A person should take over.", ctx.did, "Work the order by hand.")
+      ctx.stopped = forcedStop("Ringo could not continue on this order. A person should take over.", ctx.did, "Work the order by hand.")
       return
     }
     messages.push({ role: "assistant", content: msg.content })
@@ -156,7 +156,7 @@ async function loop(client: Anthropic, ctx: RunCtx, input: { orderId: string; tr
     const uses = msg.content.filter((c): c is Anthropic.Beta.BetaToolUseBlock => c.type === "tool_use")
     if (!uses.length) {
       if (msg.stop_reason === "max_tokens" || nudges++ >= 2) {
-        ctx.stopped = forcedStop("Ring ended without a clear decision. A person should look.", ctx.did, "Read Ring's notes on this order.")
+        ctx.stopped = forcedStop("Ringo ended without a clear decision. A person should look.", ctx.did, "Read Ringo's notes on this order.")
         return
       }
       messages.push({ role: "user", content: "End the run with stop_with_decision." })

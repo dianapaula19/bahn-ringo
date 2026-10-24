@@ -1,5 +1,5 @@
 // Self-checks for triage, the Reviewer gate and the evidence ladder (node:test).
-//   npm run ring:check      (needs the seeded DB on :5438; Ring rows are ignored)
+//   npm run ring:check      (needs the seeded DB on :5438; Ringo rows are ignored)
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { after, before, describe, test } from "node:test"
@@ -27,7 +27,7 @@ const t = (orderId: string, ring: RingOrderState = emptyRing()) => triage(bundle
 describe("triage on the demo orders (CONTRACT §8)", () => {
   before(async () => { bundles = new Map((await triageAll(NOW)).map((x) => [x.bundle.order.id, x.bundle])) })
 
-  test("322 is the first SAFETY card, not a Ring order, with a row-built decision", () => {
+  test("322 is the first SAFETY card, not a Ringo order, with a row-built decision", () => {
     const r = t("ord-00322")
     assert.equal(r.bucket, "needs_you"); assert.equal(r.reason, "SAFETY"); assert.equal(r.severity, "critical")
     assert.equal(r.oneDecision, "Driver says they are safe and stopped (driver 08:22). Location unverified, no photo yet. Customer: keep it stopped (08:40). Decide with the customer: roadside or tow.")
@@ -40,7 +40,7 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     assert.ok(r.sources.some((s) => s.id === "alert-xad90176c4d6e6fc5"))
   })
   test("593 driver on site is DRIVER_WAITING", () => assert.equal(t("ord-00593").reason, "DRIVER_WAITING"))
-  test("516, 010, 023 are Ring-workable by phone", () => {
+  test("516, 010, 023 are Ringo-workable by phone", () => {
     for (const id of ["ord-00516", "ord-00010", "ord-00023"]) {
       const r = t(id)
       assert.equal(r.bucket, "ring", id); assert.equal(r.reason, "RING_CAN_CALL", id)
@@ -57,7 +57,7 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
   test("every non-quiet result names its source rows", () => {
     for (const id of bundles.keys()) { const r = t(id); if (r.bucket !== "quiet") assert.ok(r.sources.length > 0, id) }
   })
-  test("Ring state moves cards: pending proposal, dropped call, callback", () => {
+  test("Ringo state moves cards: pending proposal, dropped call, callback", () => {
     const pending = { ...emptyRing(), proposals: [{ id: "prop-x", status: "PENDING_REVIEW", summary: "Record access", proposedPayload: {}, execution: null } as never] }
     assert.equal(t("ord-00516", pending).reason, "DECISION_WAITING")
     const call = { id: "call-x", status: "ended", outcome: "DROPPED_UNKNOWN" } as never

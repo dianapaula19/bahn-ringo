@@ -1,4 +1,4 @@
-// Ring background loop for a Matrix OS box (or any always-on machine).
+// Ringo background loop for a Matrix OS box (or any always-on machine).
 //   every 5 min : triage + due callbacks  (scripts/background.ts, else POST /api/agent/jobs/run-due)
 //   07:00 local : "Since you left" handover -> Telegram, delivered by Matrix's own channel
 //
@@ -112,7 +112,7 @@ async function tick() {
       const r = await fetch(`${APP}/api/agent/handover?format=text`)
       if (!r.ok) throw new Error(`handover ${r.status}`)
       const text = (await r.text()).trim() || "Nothing changed since you left."
-      await sendViaMatrix(`bahn-ring-handover-${day}`, `Ring handover, ${day} 07:00 ${TZ}\n\n${text}`)
+      await sendViaMatrix(`bahn-ring-handover-${day}`, `Ringo handover, ${day} 07:00 ${TZ}\n\n${text}`)
       if (!DRY) saveState({ ...s, handover: day })
     } catch (e) { console.error(`[handover] ${e.message}`) }
   }

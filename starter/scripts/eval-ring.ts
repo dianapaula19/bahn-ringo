@@ -1,5 +1,5 @@
-// Ring behaviour eval (needs the model key): runs Ring on the demo orders and
-// asserts the behaviour column of CONTRACT §8. Clears Ring's rows for those
+// Ringo behaviour eval (needs the model key): runs Ringo on the demo orders and
+// asserts the behaviour column of CONTRACT §8. Clears Ringo's rows for those
 // orders first. Prints pass/fail per assertion.
 //   npm run eval:ring [-- ord-00516 ...]
 import type { RunEvent } from "../lib/contract"

@@ -10,7 +10,7 @@ const GROUPS: { label: string; links: { section: Section; href: string; label: s
     { section: "queue", href: "/", label: "Needs you", icon: "alert" },
     { section: "board", href: "/board", label: "All orders", icon: "car" },
     { section: "inbox", href: "/inbox", label: "Inbox", icon: "inbox" },
-    { section: "trust", href: "/trust", label: "What Ring may do", icon: "key" },
+    { section: "trust", href: "/trust", label: "What Ringo may do", icon: "key" },
   ] },
   { label: "People and places", links: [
     { section: "customers", href: "/customers", label: "Customers", icon: "people" },
