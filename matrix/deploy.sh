@@ -12,6 +12,7 @@
 #   4. npm ci, db:push, seed, attachments:seed, build with basePath /apps/bahn-ring (detached; log in ~/projects/bahn-setup.log)
 #   5. ~/apps/bahn-ring/matrix.json -> Matrix starts matrix/prefix-proxy.mjs, which re-adds the /apps/bahn-ring
 #      prefix the gateway strips, in front of `next start`. Open it from the Matrix desktop.
+#   6. Ringo's background agent loop, supervised (log in ~/projects/bahn-loop.log)
 # Note: `matrix run` needs `-C .` (CLI 0.3.22 sends an empty cwd otherwise and the gateway answers 400).
 set -euo pipefail
 APPLY=0; [[ ${1:-} == --apply ]] && APPLY=1
@@ -43,4 +44,10 @@ box 'cd projects/bahn-ring/starter && setsid nohup sh -c "set -e; set -a; . ./.e
 echo "wait for SETUP_DONE:  matrix run -C . -- tail -3 projects/bahn-setup.log"
 
 run matrix upload --force "$REPO/matrix/matrix.json" apps/bahn-ring/matrix.json
+
+# 6. Ringo's background agent: triage every 5 min, due callbacks every minute, and (--autorun) a first
+#    live run on orders Ringo can call but never has (max 2 per pass). A shell supervisor restarts it;
+#    `bahn-ring-loop` in its argv lets the next deploy stop the old one. Log: ~/projects/bahn-loop.log
+box 'pkill -f "[b]ahn-ring-loop"; pkill -f "[s]cripts/background.ts"; true'  # separate call: the start command below names the loop, so pkill would match its own shell
+box 'cd projects/bahn-ring/starter && setsid nohup sh -c "while true; do npm run -s ring:background -- --loop --autorun; sleep 30; done" bahn-ring-loop >> ../../bahn-loop.log 2>&1 < /dev/null &'
 ((APPLY)) || echo "(dry run: nothing was sent. Re-run with --apply.)"
