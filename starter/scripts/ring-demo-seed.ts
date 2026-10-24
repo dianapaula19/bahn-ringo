@@ -47,7 +47,7 @@ async function main() {
   const { db } = await import("../lib/db")
   const S = await import("../lib/ring-schema")
   const { clearOrder } = await import("../lib/agent/jobs")
-  const { SNAPSHOT, simNow } = await import("../lib/agent/clock")
+  const { SNAPSHOT } = await import("../lib/agent/clock")
   const { orders } = await import("../lib/schema")
   const { observeCall, noteFromCall } = await import("../lib/agent/playbook/playbook")
   const { findQuote } = await import("../lib/agent/sim/calls")
@@ -137,7 +137,7 @@ async function main() {
   }
   console.log(`\nCreated: ${counts.runs} recorded runs (${counts.steps} steps, ${counts.calls} simulated calls, ${counts.facts} facts, ${counts.proposals} proposals waiting for a person), ${counts.notes} site playbook notes rebuilt from those runs, ${evalRuns} new scenario-suite runs on /evals.`)
   console.log("Not created: no review, no correction, no learned rule, no claim. Those are a person's to make.")
-  console.log(`Sim clock now ${await simNow()}. Approve or reject the proposals yourself on /decide.`)
+  console.log(`Sim clock now ${new Date(Date.parse(latest) + 60_000).toISOString()}. Approve or reject the proposals yourself on /decide.`)
   await db.$client.end()
 }
 
