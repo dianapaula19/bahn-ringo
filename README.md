@@ -21,6 +21,7 @@ Around it:
 - **What Ringo may do** (`/trust`). Each kind of action is auto, ask or never. Ask rows can be promoted after five clean approvals in a row; bookings, dates, costs, addresses and customer messages are locked to ask.
 - **Since you left.** A handover strip on the queue in which every sentence links to its sources. A sentence whose source cannot be found is dropped and counted.
 - **CD-420322** (a car stopped on the road) is not a Ringo order. It gets a one-decision card built from the records.
+- **Map** (`/map`). Every place in the dataset at city level (the addresses are fictional streets in real cities), cities with an order that needs you ringed in red, cars on the road as faint pickup-to-delivery lines, ferry terminals as squares. Click a city (`/map?city=Hamburg`) for its places by kind and the orders there that need you. Plain inline SVG, no map service.
 
 How we built it with coding agents, what we checked and threw away, and the eval numbers (including the misses) are in [`PROCESS.md`](PROCESS.md). The hard rules are in [`CLAUDE.md`](CLAUDE.md), and the build contract is in [`CONTRACT.md`](CONTRACT.md).
 
@@ -73,9 +74,9 @@ matrix/deploy.sh                          # dry run: packs the repo (no env file
 matrix/deploy.sh --apply --secrets=FILE   # FILE holds ANTHROPIC_API_KEY, and MATRIX_TOKEN + TELEGRAM_CHAT_ID for the 07:00 handover
 ```
 
-The box loop (`matrix/box-loop.mjs`) runs the background pass every 5 minutes. At 07:00 Helsinki time it sends the "Since you left" handover to the operator's own Telegram chat through Matrix's channel; this is off unless `MATRIX_TOKEN` and `TELEGRAM_CHAT_ID` are set. Details and the open questions are in [`matrix/README.md`](matrix/README.md). The deploy has only been dry-run; it has not run against a real Matrix account.
+The box loop (`matrix/box-loop.mjs`) runs the background pass every 5 minutes. At 07:00 Helsinki time it sends the "Since you left" handover to the operator's own Telegram chat through Matrix's channel; this is off unless `MATRIX_TOKEN` and `TELEGRAM_CHAT_ID` are set. On the box the app is built and started with `NEXT_BASE_PATH=/apps/bahn-ring`, because Matrix serves apps under `/apps/<slug>`; leave it unset locally. Details and the open questions are in [`matrix/README.md`](matrix/README.md). The deploy has only been dry-run; it has not run against a real Matrix account.
 
-Everything is synthetic: no real people, companies, phone numbers or messages. Ringo's only external call is the Anthropic API.
+Everything is synthetic: no real people, companies, phone numbers or messages. The only external calls are the Anthropic API and, when its env vars are set, PostHog analytics.
 
 ---
 

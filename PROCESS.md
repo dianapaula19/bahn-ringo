@@ -23,6 +23,7 @@ How we worked with coding agents: what we asked for, what we checked, what we th
 | 16:00 | MATRIX | Learn the real Matrix OS formats from its source. Write manifests, cron entries, a dry-run deploy and README text. Mark every unverified assumption | `matrix/` (manifest, cron, box loop, deploy.sh), assumptions A1 to A10 |
 | 16:40 | integrator | Wire the UI to the real routes, run everything live, review against the judging criteria, fix the top issues, write README and PROCESS, fresh-clone run, commit | This commit series |
 | 17:10 | polish | Judge the queue and pages by Bahn's rubric (only orders that need a person, with just enough to decide; one glance, calm, hundreds of orders). Make every row specific, re-check triage, quieter colours, tab title, screenshot every page at 1440 and 390, test the sibling-STALE fix | §6 below |
+| 18:15 | integrator | Rename Ring → Ringo, add the mascot, a places map, and a Matrix base path; check it all in a production build with and without the prefix | §6c below |
 
 ## 3. What we checked
 
@@ -161,9 +162,28 @@ A 30-second look as a judge, on a production build (`next start` on a spare port
 
 **Thrown away:** a timeout race around the Scribe (still a skeleton for the length of the timeout); polling until the Scribe answers (a loop for one swap).
 
+## 6c. Ringo, the map and the Matrix base path (18:15)
+
+**Renamed Ring → Ringo on 24 Oct.** Everything a person reads says Ringo: UI strings, tab titles ("Ringo — Bahn control room"), the system prompt (it calls itself Ringo), the phone and driver sims' persona prompts, handover sentences, the docs, the Matrix manifest and cron text. Internal identifiers stay as they were to avoid churn: the `ring_*` tables, `lib/ring-schema.ts`, file names, `ring:*` npm scripts, `/api/agent/*` paths, CSS classes and the `RING_*` triage codes. The replay fixtures were string-mapped (`Ring` → `Ringo`, whole word only, e.g. "Hier ist Ringo, Abholplanung"); nothing else in the recorded model output was touched. The shared DB had no Ringo rows, so there was nothing to map there.
+
+**Mascot.** `public/ringo.svg` (drawn earlier, not redrawn) appears three times: a 28 px head-and-shoulders crop next to "Ringo" in the sidebar (which said "Control Room" until now, see 6b point 5), a 26 px crop in Ringo's panel on the order page, and the full figure at 140 px on the empty "Nothing needs you" state with one dry line ("Quiet on the lot."). The crop is CSS on an `<img>` (`.ringo-face`), so there is one file. The favicon is `app/icon.svg`, the same drawing with a cropped `viewBox`.
+
+**Map** (`/map`, sidebar "People and places → Map"). A server component that draws inline SVG from `lib/europe-map.ts` (Natural Earth outlines and real city centres, pre-projected): no map library, no tiles, no external requests. Places are shown at city level only, with the caption "Places shown at city level. Addresses in this dataset are fictional." Dots are area-proportional to the 132 addresses; a red ring means an order with a pickup or delivery in that city is in Needs you, taken from the queue's own `triageAll` (not a second copy of the rules); faint arcs are the 24 orders in transit; squares are the 4 ferry terminals. Helsinki, Espoo and Vantaa sit within a few km, so they get a zoomed inset; labels only for cities with ≥ 3 places or an order that needs you, and every city has a `<title>`. `?city=Name` opens the side panel (plain links, works without JS): the orders there that need you, then places grouped by kind. The base layer is `role="img"` with a one-sentence summary; city links are keyboard-focusable and also listed in the panel, which is the easier way in on a phone. City clicks send `map_city_opened` to PostHog (only when PostHog is configured, like the other events); prefetch is off on those links because each map render triages every order.
+
+**Matrix base path.** Matrix serves apps under `/apps/<slug>`, so `next.config.ts` sets `basePath` from `NEXT_BASE_PATH` (empty by default) and exposes it as `NEXT_PUBLIC_BASE_PATH`. `<Link>` and the router add it themselves; raw `fetch`, `<a href>` and `next/image` do not, so they go through `withBase()` (`lib/base.ts`): the agent API client, the order, record, entity, inbox and board fetches, the attachments list, the two "order API" links and the car illustration. `deploy.sh` and `matrix.json` build and start with `NEXT_BASE_PATH=/apps/bahn-ring`; the box loop adds it to its app URL.
+
+**What we checked**
+- `NEXT_BASE_PATH=/apps/bahn-ring next build && next start`: every page, `/icon.svg`, `/ringo.svg`, the queue and order APIs and a POST to the run route answered under the prefix; headless Chrome on `/`, `/map`, `/map?city=Hamburg`, the 516 story and record pages, `/trust`, `/board`, `/inbox`, `/sites` and a site page logged no 4xx and no failed request (the car image loads).
+- The same without the variable: everything at the root as before, `/apps/bahn-ring` is a 404, and `npm run smoke` passes.
+- Screenshots at 1440 and 390 (viewport set through Playwright) of `/`, `/map`, `/map?city=Hamburg`, the 516 story and `/trust`, plus the empty queue (the queue response emptied in the browser, not in the DB). No horizontal scroll at 390.
+- `typecheck`, `build`, `ring:check` 19/19, `eval:reviewer` unchanged at 3/10 leave-one-out.
+
+**Thrown away:** the SVG `#svgView()` fragment for the crop (CSS is certain to work everywhere); one clickable dot per capital-region city on the main map (they overlapped, so the inset holds the links); CSS stroke widths on the map (CSS beats SVG attributes, which made the inset's rings 5× too thick); a `max-height` on the map, which shrank labels to 9 px; prefetching every city link.
+
 ## 7. Known gaps
 
-- Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, serving a Next app under `/apps/<slug>/`, and so on) are unverified.
+- Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, and so on) are unverified. Serving under `/apps/<slug>` works in a local production build with the base path; whether the gateway keeps or strips the prefix on a real box is not checked.
+- `/orders/516` is not a route; order pages use the row id (`/orders/ord-00516`).
 - The gate's leave-one-out score is low (3/10) for the reason above.
 - No speech input in the Ringo chat box; earlier runs are not browsable (only the latest run's headline shows).
 - Ringo prepares no customer-message drafts. The background runner's `--autorun` is off by default so it cannot take over a live demo.
