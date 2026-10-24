@@ -5,7 +5,7 @@ import { db } from "@/lib/db"
 import type { CallOutcome, CallRecord, CallTurn, IvrNode, IvrNodeKind, SimPersona, SimScenario } from "@/lib/contract"
 import { ringCalls } from "@/lib/ring-schema"
 import { newId, simNow } from "../clock"
-import { shortReply } from "../llm"
+import { shortReply, type AiTraceContext } from "../llm"
 import { toCall } from "../store"
 
 export const MAX_INPUTS = 14
@@ -43,15 +43,15 @@ function personaSystem(p: SimPersona, siteName: string): string {
   ].join("\n\n")
 }
 
-async function personaReply(p: SimPersona, siteName: string, call: CallRecord): Promise<string> {
+async function personaReply(p: SimPersona, siteName: string, call: CallRecord, ai: AiTraceContext | null): Promise<string> {
   const since = call.transcript.findLastIndex((t) => t.speaker === "ivr")
   const lines = call.transcript.slice(since + 1).map((t) => `${t.speaker === "ring" ? "Caller" : "You"}: ${t.text}`).join("\n")
-  const text = await shortReply(personaSystem(p, siteName), lines ? `The call so far:\n${lines}\n\nYour reply:` : "You pick up the phone. Greet the caller with your name and role.")
+  const text = await shortReply(personaSystem(p, siteName), lines ? `The call so far:\n${lines}\n\nYour reply:` : "You pick up the phone. Greet the caller with your name and role.", "low", ai ?? undefined)
   return text ?? "Sorry, the line is breaking up. Could you call back?"
 }
 
 /** Enter a node: what the caller hears, plus any scripted twist for this attempt. */
-async function enter(call: CallRecord, sc: SimScenario, node: IvrNode, attempt: number, siteName: string): Promise<Step> {
+async function enter(call: CallRecord, sc: SimScenario, node: IvrNode, attempt: number, siteName: string, ai: AiTraceContext | null): Promise<Step> {
   call.ivrPath.push(node.id)
   const twist = sc.script.find((s) => s.attempt === attempt && s.atNode === node.id)
   const turns: CallTurn[] = []
@@ -71,7 +71,7 @@ async function enter(call: CallRecord, sc: SimScenario, node: IvrNode, attempt: 
   if (node.kind === "menu") turns.push(await turn("ivr", node.prompt, { heard: "menu", nodeId: node.id }))
   if (node.kind === "human") {
     const p = sc.personas.find((x) => x.id === node.personaId)!
-    turns.push(await turn("site", await personaReply(p, siteName, call), { heard: "human", nodeId: node.id }))
+    turns.push(await turn("site", await personaReply(p, siteName, call, ai), { heard: "human", nodeId: node.id }))
   }
   return { turns, heard: node.kind, ended: false, outcome: null }
 }
@@ -85,7 +85,7 @@ function finish(call: CallRecord, turns: CallTurn[], outcome: CallOutcome, heard
 
 export async function startCall(input: {
   runId: string; orderId: string; siteName: string; scenario: SimScenario; purpose: string; attempt: number
-  reconciledFrom: CallRecord["reconciledFrom"]
+  reconciledFrom: CallRecord["reconciledFrom"]; ai: AiTraceContext | null
 }): Promise<{ call: CallRecord; step: Step }> {
   const now = await simNow()
   const { ivr } = input.scenario
@@ -95,7 +95,7 @@ export async function startCall(input: {
   }
   await db.insert(ringCalls).values({ ...call, ivrPath: [], transcript: [] })
   const open = isOpen(ivr.openingHours, ivr.timezone, now)
-  const step = await enter(call, input.scenario, ivr.nodes[open ? ivr.root : ivr.closedNode], input.attempt, input.siteName)
+  const step = await enter(call, input.scenario, ivr.nodes[open ? ivr.root : ivr.closedNode], input.attempt, input.siteName, input.ai)
   call.transcript.push(...step.turns)
   await save(call)
   return { call, step }
@@ -103,7 +103,7 @@ export async function startCall(input: {
 
 export type CallAction = { press?: string; say?: string; wait?: boolean; hangup?: boolean }
 
-export async function callStep(call: CallRecord, sc: SimScenario, action: CallAction, attempt: number, siteName: string): Promise<Step> {
+export async function callStep(call: CallRecord, sc: SimScenario, action: CallAction, attempt: number, siteName: string, ai: AiTraceContext | null): Promise<Step> {
   const node = sc.ivr.nodes[call.ivrPath[call.ivrPath.length - 1]]
   const turns: CallTurn[] = []
   const inputs = call.transcript.filter((t) => t.speaker === "ring").length
@@ -122,7 +122,7 @@ export async function callStep(call: CallRecord, sc: SimScenario, action: CallAc
       turns.push(await turn("ivr", node.kind === "menu" ? `That is not a valid option. ${node.prompt}` : "(no response to the key press)", { heard: node.kind, nodeId: node.id }))
       step = { turns, heard: node.kind, ended: false, outcome: null }
     } else {
-      const next = await enter(call, sc, sc.ivr.nodes[opt.next], attempt, siteName)
+      const next = await enter(call, sc, sc.ivr.nodes[opt.next], attempt, siteName, ai)
       step = { ...next, turns: [...turns, ...next.turns] }
     }
   } else if (action.say !== undefined) {
@@ -130,7 +130,7 @@ export async function callStep(call: CallRecord, sc: SimScenario, action: CallAc
     call.transcript.push(...turns)
     if (node.kind === "human") {
       const p = sc.personas.find((x) => x.id === node.personaId)!
-      const reply = await turn("site", await personaReply(p, siteName, call), { heard: "human", nodeId: node.id })
+      const reply = await turn("site", await personaReply(p, siteName, call, ai), { heard: "human", nodeId: node.id })
       call.transcript.push(reply)
       await save(call)
       return { turns: [...turns, reply], heard: "human", ended: false, outcome: null }
@@ -149,7 +149,7 @@ export async function callStep(call: CallRecord, sc: SimScenario, action: CallAc
   } else {
     turns.push(await turn("ring", "(waits)"))
     if (node.kind === "hold" && node.next) {
-      const next = await enter(call, sc, sc.ivr.nodes[node.next], attempt, siteName)
+      const next = await enter(call, sc, sc.ivr.nodes[node.next], attempt, siteName, ai)
       step = { ...next, turns: [...turns, ...next.turns] }
     } else if (node.kind === "menu") {
       turns.push(await turn("ivr", node.prompt, { heard: "menu", nodeId: node.id }))

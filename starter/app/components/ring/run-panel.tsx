@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import posthog from "posthog-js"
 import type { CallRecord, CallTurn, OrderStory, RunEvent, ToolName } from "@/lib/contract"
 import { DESK, runRing } from "../../_lib/agent-api"
 import { Icon } from "../icons"
@@ -62,6 +63,7 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
   useEffect(() => { end.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }) }, [lines.length])
 
   async function start(trigger: "operator" | "replay", text?: string) {
+    posthog.capture("ring_run_started", { trigger })
     abort.current?.abort()
     const c = new AbortController(); abort.current = c
     setRunning(true); setOffline(false)
@@ -90,7 +92,7 @@ export function RunPanel({ story, onDone }: { story: OrderStory; onDone: () => v
     <div className="ring-controls">
       <button type="button" className="btn primary" disabled={running} onClick={() => start("operator")}><Icon name="bot" size={15} /> {running ? "Ring is working…" : "Run Ring"}</button>
       <button type="button" className="btn" disabled={running} onClick={() => start("replay")}>Watch a recorded run</button>
-      {running && <button type="button" className="btn" onClick={() => { abort.current?.abort(); setRunning(false); onDone() }}>Stop watching</button>}
+      {running && <button type="button" className="btn" onClick={() => { posthog.capture("ring_run_stopped"); abort.current?.abort(); setRunning(false); onDone() }}>Stop watching</button>}
     </div>
     <form className="ring-chat" onSubmit={(e) => { e.preventDefault(); const t = message.trim(); if (t && !running) { setMessage(""); start("operator", t) } }}>
       <label className="sr-only" htmlFor="ring-msg">Tell Ring something</label>

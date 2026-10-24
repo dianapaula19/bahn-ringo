@@ -11,8 +11,8 @@ import { loadOrder } from "@/lib/present/load"
 import { ringRuns, ringSteps } from "@/lib/ring-schema"
 import { ringEligibility } from "@/lib/triage/triage"
 import { newId, simNow } from "./clock"
-import { anthropic, BETAS, MODEL } from "./llm"
-import { LIMITS, runTool, TOOLS, type RunCtx } from "./tools"
+import { anthropic, BETAS, captureAiToolSpan, flushAiObservability, MODEL, newAiTrace } from "./llm"
+import { LIMITS, runTool, TOOLS, type RunCtx, type ToolOutcome } from "./tools"
 
 export const SYSTEM = `You are Ring, the pickup readiness agent in a car delivery control room. Your job on one order: find out whether the car can be collected (who has the keys, where the handover is, who releases it, which papers are needed), write down what you learn as graded facts, and then either finish or bring a person one clear decision.
 
@@ -91,7 +91,7 @@ export async function runRing(input: {
     await db.insert(ringSteps).values({ runId, seq: seq++, event: e })
     await onEvent(e)
   }
-  const ctx: RunCtx = { runId, orderId: input.orderId, loaded, emit, reads: { order: null, messages: null, docs: null }, liveCallId: null, proposeAttempts: 0, toolCalls: 0, did: [], stopped: null }
+  const ctx: RunCtx = { runId, orderId: input.orderId, loaded, emit, reads: { order: null, messages: null, docs: null }, liveCallId: null, proposeAttempts: 0, toolCalls: 0, did: [], stopped: null, ai: null }
   await emit({ type: "run_started", runId, orderId: input.orderId, trigger: input.trigger, at: startedAt, model: MODEL, replay: false })
 
   let status: RunSummary["status"] = "stopped"
@@ -115,6 +115,7 @@ export async function runRing(input: {
   await emit({ type: "stop", decision, at: endedAt })
   await db.update(ringRuns).set({ status, decision, error, endedAt }).where(eq(ringRuns.id, runId))
   await emit({ type: "run_ended", runId, status, at: endedAt })
+  await flushAiObservability()
   return { id: runId, orderId: input.orderId, trigger: input.trigger, status, startedAt, endedAt, model: MODEL, decision, error, operatorMessage: input.message ?? null }
 }
 
@@ -136,12 +137,15 @@ async function loop(client: Anthropic, ctx: RunCtx, input: { orderId: string; tr
       ctx.stopped = forcedStop("Ring reached its step limit before finishing. A person should take over.", ctx.did, "Read Ring's notes on this order and decide the next step.")
       return
     }
+    ctx.ai = newAiTrace(ctx.runId)
     const stream = client.beta.messages.stream({
       model: MODEL, max_tokens: 16000, betas: BETAS, fallbacks: "default",
       system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
       tools: TOOLS as Anthropic.Beta.BetaTool[], tool_choice: { type: "auto" },
       thinking: { type: "adaptive" }, output_config: { effort: "medium" }, messages,
-    } as Anthropic.Beta.MessageCreateParamsStreaming)
+      posthogTraceId: ctx.ai.traceId,
+      posthogProperties: { $ai_session_id: ctx.ai.sessionId },
+    } as unknown as Anthropic.Beta.MessageCreateParamsStreaming)
     const msg = await stream.finalMessage()
     if (msg.stop_reason === "refusal") {
       ctx.stopped = forcedStop("Ring could not continue on this order. A person should take over.", ctx.did, "Work the order by hand.")
@@ -166,7 +170,15 @@ async function loop(client: Anthropic, ctx: RunCtx, input: { orderId: string; tr
       const toolInput = (use.input ?? {}) as Record<string, unknown>
       await ctx.emit({ type: "tool_call", stepId, tool: name, input: toolInput, at: await simNow() })
       const over = ctx.toolCalls > LIMITS.toolCalls
-      const out = over ? { ok: false, summary: "Step limit reached.", content: { error: "Step limit reached. Call stop_with_decision now." } } : await runTool(ctx, name, toolInput)
+      const toolStartedAt = Date.now()
+      let out: ToolOutcome
+      try {
+        out = over ? { ok: false, summary: "Step limit reached.", content: { error: "Step limit reached. Call stop_with_decision now." } } : await runTool(ctx, name, toolInput)
+      } catch (error) {
+        captureAiToolSpan(ctx.ai, name, toolInput, null, toolStartedAt, true)
+        throw error
+      }
+      captureAiToolSpan(ctx.ai, name, toolInput, out.content, toolStartedAt)
       await ctx.emit({ type: "tool_result", stepId, tool: name, ok: out.ok, summary: out.summary, at: await simNow() })
       results.push({ type: "tool_result", tool_use_id: use.id, content: JSON.stringify(out.content), is_error: !out.ok })
     }

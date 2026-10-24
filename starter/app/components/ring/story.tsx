@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import posthog from "posthog-js"
 import type { CallRecord, Fact, OrderStory, Proposal, ReviewDecision, ReviewResponse, StoryEntry } from "@/lib/contract"
 import { DESK, reviewProposal } from "../../_lib/agent-api"
 import { Icon } from "../icons"
@@ -65,6 +66,11 @@ export function ProposalCard({ proposal: p, story, onChanged }: { proposal: Prop
     if (r.execution?.status === "STALE") setResult({ text: "The order changed after Ring wrote this, so nothing was changed. Run Ring again so it re-reads first.", tone: "warn" })
     else if (r.execution?.status === "FAILED") setResult({ text: `It did not go through: ${r.execution.error ?? "unknown error"}. Check before trying again.`, tone: "danger" })
     else setResult({ text: r.next, tone: "ok" })
+    posthog.capture("proposal_reviewed", {
+      action_type: p.actionType,
+      decision,
+      origin: p.origin,
+    })
     setMode("idle"); onChanged()
   }
 

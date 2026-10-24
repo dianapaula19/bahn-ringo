@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import posthog from "posthog-js"
 import type { TrustLedger, TrustMode, TrustRow } from "@/lib/contract"
 import { loadTrust, updateTrust } from "../_lib/agent-api"
 import { AppFrame } from "../components/app-frame"
@@ -28,6 +29,13 @@ export default function TrustPage() {
     setBusy(row.actionType)
     const r = await updateTrust(row.actionType, mode, mode === "auto" ? "Promoted after a clean review record" : "Moved back to ask first")
     setBusy(null)
+    if (!("error" in r)) {
+      posthog.capture("trust_mode_updated", {
+        action_type: row.actionType,
+        previous_mode: row.mode,
+        mode: r.row.mode,
+      })
+    }
     setMsg("error" in r ? r.error : `${ACTION[row.actionType]}: now “${MODE[r.row.mode].label}”.`)
     refresh()
   }

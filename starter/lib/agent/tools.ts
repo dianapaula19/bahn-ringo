@@ -12,6 +12,7 @@ import { ringDriverMessages, ringFacts, ringJobs, ringMeta } from "@/lib/ring-sc
 import { orderFacts } from "@/lib/triage/facts"
 import { pickupSiteId, triage } from "@/lib/triage/triage"
 import { newId, simNow } from "./clock"
+import { type AiTraceContext } from "./llm"
 import { checkFact, resolveSources, type FactInput } from "./facts"
 import { checkSpeech } from "./gate"
 import { datasetProposals, propose } from "./proposals"
@@ -33,6 +34,7 @@ export type RunCtx = {
   toolCalls: number
   did: string[]
   stopped: StopDecision | null
+  ai: AiTraceContext | null
 }
 
 export type ToolOutcome = { ok: boolean; summary: string; content: unknown }
@@ -206,7 +208,7 @@ async function placeCall(ctx: RunCtx, input: { siteId: string; purpose: string; 
     const lastRead = [ctx.reads.order, ctx.reads.messages].filter(Boolean).sort().pop()!
     if (Date.parse(lastRead) < Date.parse(last.endedAt ?? last.startedAt)) return fail("Re-read the order or messages after the dropped call before redialling.")
   }
-  const { call, step } = await startCall({ runId: ctx.runId, orderId: ctx.orderId, siteName: s.site.name, scenario: s.sc, purpose: input.purpose, attempt: prior.length + 1, reconciledFrom: input.reconciled ?? null })
+  const { call, step } = await startCall({ runId: ctx.runId, orderId: ctx.orderId, siteName: s.site.name, scenario: s.sc, purpose: input.purpose, attempt: prior.length + 1, reconciledFrom: input.reconciled ?? null, ai: ctx.ai })
   for (const t of step.turns) await ctx.emit({ type: "call_turn", callId: call.id, turn: t })
   if (step.ended) await endCall(ctx, call)
   else ctx.liveCallId = call.id
@@ -230,7 +232,7 @@ async function callInput(ctx: RunCtx, input: { callId: string; press?: string; s
   if (input.say) { const bad = checkSpeech(input.say); if (bad) return fail(bad) }
   const s = scenario(ctx)!
   const attempt = (await ringFor(ctx.orderId)).calls.filter((c) => c.siteId === call.siteId && c.startedAt <= call.startedAt).length
-  const step = await callStep(call, s.sc, input, attempt, s.site.name)
+  const step = await callStep(call, s.sc, input, attempt, s.site.name, ctx.ai)
   for (const t of step.turns) await ctx.emit({ type: "call_turn", callId: call.id, turn: t })
   if (step.ended) await endCall(ctx, call)
   const heard = step.turns.filter((t) => t.speaker !== "ring").map((t) => t.text)
@@ -263,7 +265,7 @@ async function sendDriverMessage(ctx: RunCtx, input: { body: string; intent: "qu
   await db.insert(ringDriverMessages).values(out)
   await ctx.emit({ type: "driver_message", message: toDriverMessage(out) })
   const recent = ctx.loaded.messages.filter((m) => m.authorType === "driver").slice(-3).map((m) => m.body)
-  const text = await driverReply({ driverName: name, question: input.body, scenario: scenario(ctx)?.sc ?? null, recent })
+  const text = await driverReply({ driverName: name, question: input.body, scenario: scenario(ctx)?.sc ?? null, recent, ai: ctx.ai })
   const back = { id: newId("dm"), runId: ctx.runId, orderId: ctx.orderId, driverId, direction: "in", intent: "reply", body: text, proposalId: null, at: await simNow() }
   await db.insert(ringDriverMessages).values(back)
   await ctx.emit({ type: "driver_message", message: toDriverMessage(back) })

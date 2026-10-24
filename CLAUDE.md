@@ -30,7 +30,7 @@ This is our entry for Bahn's Car Delivery Control Room challenge (Prompt Operati
 7. **Recheck before write.** Every proposal records `dependency.basisEventId`. If the order changed before approval, execution is `STALE` and nothing changes.
 8. **Prepare, don't cancel.** Ring never cancels or double-books, and never represents a backup as booked.
 9. **Synthetic data only.** Do not add real people, companies, phone numbers, addresses or messages. Sim numbers are `sim:<siteId>`. Sim people get fictional names in the dataset's style. Everything simulated is labelled "Simulated" in the UI.
-10. **Never contact the outside world.** There are no real calls, emails, bookings or webhooks to real services. The only external call is the Anthropic API.
+10. **Never contact the outside world.** There are no real calls, emails, bookings or webhooks to real services. The only external calls are the Anthropic API and PostHog product analytics (decided 24 Oct; optional: with no `NEXT_PUBLIC_POSTHOG_*` env vars nothing is sent and the app must still run). Test traffic is tagged `synthetic_tester`.
 11. **This is an ops tool, not a dev tool.**
     - Use plain words and no JSON on screen.
     - Show no model or token stats in the main UI.
