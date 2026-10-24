@@ -2,9 +2,12 @@
 import type { GateFinding, GateResult } from "@/lib/contract"
 import { MECHANICAL, RULES, type GateContext, type GateInput } from "./caselaw"
 
-export function runGate(p: GateInput, ctx: GateContext, checkedAt: string, exclude: Set<string> = new Set()): GateResult {
+/** A rule from outside caselaw.ts: the learned rules a person accepted (lib/agent/learn, CL-Lxx). */
+export type ExtraRule = { id: string; effect: "block" | "condition"; learnedFrom: string[]; test: (p: GateInput, ctx: GateContext) => string | null }
+
+export function runGate(p: GateInput, ctx: GateContext, checkedAt: string, exclude: Set<string> = new Set(), learned: ExtraRule[] = []): GateResult {
   const findings: GateFinding[] = []
-  for (const rule of RULES) {
+  for (const rule of [...RULES, ...learned]) {
     if (exclude.has(rule.id)) continue
     const message = rule.test(p, ctx)
     if (message) findings.push({ ruleId: rule.id, effect: rule.effect, message, learnedFrom: rule.learnedFrom })

@@ -11,6 +11,8 @@ import { datasetFacts } from "@/lib/triage/facts"
 import type { GateContext } from "./caselaw"
 import { newId, simNow } from "./clock"
 import { runGate } from "./gate"
+import { learnedGateRules, recordCorrections } from "./learn/store"
+import type { LearnedRule } from "./learn/types"
 import { toProposal } from "./store"
 import { trustMode, TRUST_DEFAULTS } from "./trust"
 
@@ -67,7 +69,7 @@ export type ProposeResult = { proposal: Proposal; execution: Execution | null } 
 export async function propose(b: Bundle, runId: string | null, input: ProposeInput): Promise<ProposeResult> {
   const now = await simNow()
   if (!TRUST_DEFAULTS[input.actionType]) return { blocked: null, reason: `Unknown action type ${input.actionType}.` }
-  const gate = runGate({ command: input.command, actionType: input.actionType, payload: input.payload, summary: input.summary, evidenceRefs: input.evidenceRefs, createdAt: now }, gateContext(b), now)
+  const gate = runGate({ command: input.command, actionType: input.actionType, payload: input.payload, summary: input.summary, evidenceRefs: input.evidenceRefs, createdAt: now }, gateContext(b), now, undefined, await learnedGateRules(b))
   if (!gate.passed) return { blocked: gate, reason: "The Reviewer gate blocked it." }
   const mode = await trustMode(input.actionType)
   if (mode === "never") return { blocked: gate, reason: `${input.actionType} is never allowed for Ringo (${TRUST_DEFAULTS[input.actionType].lockedReason}).` }
@@ -131,7 +133,9 @@ async function execute(b: Bundle, p: Proposal, payload: Record<string, unknown>,
   return execution
 }
 
-export async function review(id: string, req: ReviewRequest): Promise<{ status: number; body: ReviewResponse | Omit<Extract<ReviewResponse, { proposal: Proposal }>, "triage"> }> {
+type Reviewed = Omit<Extract<ReviewResponse, { proposal: Proposal }>, "triage"> & { suggestion: LearnedRule | null }
+
+export async function review(id: string, req: ReviewRequest): Promise<{ status: number; body: Extract<ReviewResponse, { error: string }> | Reviewed }> {
   const now = await simNow()
   const [row] = await db.select().from(ringProposals).where(eq(ringProposals.id, id))
   if (!row) return { status: id.startsWith("agent-") ? 409 : 404, body: id.startsWith("agent-") ? { error: "Recorded dataset proposals are read-only.", code: "READ_ONLY" } : { error: "Proposal not found.", code: "NOT_FOUND" } }
@@ -142,6 +146,7 @@ export async function review(id: string, req: ReviewRequest): Promise<{ status: 
   const loaded = await loadOrder(p.orderId)
   if (!loaded) return { status: 404, body: { error: "Order not found.", code: "NOT_FOUND" } }
   const finalPayload = req.decision === "EDITED" ? req.finalPayload! : p.proposedPayload
+  // A person's edit is checked against the case law only. Learned rules are this desk's own habits; a different edit is new teaching, not a breach.
   if (req.decision === "EDITED") {
     const gate = runGate({ command: p.command, actionType: p.actionType, payload: finalPayload, summary: p.summary, evidenceRefs: p.evidenceRefs, createdAt: now }, gateContext(loaded.bundle), now)
     if (!gate.passed) return { status: 409, body: { error: gate.findings.filter((f) => f.effect === "block").map((f) => `${f.ruleId}: ${f.message}`).join(" "), code: "GATE_BLOCKED" } }
@@ -149,12 +154,14 @@ export async function review(id: string, req: ReviewRequest): Promise<{ status: 
   const reviewRow = { decision: req.decision, decisionNote: req.note ?? null, finalPayload, reviewerId: req.reviewerId, reviewedAt: now }
   if (req.decision === "REJECTED") {
     await db.update(ringProposals).set({ status: "REJECTED", review: reviewRow }).where(eq(ringProposals.id, id))
+    const suggestion = await recordCorrections(p, reviewRow, loaded.bundle)
     const proposal = toProposal((await db.select().from(ringProposals).where(eq(ringProposals.id, id)))[0])
-    return { status: 200, body: { proposal, execution: null, next: p.onReject ?? "Nothing changes. Ringo notes the reason." } }
+    return { status: 200, body: { proposal, execution: null, next: p.onReject ?? "Nothing changes. Ringo notes the reason.", suggestion } }
   }
   await db.update(ringProposals).set({ status: "APPROVED_AWAITING_EXECUTION", review: reviewRow }).where(eq(ringProposals.id, id))
   const execution = await execute(loaded.bundle, { ...p, review: reviewRow }, finalPayload, req.reviewerId)
+  const suggestion = await recordCorrections(p, reviewRow, loaded.bundle)
   const proposal = toProposal((await db.select().from(ringProposals).where(eq(ringProposals.id, id)))[0])
   const next = execution.status === "STALE" ? "The order changed after Ringo read it, so nothing was changed. Run Ringo again to re-read." : (p.onApprove ?? "Done.")
-  return { status: 200, body: { proposal, execution, next } }
+  return { status: 200, body: { proposal, execution, next, suggestion } }
 }
