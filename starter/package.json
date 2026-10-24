@@ -14,7 +14,7 @@
     "smoke": "tsx scripts/smoke.ts",
     "ring:background": "tsx --require ./scripts/ring-shim.cjs scripts/background.ts",
     "ring:run": "tsx --require ./scripts/ring-shim.cjs scripts/ring-run.ts",
-    "ring:check": "tsx --require ./scripts/ring-shim.cjs lib/triage/triage.check.ts && tsx lib/agent/sim/calls.check.ts",
+    "ring:check": "tsx --require ./scripts/ring-shim.cjs lib/triage/triage.check.ts && tsx lib/agent/sim/calls.check.ts && tsx lib/savings.check.ts",
     "eval:reviewer": "tsx scripts/eval-reviewer.ts",
     "eval:learned": "tsx --require ./scripts/ring-shim.cjs scripts/eval-learned.ts",
     "eval:ring": "tsx --require ./scripts/ring-shim.cjs scripts/eval-ring.ts",

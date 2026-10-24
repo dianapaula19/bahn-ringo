@@ -38,6 +38,11 @@ These are Drizzle `pgTable`s. There are **no foreign keys to starter tables**, b
 | `ring_events` | `id pk`, `order_id`, `at`, `command`, `actor_type`, `actor_id`, `proposal_id null`, `changes jsonb`, `source_refs jsonb` | simulated committed changes (the effect events) |
 | `ring_trust` | `action_type pk`, `mode`, `locked bool`, `locked_reason null`, `updated_at`, `updated_by` | `TrustRow` (the counts are computed from `ring_proposals.review`) |
 | `ring_jobs` | `id pk`, `order_id`, `due_at`, `reason`, `status`, `created_by_run_id`, `fired_run_id null` | `CallbackJob` |
+| `ring_playbooks` | `id pk`, `site_id`, `topic` (phone_path\|people\|keys\|handover\|hours\|quirk), `rung null`, `note`, `quote null`, `language null`, `level` (quoted\|observed), `source_call_id`, `order_id`, `source_at`, `created_at`, `edited_by null`, `edited_at null` | site playbook notes (round 2, calls). Wiped by reset and `clearOrder` |
+| `ring_corrections` | `id pk`, `proposal_id`, `order_id`, `order_ref`, `action_type`, `kind` (edit\|reject), `field null`, `before jsonb`, `after jsonb`, `reason_class null`, `note`, `situation jsonb`, `pattern_key`, `reviewer_id`, `at` | what a person changed on Ringo's proposals (round 2, learn). **Kept** across reset |
+| `ring_learned_rules` | `id pk`, `pattern_key unique`, `rule_id unique null` (CL-Lxx), `status` (suggested\|active\|off\|dismissed), `version`, `action_type`, `spec jsonb`, `title`, `text`, `ask`, `correction_ids jsonb`, `history jsonb`, `created_at`, `updated_at`, `updated_by` | learned gate rules. **Kept** across reset |
+| `ring_eval_runs`, `ring_eval_results` | one row per scenario-suite run / per scenario (verdict pass\|fail\|void, expected, actual, reasons, checks, ring_run_ids) | `/evals` (round 2, evals). **Kept** across reset |
+| `ring_turns` | `id pk`, `run_id`, `name` (ringo_turn\|short_reply), `model`, `started_at`, `latency_ms`, token counts, `stop_reason`, `tool_uses`, `error` | `/engine` trace (round 2, engine). `ring_steps` also gained `wall_at null`. Wiped by reset |
 
 Dataset proposals (`agent_proposals` in `related_records`) are read-only. They appear as `Proposal` with `origin: "dataset"` and a gate verdict, but they cannot be reviewed (`READ_ONLY`).
 
@@ -102,11 +107,13 @@ Invoke the `claude-api` skill before writing SDK code.
 | `read_messages` | `{orderId, sinceIso?}` | dataset messages (id, at, channel, author, recipient, language, body), plus Ringo calls with outcome and transcript, plus Ringo driver messages | — |
 | `read_docs` | `{orderId}` | documents, proofs, attachment metadata, and the site profile rules (`release_document_rule`, `requires_signed_release`, hours, `advance_notice_minutes`, access notes) | — |
 | `record_fact` | `{subject, claim, level, sourceKind, sourceId, at, by, supersedesFactId?, note?}` | `{fact}` or an error | the level cap from §3, `sourceId` must exist, `verified` is forbidden, and a refutation must cite a later source |
-| `place_call` | `{orderId, siteId, purpose, reconciled?: {callId, finding}}` | `{callId, turn}`, the first IVR prompt | `read_order` **and** `read_messages` must already have run in this run. The site must be the order's **pickup** site or pickup contact, and never a customer or delivery recipient. If the last Ringo call on this order was `DROPPED_UNKNOWN`/`NO_ANSWER`, `reconciled` is required. Outside the site's opening hours the call ends `CLOSED`. |
-| `call_input` | `{callId, press?: string, say?: string, wait?: boolean, hangup?: boolean}` | `{turn, heard: IvrNodeKind, ended: boolean, outcome?}` | exactly one action per call. `say` passes through the gate's text rules (no mechanical advice, no promises) |
+| `read_playbook` | `{siteId}` | the site's playbook notes, each with its source call and time | — |
+| `place_call` | `{orderId, siteId, purpose, rung: site_desk\|stock_control\|branch_manager, why?, reconciled?: {callId, finding}}` | `{callId, turn}`, the first IVR prompt | `read_order`, `read_messages` **and** `read_playbook` must already have run in this run. The site must be the order's **pickup** site or pickup contact, and never a customer or delivery recipient. If the last Ringo call on this order was `DROPPED_UNKNOWN`/`NO_ANSWER`, `reconciled` is required. The ladder ("Ladder stop:"): no start at the branch manager, no skipped rung, a climb needs `why`, at most two calls per rung per order and three calls per run, no climbing on a safety case. Outside the site's opening hours the call is **refused before dialling**. |
+| `call_input` | `{callId, press?: string, say?: string, wait?: boolean, hangup?: boolean}` | `{turn, heard: IvrNodeKind, ended: boolean, outcome?}` | exactly one action per call. `press` may carry several digits. A press that reaches a rung other than the call's is refused. `say` passes through the gate's text rules (no mechanical advice, no promises), on the words and on their English translation |
+| `note_playbook` | `{callId, notes: [{topic, note, quote}]}` | the notes written | `quote` must appear in that call's transcript. Code writes the menu path itself |
 | `send_driver_message` | `{orderId, body, intent: "question"\|"instruction"}` | `{message, reply?}`. A question gets a Driver-Sim reply. An instruction is not sent and returns `{proposalId}` | only to the order's current assigned driver. An instruction becomes a `driver.instruct` proposal, and the trust ledger decides whether it is sent |
 | `propose_action` | `{command, actionType, targetType, targetId, alertId?, payload, rationale, summary, evidenceRefs, onApprove, onReject}` | `{proposal}` or `{blocked: GateFinding[]}` | the gate runs first. `dependency.basisEventId` = the latest ring or dataset event id on the order. `trustMode` comes from `ring_trust`: `auto` executes immediately, `never` is refused |
-| `schedule_callback` | `{orderId, dueAt, reason}` | `{job}` | `dueAt` must fall within the site's opening hours |
+| `schedule_callback` | `{orderId, dueAt, reason}` | `{job}` | `dueAt` must fall within the site's opening hours. After two calls in a row that reached no one, refused: stop `needs_person` |
 | `stop_with_decision` | `StopDecision` | ends the run | `found` must be fact ids from this order, `headline` is at most 120 chars, and when `outcome` is `proposal_ready` at least one pending proposal must exist |
 
 Every tool result streams as `tool_result` with a human-readable `summary`, for example "Read 9 messages (latest: site call 08:24)". The UI shows summaries, never raw JSON.
@@ -165,6 +172,13 @@ Errors use `{error, code?}` with 400/404/409. Every success body carries `now`.
 | `GET /api/agent/jobs` | — | `{now, jobs: CallbackJob[]}` |
 | `POST /api/agent/jobs/run-due` | — | `RunDueResponse`. Cron, or the "Try now" button, calls it |
 | `POST /api/agent/reset` | — | `ResetResponse`. Demo only |
+| `GET /api/agent/learned` | — | `LearnedResponse` (`lib/agent/learn/types.ts`): suggestions and rules |
+| `POST /api/agent/learned/:id` | `{action: accept\|dismiss\|off\|on\|edit, text?, operatorId}` | the rule. Review responses also carry `suggestion` |
+| `GET /api/agent/sites/:id/playbook` | — | the site's playbook notes |
+| `PATCH`/`DELETE /api/agent/playbook/:id` | `{note, operatorId}` | the edited note, or `{ok}` |
+| `GET`/`POST /engine/savings` | — / `{readMin, driverMessageMin, noteMin}` (0–60) | today's time-saved tally and the estimates (`ring_meta.savings_estimates`) |
+
+Pages added in round 2: `/decide` (decision mode), `/evals` (scenario suite, from the trust footer), `/engine` (technical trace, from the run panel). Scripts: `eval:suite` (live, ten scenarios), `eval:learned` (offline), `npx tsx lib/savings.check.ts`, `scripts/scale-seed.ts` (`--undo`).
 
 The trust ledger starts like this. Rows marked locked (L) cannot be promoted:
 

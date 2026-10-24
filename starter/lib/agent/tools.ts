@@ -55,8 +55,8 @@ const ACTIONS: ActionType[] = ["driver.instruct", "endpoint.record_contact", "en
 
 const LOOSE: string[] = ["record_fact", "propose_action", "stop_with_decision", "note_playbook"]
 
-/** Ringo's tools beyond the contract's ten (CONTRACT §5): the site playbook. */
-export type RingTool = ToolName | "read_playbook" | "note_playbook"
+/** Ringo's tools (CONTRACT §5), the site playbook's two included. */
+export type RingTool = ToolName
 
 export const TOOLS: Anthropic.Tool[] = ([
   ["read_order", "Read the order: status, route, pickup and delivery details, selected slot, driver, open alerts, incidents, work items, recorded proposals, existing facts and the triage result. Every item has an id you can cite. Always call this first.", S({ orderId: str }, ["orderId"])],

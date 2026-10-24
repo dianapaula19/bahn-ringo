@@ -378,6 +378,7 @@ export type RunSummary = {
 export type ToolName =
   | "read_order" | "read_messages" | "read_docs" | "record_fact" | "place_call" | "call_input"
   | "send_driver_message" | "propose_action" | "schedule_callback" | "stop_with_decision"
+  | "read_playbook" | "note_playbook"
 
 /** One line of the NDJSON stream from POST /api/agent/orders/:id/run, and one ring_steps row. */
 export type RunEvent =

@@ -80,7 +80,13 @@ function nextStepFrom(story: OrderStory, ctx: HeroContext | null, ringPending: P
   const byRingo = lastRun && decision ? <>Ringo, <When at={lastRun.startedAt} now={story.now} /></> : null
   if (ringPending.length) return { text: `Accept, edit or reject Ringo's ${ringPending.length === 1 ? "proposal" : `${ringPending.length} proposals`}.`, source: <>Ringo, <When at={ringPending[0].createdAt} now={story.now} /></> }
   if (triage.bucket === "ring") return triage.reason === "RING_WORKING" ? { text: "Nothing yet. Ringo is on it." } : { text: "Run Ringo. He calls the site and brings back one decision." }
-  const one = decision?.oneDecision ?? triage.oneDecision
+  // Once his proposals are all reviewed, Ringo's "approve this" is done; what he said comes next is the next step.
+  const settled = decision?.outcome === "proposal_ready" && story.proposals.some((p) => p.origin === "ring" && p.status !== "PENDING_REVIEW")
+  if (settled && decision?.whatNext) {
+    const s = sentences(decision.whatNext.replace(/^(after|once) (approval|approved|you approve)[^,]*,\s*/i, "").replace(/^\w/, (c) => c.toUpperCase()))
+    return { text: s[0], context: s.length > 1 ? s.slice(1).join(" ") : undefined, source: byRingo }
+  }
+  const one = (settled ? null : decision?.oneDecision) ?? triage.oneDecision
   if (one) {
     const s = sentences(one)
     const context = s.length > 1 ? s.slice(0, -1).join(" ") : decision?.whatNext ? <>Meanwhile: {decision.whatNext}</> : undefined
@@ -131,7 +137,9 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
   const tone = triage.bucket === "needs_you" ? (triage.severity === "critical" ? "danger" : "warn") : triage.bucket === "ring" ? "accent" : "ok"
   const recorded = triage.reason === "RECORDED_PROPOSAL" ? earlier.find((p) => !blocked(p)) : undefined
   // With a stop decision, Ringo's headline says what he found; the proposal card below says what he asks.
-  const problem = decision && (decision.outcome === "needs_person" || ringPending.length) ? decision.headline : recorded?.rationale || triage.why
+  // Once his proposals are reviewed, what he found still beats the dataset's older "waiting on…" line.
+  const settled = decision?.outcome === "proposal_ready" && story.proposals.some((p) => p.origin === "ring" && p.status !== "PENDING_REVIEW")
+  const problem = decision && (decision.outcome === "needs_person" || ringPending.length || settled) ? decision.headline : recorded?.rationale || triage.why
   const msg = triage.sources.find((s) => s.table === "messages" && story.timeline.some((e) => e.ref.id === s.id))
   const say = next?.text ?? ""
   const links = [

@@ -44,3 +44,4 @@
   .ev-tiles { grid-template-columns: 1fr; }
   .ev-cards { grid-template-columns: 1fr; }
 }
+.ev-rerun { margin-top: 8px; font-size: 13px; color: var(--teal-ink); }

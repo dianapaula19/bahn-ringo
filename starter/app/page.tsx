@@ -82,7 +82,7 @@ export default function NeedsYou() {
         {queue && queue.needsYou.length > 0 && <Link href="/decide" className="btn primary decide-start">Start deciding ({queue.needsYou.length})<Icon name="arrow" size={14} /></Link>}
       </div>
       <p className="queue-sub">{queue
-        ? <>Checked <When at={queue.now} now={queue.now} /> · {queue.total} orders · <span className="kbd-hint">j / k to move, Enter to open</span></>
+        ? <>Checked <When at={queue.now} now={queue.now} /> · {queue.total} orders<span className="kbd-hint"> · j / k to move, Enter to open</span></>
         : "Checking every order…"}</p>
     </header>
     {error && <p className="board-error" role="alert">{error}. Check that the app and database are running.</p>}
@@ -210,7 +210,7 @@ function ShiftReport({ queue }: { queue: QueueResponse | null }) {
             : lines.length ? <>Here&apos;s the lot since <When at={handover!.since} now={now} />: {lines.length} {lines.length === 1 ? "update" : "updates"} on {orders} {orders === 1 ? "order" : "orders"}.</>
               : <>Nothing new since <When at={handover!.since} now={now} />.</>}</p>
           <p>{top ? <><a href="#needs-h">{queue!.needsYou.length} need you</a>{urgent > 0 && <>, <a href="#now">{urgent} right now</a></>}. Start with the {top.vehicle}.</> : "Nothing needs you. Enjoy the coffee."}</p>
-          {queue!.ring.length > 0 && <p><a href="#ring-h">{queue!.ring.length} I can phone myself</a>. Open one and say the word.</p>}
+          {queue!.ring.length > 0 && <p><a href="#ring-h">{queue!.ring.length === 1 ? "One" : queue!.ring.length} I can phone myself</a>. Open {queue!.ring.length === 1 ? "it" : "one"} and say the word.</p>}
         </>}
       </div>
       {(lines.length > 0 || since) && <div className="shift-foot">

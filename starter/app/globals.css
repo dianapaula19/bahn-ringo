@@ -554,6 +554,7 @@ details.more > :not(summary) { margin-top: 8px; }
 .queue-count { font-family: var(--font-body); font-size: 18px; font-weight: 500; color: var(--orange-ink); }
 .queue-sub { margin-top: 6px; font-size: 13px; color: var(--muted); }
 .kbd-hint { color: var(--muted); }
+@media (hover: none), (max-width: 600px) { .kbd-hint { display: none; } }
 .q-list { display: grid; gap: 6px; margin-top: 16px; }
 .q-skel { height: 52px; margin-top: 8px; border-radius: 10px; background: linear-gradient(90deg, var(--hair-soft), var(--birch), var(--hair-soft)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
 .q-skel.tall { height: 140px; }

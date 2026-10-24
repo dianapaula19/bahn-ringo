@@ -49,12 +49,17 @@ async function load() {
   const runs = all.filter((r) => r.status !== "done" || size(r) === full)
   const latest = runs.find((r) => r.status === "done") ?? null
   const results = latest ? (await db.select().from(ringEvalResults).where(eq(ringEvalResults.evalRunId, latest.id))).sort(ORDER) : []
+  // A scenario re-run on its own (--only) after the latest full run: shown on its card, not in the score.
+  const later = latest ? all.filter((r) => r.status === "done" && r.startedAt > latest.startedAt && size(r) < full) : []
+  const rerun = new Map<string, { verdict: string; at: string; note: string | null }>()
+  if (later.length) for (const x of (await db.select().from(ringEvalResults).where(inArray(ringEvalResults.evalRunId, later.map((r) => r.id)))).sort((a, b) => a.at.localeCompare(b.at)))
+    rerun.set(x.scenarioId, { verdict: x.verdict, at: x.at, note: later.find((r) => r.id === x.evalRunId)?.note ?? null })
   const refs = results.length ? await db.select({ id: orders.id, reference: orders.reference }).from(orders).where(inArray(orders.id, results.map((r) => r.orderId))) : []
-  return { runs, latest, results, refs: new Map(refs.map((o) => [o.id, o.reference])), running: all[0]?.status === "running" ? all[0] : null, partial: all.length - runs.length, gate: await gateScore() }
+  return { runs, latest, results, refs: new Map(refs.map((o) => [o.id, o.reference])), running: all[0]?.status === "running" ? all[0] : null, partial: all.length - runs.length, rerun, gate: await gateScore() }
 }
 
 export default async function EvalsPage() {
-  const { runs, latest, results, refs, running, partial, gate } = await load()
+  const { runs, latest, results, refs, running, partial, rerun, gate } = await load()
   const history = runs.filter((r) => r.status === "done" && scored(r) > 0).reverse()
   return <AppFrame><main className="page">
     <div className="trust-intro"><RingoFace size={64} /><div>
@@ -88,7 +93,7 @@ export default async function EvalsPage() {
       <section className="sec" aria-labelledby="ev-results">
         <div className="sec-head"><h2 id="ev-results">Scenario by scenario</h2><span className="count num">{results.length}</span>
           <span className="note">{latest.note ? `${latest.note} · ` : ""}model {latest.model}</span></div>
-        {results.length === 0 ? <p className="empty">This run has no results.</p> : <ul className="ev-cards">{results.map((r) => <Card key={r.id} r={r} reference={refs.get(r.orderId) ?? r.orderId} />)}</ul>}
+        {results.length === 0 ? <p className="empty">This run has no results.</p> : <ul className="ev-cards">{results.map((r) => <Card key={r.id} r={r} reference={refs.get(r.orderId) ?? r.orderId} rerun={rerun.get(r.scenarioId)} />)}</ul>}
       </section>
     </>}
 
@@ -99,7 +104,7 @@ export default async function EvalsPage() {
   </main></AppFrame>
 }
 
-function Card({ r, reference }: { r: Result; reference: string }) {
+function Card({ r, reference, rerun }: { r: Result; reference: string; rerun?: { verdict: string; at: string; note: string | null } }) {
   const v = VERDICT[r.verdict as keyof typeof VERDICT] ?? VERDICT.void
   const checks = r.checks as CheckRow[]
   const reasons = r.reasons as string[]
@@ -114,6 +119,7 @@ function Card({ r, reference }: { r: Result; reference: string }) {
       <div><dt>What I did</dt><dd>{r.actual}</dd></div>
     </dl>
     {reasons.length > 0 && <ul className="ev-reasons">{reasons.map((x) => <li key={x}>{x}</li>)}</ul>}
+    {rerun && <p className="ev-rerun">Run again on its own {fmtDateTime(rerun.at, ZONE)}: {(VERDICT[rerun.verdict as keyof typeof VERDICT] ?? VERDICT.void).label.toLowerCase()}{rerun.note ? ` (${rerun.note})` : ""}. Not in the score above.</p>}
     <details className="ev-checks">
       <summary>{checks.filter((c) => c.ok).length} of {checks.length} checks held</summary>
       <ul>{checks.map((c) => <li key={c.label} className={c.ok ? "ok" : "bad"}><span aria-hidden="true">{c.ok ? "✓" : "✗"}</span><span className="sr-only">{c.ok ? "Held:" : "Missed:"}</span> {c.label}{c.setup ? <em> (the test itself)</em> : null}</li>)}</ul>

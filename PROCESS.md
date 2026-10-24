@@ -429,7 +429,20 @@ Bahn's brief says "hundreds of orders", but the dataset has 100. We tested at 1,
 - Virtualising lists (it needs a dependency or a lot of code; paging covers it) and caching the queue between polls (110 ms per 20 s poll per tab is fine).
 - De-duplicating map arcs. At 1,000 orders, 10 identical arcs stack and look darker, and de-duplicating would change the 100-order map.
 - Left: the map's city panel lists its orders in load order, not rank order. With 50 in Hamburg, the worst may not be on top.
-- Model use: the queue page's handover strip starts the Scribe in the background. My browser runs triggered about 5 Scribe calls (one per server start and database state) before I noticed and blanked the key for the rest. No Ringo runs.
+- Model use: the queue page's handover strip starts the Scribe in the background. My browser runs triggered about 5 Scribe calls (one per server start and database state) before I noticed; after that I stopped loading pages rather than restart with the key blanked. No Ringo runs.
+
+## 6n. Integration of round 2
+
+Merged `r2-decide`, `r2-learn`, `r2-calls`, `r2-evals`, `r2-engine`, `r2-scale` into `ring`, in that order, typechecking after each.
+- **Conflicts kept every lane's behaviour.** `ring-schema.ts` has all six new tables. The system prompt keeps both the calls lane's "read_playbook before you dial" and the evals lane's "two dead lines in a row go to a person". `scenarios.ts` keeps the red-team override hook around the new multilingual `baseScenario`. `reset()` and `clearOrder()` clear playbooks and `ring_turns`. `/trust` reads: suggestion, crew, ledger, learned rules, time saved, then the "How we test Ringo" footer. PROCESS sections renumbered 6h–6m.
+- **Contract.** `read_playbook` and `note_playbook` joined `ToolName` in `lib/contract.ts` (the local `RingTool` widening is gone). CONTRACT.md §2, §5 and §7 list the new tables, the ladder rules on `place_call`, the closed-site refusal, the callback guard, the new routes and pages. `savings.check` runs inside `ring:check`.
+- **Semantic breaks found by running things, not by the merge.**
+  - The scenario suite read raw transcript text. Sites now answer in Finnish or German, so its regexes ("reception", "booked") would never match on 516 or 593. The suite now reads the English beside each line.
+  - On the first integrated run, the backup-car scenario was voided: the Finnish stock clerk's line came back translated as "reserved a comparable BMW M4", and the setup check only knew "backup / similar" and "booked / confirmed / ready". The check now knows "comparable" and "reserved". The scenario re-ran on its own and passed. `/evals` shows that re-run on the card, outside the score.
+  - On an order whose Ringo proposal had been reviewed, the hero still said "Next: approve the updated access instruction". Once his proposals are reviewed, the hero now shows his headline and his "what next", minus the "After approval," lead-in.
+- **Checks on the merged tree:** typecheck; `ring:check` 25 + 9 + 3; build; `smoke` against our own server; `eval:reviewer` unchanged at 3/10; `eval:learned` 33/33 offline (part B, the real-rule replay, has no rule in a fresh database); the scenario suite live, 9 passed and 1 voided of 10, then backup-car alone passed (12 model runs in all).
+- **Demo state.** `POST /api/agent/reset`, then two live runs to put back what the lanes' demo needs: 516 (Finnish call, five playbook notes for Velantora Helsinki) and 023 (German call, an address change waiting in Decide). Both access instructions were edited the same way through the review API ("Take the pickup photos at the bay before the car leaves."), so `/trust` opens on Ringo's rule suggestion. It is left unaccepted for the demo. Eval history, corrections and learned rules survive a reset by design; playbooks, traces and the savings tally do not.
+- Not re-run: `eval:ring` (about five more live runs; the calls lane flagged its 593 driver assertion), and the Matrix base-path build of the merged tree (engine and learn checked theirs; decide and calls did not).
 
 ## 7. Known gaps
 
@@ -439,3 +452,5 @@ Bahn's brief says "hundreds of orders", but the dataset has 100. We tested at 1,
 - No speech input in the Ringo chat box; earlier runs are not browsable (only the latest run's headline shows).
 - Learned rules live in the database, so a fresh clone starts with none (no export or seed for them). The run panel shows a learned-rule block only while the run is live, like every gate event. Scoping uses open alert signals and work item kinds only.
 - Ringo prepares no customer-message drafts. The background runner's `--autorun` is off by default so it cannot take over a live demo.
+- The scenario suite runs 516 and 593 in parallel against the same site, so one scenario's playbook notes can be read by the other mid-run. Run it on its own database, not the demo one: it clears Ringo's rows on the orders it uses.
+- Reset keeps the scenario history, corrections and learned rules, but wipes the site playbooks and the trace those corrections came from.
