@@ -33,7 +33,7 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
   test("322 is the first SAFETY card, not a Ringo order, with a row-built decision", () => {
     const r = t("ord-00322")
     assert.equal(r.bucket, "needs_you"); assert.equal(r.reason, "SAFETY"); assert.equal(r.severity, "critical")
-    assert.equal(r.oneDecision, "Driver says they are safe and stopped (driver 08:22). Location unverified, no photo yet. Customer: keep it stopped (08:40). Decide with the customer: roadside or tow.")
+    assert.equal(r.oneDecision, "Driver says they are safe and stopped (driver 11:22 EEST). Location unverified, no photo yet. Customer: keep it stopped (11:40 EEST). Decide with the customer: roadside or tow.")
     assert.deepEqual(r.overtaken.map((o) => [o.ref.id, o.overtakenBy.id]), [["alert-x105238e92e7f3ba6", "alert-x539dcfdd5a51d9ab"]])
     assert.equal(ringEligibility(bundles.get("ord-00322")!).ok, false)
   })
@@ -74,7 +74,7 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     assert.equal(next("ord-00458"), "Confirm with customer")
     assert.equal(next("ord-00593"), "Answer driver")
     assert.equal(next("ord-00516"), "Run Ringo")
-    assert.equal(nextAction({ reason: "DUE_SOON", why: "Site, 08:10 UTC: “Who collects?”", oneDecision: null, sources: [] }), "Call site")
+    assert.equal(nextAction({ reason: "DUE_SOON", why: "Site, 11:10 EEST: “Who collects?”", oneDecision: null, sources: [] }), "Call site")
     assert.equal(nextAction({ reason: "DUE_SOON", why: "A trade-in receipt shares a branch.", oneDecision: null, sources: [] }), null)
     assert.equal(nextAction({ reason: "WAITING_EXTERNAL", why: "", oneDecision: null, sources: [] }), null)
   })

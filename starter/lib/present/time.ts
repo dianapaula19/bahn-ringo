@@ -3,6 +3,10 @@
 
 const LOCALE = "en-GB"
 
+/** The ops desk's zone. A time with no zone of its own (a message, an event, a check) is shown here,
+ *  with the zone name; the UTC time stays on hover (fmtLong). */
+export const OPERATOR_ZONE = "Europe/Helsinki"
+
 export function zoneCity(zone: string | null | undefined): string | null {
   if (!zone || zone === "UTC") return null
   const city = zone.split("/").pop()
@@ -27,7 +31,7 @@ function formatter(zone: string, options: Intl.DateTimeFormatOptions): Intl.Date
 
 const zones = new Map<string, string>()
 function safeZone(zone: string | null | undefined): string {
-  if (!zone) return "UTC"
+  if (!zone) return OPERATOR_ZONE
   let known = zones.get(zone)
   if (!known) {
     try { formatter(zone, {}); known = zone } catch { known = "UTC" }
@@ -59,6 +63,14 @@ export function fmtClock(value: string | null | undefined, zone?: string | null)
   const date = parse(value)
   if (!date) return ""
   return parts(date, safeZone(zone), { hour: "2-digit", minute: "2-digit" })
+}
+
+/** "11:22 EEST": a clock time in the given zone (the operator's by default) with the zone's short name. */
+export function fmtClockZone(value: string | null | undefined, zone?: string | null): string {
+  const date = parse(value)
+  if (!date) return ""
+  const tz = safeZone(zone)
+  return `${parts(date, tz, { hour: "2-digit", minute: "2-digit" })} ${tz === "UTC" ? "UTC" : zoneName(date, tz)}`
 }
 
 /** "21 Oct 08:14" in the given zone, with the zone's short name when it is not UTC: "23 Oct 09:00 EEST". */
