@@ -4,7 +4,7 @@ import type { EvidenceLevel, Fact, Triage } from "@/lib/contract"
 import { effectiveLevel } from "@/lib/agent/facts"
 import type { RingOrderState } from "@/lib/agent/store"
 import { rows, str, type Bundle } from "@/lib/present/bundle"
-import { humanize, label, labelIn } from "@/lib/present/labels"
+import { label, labelIn } from "@/lib/present/labels"
 import { fmtWindow } from "@/lib/present/time"
 import { rankByDecision } from "./relevance"
 
@@ -91,7 +91,7 @@ export function datasetFacts(bundle: Bundle, now?: string): Fact[] {
   for (const al of bundle.alerts) {
     if (al.status === "RESOLVED" || al.status === "DISMISSED") continue
     const level = alertLevel(al.summary)
-    add(al.id, `alert.${al.signal.toLowerCase()}`, al.summary, level, "alert", al.triggeredAt, "Monitoring", `${level === "quoted" ? "Relays what the site said · " : ""}${alertNote(al.severity, al.status, str(al.details.owner))}`)
+    add(al.id, `alert.${al.signal.toLowerCase()}`, al.summary, level, "alert", al.triggeredAt, "Monitoring", `${level === "quoted" ? "Relays what the site said · " : ""}${alertNote(al.severity, al.status, str(al.details.owner) ? bundle.dir.resolve(al.details.owner, "operator").name : null)}`)
   }
   return out
 }
@@ -108,7 +108,7 @@ export function alertLevel(summary: string): EvidenceLevel {
 
 /** "Critical alert, acknowledged by Shift lead" rather than "critical acknowledged". */
 function alertNote(severity: string, status: string, owner: string | null): string {
-  const state = status === "ACKNOWLEDGED" ? `acknowledged${owner ? ` by ${humanize(owner)}` : ""}` : status === "OPEN" ? "not yet acknowledged" : labelIn(status)
+  const state = status === "ACKNOWLEDGED" ? `acknowledged${owner ? ` by ${owner}` : ""}` : status === "OPEN" ? "not yet acknowledged" : labelIn(status)
   return `${label(severity)} alert, ${state}`
 }
 
