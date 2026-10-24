@@ -180,6 +180,21 @@ A 30-second look as a judge, on a production build (`next start` on a spare port
 
 **Thrown away:** the SVG `#svgView()` fragment for the crop (CSS is certain to work everywhere); one clickable dot per capital-region city on the main map (they overlapped, so the inset holds the links); CSS stroke widths on the map (CSS beats SVG attributes, which made the inset's rings 5× too thick); a `max-height` on the map, which shrank labels to 9 px; prefetching every city link.
 
+## 6d. Clumsy-user run (24 Oct, evening)
+
+Three persona agents (impatient lead, keyboard user, new dispatcher) clicked through Bahn at 1440 and 390. The run found these bugs; fixed:
+- Every model call failed with 400 because PostHog fields reached `beta.messages` (fixed earlier, separately).
+- **A failed run showed raw API JSON with a request id three times and replaced the order's decision card.** A failed run now stops with outcome `failed`: triage and the story skip it, so the order keeps its real card, and the run panel says it once ("Ringo couldn't reach its model. Nothing changed. Try again or work it by hand.") with the raw text folded under "Technical details" (wraps on a phone).
+- "Since you left" printed `Ringo stopped (needs_person)`; it now says "Ringo needs a person".
+- On a phone, Run Ringo scrolled under the sticky top bar and the tap opened "Needs you": `scroll-padding-top` at the mobile breakpoint. The top bar fades at the right edge so it reads as scrollable.
+- `ORD-00010`, ` ord-00010` and `/places` were dead ends: `proxy.ts` redirects to the lower-case id (pages and APIs) and `/places` to `/sites`. An unknown order is a real 404 from `orders/[id]/layout.tsx` (no client fetches), with a plain not-found page.
+- `/map?city=helsinki` found nothing, and the tab title echoed any query text: the city match ignores case, accents and spaces, and the title names only a matched city.
+- Map dots were 15 px tap targets on a phone: a layer of invisible 44 px circles under every dot (a dot itself always opens its own city).
+- Most tabs said "Ringo — Bahn control room": each page has its own title; an order's names its reference from the server.
+- Keyboard: a skip link, Back from an order focuses the row it was opened from, Escape leaves the chat box and stops watching a run.
+
+Left, because they are outside the order flow and nobody hit them: customer, driver and site pages with an unknown id still render their own "not found" with HTTP 200. Then `POST /api/agent/reset` cleared the 4 failed persona runs plus the day's test runs; the queue is back to the §8 picture (322 first, 458 and 593 in Needs you, 516/010/023 with Ringo).
+
 ## 7. Known gaps
 
 - Nothing has run on a real Matrix OS box yet. The deploy script is a dry run until `--apply`, and assumptions A1 to A10 (Node 24 on the box, Docker, and so on) are unverified. Serving under `/apps/<slug>` works in a local production build with the base path; whether the gateway keeps or strips the prefix on a real box is not checked.
