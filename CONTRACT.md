@@ -63,7 +63,7 @@ Levels: `claimed → quoted → reserved → observed → verified`, plus `stale
 - A fact becomes `refuted` only when a later source contradicts it. Ringo records the new fact and sets `supersededByFactId` on the old one, citing both sources.
 - A fact becomes `stale` when it is overtaken by a later fact on the same `subject`, or when it ages past its window: quotes after 2 h, tracking after 60 min.
 - `sourceId` must resolve to a dataset row or a ring row. If it doesn't, `record_fact` returns an error and nothing is stored. This is the citation sanitizer.
-- `lib/triage/facts.ts` derives `origin: "dataset"` facts from structured rows only: endpoint details and claims, the selected slot, the assignment, travel options and reservations, the latest tracking, proofs, release documents, and alerts. Facts taken from message text come only from Ringo's `record_fact`.
+- `lib/triage/facts.ts` derives `origin: "dataset"` facts from structured rows only: endpoint details and claims, the selected slot, the assignment, travel options and reservations, the latest tracking, proofs, release documents, open incidents (the reported symptom, where it stopped, the warning photo, who decides recovery; round 5), and alerts. Facts taken from message text come only from Ringo's `record_fact`.
 
 ## 4. Triage: who needs a person (Lane AGENT, `lib/triage/triage.ts`)
 
@@ -78,7 +78,7 @@ Triage is deterministic code with no LLM. It runs on the starter `Bundle` (`load
 | 5 | `DRIVER_WAITING` | needs_you | an open `EMPTY_PICKUP` incident, or an unanswered driver message in the last 2 h that asks something (a question or "please"); the row quotes it |
 | 6 | `RECORDED_PROPOSAL` | needs_you | a dataset proposal is `PENDING_REVIEW` |
 | 7 | `CUSTOMER_CONTACT` | needs_you | the open work item's `next_action` or a pending proposal needs the customer (`IDENTITY_INPUT_REQUIRED`, or a payload `contact` that includes `"customer"`) |
-| 8 | `DUE_SOON` | needs_you | an open work item is due within 60 min of `now` and is not Ringo-workable, or an OPEN (not acknowledged) `high` alert other than `SITE_ACCESS_UNCONFIRMED` |
+| 8 | `DUE_SOON` | needs_you | an open work item is due within 60 min of `now` and is not Ringo-workable, or an OPEN (not acknowledged) `high` alert other than `SITE_ACCESS_UNCONFIRMED`; then (round 5) a person's open follow-up (an unreleased `ring_claims` row), due at its recheck time |
 | 9 | `RING_WORKING` | ring | a Ringo run is in progress, or a callback is scheduled |
 | 10 | `RING_CAN_CALL` | ring | an open work item of kind `PICKUP_CONTACT_HANDLE_REQUIRED`, `PICKUP_ACCESS_CHECK_REQUIRED` or `KEY_HOLDER_STOCK_CHECK`, or an OPEN `SITE_ACCESS_UNCONFIRMED` alert, on a `NEW` / `WAITING_FOR_PICKUP` order with a pickup site or contact |
 | 11 | `WAITING_EXTERNAL` | waiting | an ACKNOWLEDGED alert with an owner, an open conversation with `waiting_on`, or any other open alert (so "quiet" really means no open alert) |
@@ -176,6 +176,7 @@ Errors use `{error, code?}` with 400/404/409. Every success body carries `now`.
 | `POST /api/agent/learned/:id` | `{action: accept\|dismiss\|off\|on\|edit, text?, operatorId}` | the rule. Review responses also carry `suggestion` |
 | `GET /api/agent/sites/:id/playbook` | — | the site's playbook notes |
 | `PATCH`/`DELETE /api/agent/playbook/:id` | `{note, operatorId}` | the edited note, or `{ok}` |
+| `GET /api/agent/clock` | — | `{now, snapshotAt}`: the sidebar's desk clock and data-as-of on pages that load nothing else (round 5) |
 | `GET`/`POST /engine/savings` | — / `{readMin, driverMessageMin, noteMin}` (0–60) | today's time-saved tally and the estimates (`ring_meta.savings_estimates`) |
 
 Pages added in round 2: `/decide` (decision mode), `/evals` (scenario suite, from the trust footer), `/engine` (technical trace, from the run panel). Scripts: `eval:suite` (live, ten scenarios), `eval:learned` (offline), `npx tsx lib/savings.check.ts`, `scripts/scale-seed.ts` (`--undo`).
