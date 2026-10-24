@@ -1,10 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import posthog from "posthog-js"
-import type { CallRecord, CallTurn, OrderStory, RunEvent, ToolName } from "@/lib/contract"
-import { DESK, runRing } from "../../_lib/agent-api"
+import type { CallRecord, CallTurn, OrderStory, RunDetail, RunEvent, RunOutcome, ToolName } from "@/lib/contract"
+import { DESK, loadRun, runRing } from "../../_lib/agent-api"
 import { Icon } from "../icons"
 import { withBase } from "@/lib/base"
 import { RingoFace } from "../ringo"
@@ -136,14 +136,16 @@ export function RunPanel({ story, onDone, heroRun = false, runRequest = 0, onRun
     </div>
     <form className="ring-chat" onSubmit={(e) => { e.preventDefault(); const t = message.trim(); if (t && !running && !busyElsewhere) { setMessage(""); start("operator", t) } }}>
       <label className="sr-only" htmlFor="ring-msg">Tell Ringo something</label>
-      <textarea id="ring-msg" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Tell Ringo something, e.g. “call stock control again” or “don't call before 10:00”"
+      <textarea id="ring-msg" rows={1} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Tell Ringo something, e.g. “call stock control again” or “don't call before 10:00”"
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit() } else if (e.key === "Escape" && !running) e.currentTarget.blur() }} />
       <button type="submit" className="btn" disabled={running || busyElsewhere || !message.trim()}>Send</button>
     </form>
 
     {offline && <p className="result tone-warn" role="status">Ringo is offline right now (no model key). You can still watch a recorded run. <button type="button" className="link-btn" onClick={() => start("replay")}>Replay</button></p>}
     {lines.length === 0 && busyElsewhere && <p className="empty" role="status">Ringo is working on this order now (started <When at={last.startedAt} now={story.now} />). Reload in a moment to see what he found.</p>}
-    {lines.length === 0 && !running && !busyElsewhere && !offline && <p className="empty">{last ? <>Ringo last ran <When at={last.startedAt} now={story.now} />{last.decision ? <>: {last.decision.headline}</> : null} · <TraceLink runId={last.id} /></> : "Ringo has not run on this order yet."}</p>}
+    {lines.length === 0 && !running && !busyElsewhere && !offline && (last && last.status !== "running"
+      ? <RunSteps key={last.id} runId={last.id} lead={<>Ringo last ran <When at={last.startedAt} now={story.now} />{last.trigger === "replay" && " (a recorded run)"}</>} />
+      : !last && <p className="empty">Ringo has not run on this order yet.</p>)}
     {lines.length === 0 && running && <ul className="steps" aria-busy="true"><li className="step-line pending"><span className="spin" />Starting…</li></ul>}
     {lines.length > 0 && <ul className="steps" aria-live="polite">
       {lines.map((l, i) => <li key={i} className={`step-line kind-${l.kind}`}><LineView line={l} now={story.now} live={running} acted={lines.slice(0, i).some((x) => x.kind === "step" || x.kind === "call")} /></li>)}
@@ -201,4 +203,62 @@ function LineView({ line: l, now, live, acted }: { line: Line; now: string; live
     }
     default: return null
   }
+}
+
+// ---------------------------------------------------------------- what the last run cost, step by step
+
+type Step = { label: string; ms: number; sim?: boolean; tone?: "warn" }
+const READ: Partial<Record<ToolName, string>> = { read_order: "Read order", read_messages: "Read messages", read_docs: "Read site rules", read_playbook: "Read playbook" }
+const STOPPED: Record<RunOutcome, string> = { proposal_ready: "Stop: proposal ready", needs_person: "Stop: a person decides", waiting: "Stop: calls back later", done: "Done", failed: "Stopped: it failed" }
+const CALL_OUT: Record<string, string> = { NO_ANSWER: "no answer", VOICEMAIL: "voicemail", CLOSED: "closed", DROPPED_UNKNOWN: "line dropped" }
+
+/** One run as its steps: cheap reads first, then the one call, then the stop. Each step's time runs from the end of
+ *  the step before it, so the times add up to the run (model thinking included). Facts and playbook notes written
+ *  between steps fold into one "Wrote" step. */
+export function runSteps(events: RunEvent[]): Step[] {
+  const out: Step[] = []
+  const t = (e: RunEvent) => ("at" in e ? Date.parse(e.at) : e.type === "call_ended" ? Date.parse(e.call.endedAt ?? e.call.startedAt) : NaN)
+  const start = events.find((e) => e.type === "run_started")
+  let prev = start ? t(start) : NaN
+  let wrote = { facts: 0, notes: 0, end: NaN }
+  const push = (s: Omit<Step, "ms">, end: number) => {
+    if (wrote.facts || wrote.notes) { out.push({ label: `Wrote ${[wrote.facts && `${wrote.facts} ${wrote.facts === 1 ? "fact" : "facts"}`, wrote.notes && "notes"].filter(Boolean).join(" + ")}`, ms: wrote.end - prev }); prev = wrote.end; wrote = { facts: 0, notes: 0, end: NaN } }
+    out.push({ ...s, ms: (Number.isFinite(prev) ? end - prev : 0) }); prev = end
+  }
+  for (const e of events) {
+    if (e.type === "tool_result" && READ[e.tool]) push({ label: READ[e.tool]! }, t(e))
+    else if (e.type === "tool_result" && e.tool === "record_fact" && e.ok) { wrote.facts++; wrote.end = t(e) }
+    else if (e.type === "tool_result" && e.tool === "note_playbook" && e.ok) { wrote.notes++; wrote.end = t(e) }
+    else if (e.type === "call_ended") {
+      const rung = callRung(e.call.transcript)
+      const out_ = CALL_OUT[e.call.outcome ?? ""]
+      push({ label: `Call ${rung ? RUNG_LABEL[rung].toLowerCase() : "the site"}${out_ ? ` (${out_})` : ""}`, sim: true, tone: out_ ? "warn" : undefined }, t(e))
+    } else if (e.type === "tool_result" && e.tool === "send_driver_message" && e.ok) push({ label: "Message the driver", sim: true }, t(e))
+    else if (e.type === "tool_result" && e.tool === "schedule_callback" && e.ok) push({ label: "Book a callback" }, t(e))
+    else if (e.type === "stop") push({ label: STOPPED[e.decision.outcome] }, t(e))
+  }
+  return out
+}
+
+const dur = (ms: number) => !Number.isFinite(ms) || ms < 1000 ? "<1 s" : ms < 60_000 ? `${Math.round(ms / 1000)} s` : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`
+
+function RunSteps({ runId, lead }: { runId: string; lead: ReactNode }) {
+  const [detail, setDetail] = useState<RunDetail | null>(null)
+  const [error, setError] = useState(false)
+  useEffect(() => {
+    const c = new AbortController()
+    loadRun(runId, c.signal).then(setDetail).catch(() => { if (!c.signal.aborted) setError(true) })
+    return () => c.abort()
+  }, [runId])
+  const steps = detail ? runSteps(detail.events) : []
+  const total = steps.reduce((n, s) => n + (Number.isFinite(s.ms) ? s.ms : 0), 0)
+  const head = <p className="run-steps-head">{lead}{steps.length > 0 && <> · {steps.some((x) => x.sim) ? "cheap work first, then the call, then stop" : "read first; no call needed, so he stopped"} · {dur(total)} in all</>} · <TraceLink runId={runId} /></p>
+  if (error || (detail && !steps.length)) return <div className="run-steps-wrap">{head}{error && <p className="empty">Could not load the steps of that run.</p>}</div>
+  if (!detail) return <div className="run-steps-wrap">{head}<ol className="run-steps" aria-busy="true" aria-label="Loading the last run's steps"><li className="run-step skel" /><li className="run-step skel" /><li className="run-step skel" /></ol></div>
+  return <div className="run-steps-wrap">
+    {head}
+    <ol className="run-steps" aria-label="What Ringo's last run did, step by step">{steps.map((s, i) => <li key={i} className={`run-step${s.tone ? ` tone-${s.tone}` : ""}${i === steps.length - 1 ? " last" : ""}`}>
+      <b>{s.label}</b><small>{dur(s.ms)}{s.sim && <> · <Simulated>sim</Simulated></>}</small>
+    </li>)}</ol>
+  </div>
 }

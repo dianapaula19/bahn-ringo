@@ -4,6 +4,10 @@
 //    runs) become ring rows: runs, steps, calls, driver messages, facts, proposals, callbacks. Each run is
 //    stored with trigger "replay" and says where it came from. Proposals stay PENDING_REVIEW: approving or
 //    rejecting them is the person's job, so no review, no learned rule and no correction is invented here.
+//    The site playbook notes those runs wrote are rebuilt from the same recordings: code's own note on each
+//    answered or dropped call (observeCall), then every note_playbook call Ringo made, each re-checked against the
+//    call transcript exactly as the live tool does. So a fresh clone shows the Finnish 516 call in Velantora
+//    Helsinki's playbook, and clearing an order never leaves notes that the seed cannot rebuild.
 // 2. The recorded scenario-suite runs in eval/suite-*.json go into ring_eval_runs/results, so /evals shows the
 //    real results (misses included). Nothing is re-scored or edited.
 // It clears Ringo's rows on those five orders first, and moves the sim clock to just after the last recorded
@@ -43,13 +47,15 @@ async function main() {
   const { db } = await import("../lib/db")
   const S = await import("../lib/ring-schema")
   const { clearOrder } = await import("../lib/agent/jobs")
-  const { SNAPSHOT, simNow } = await import("../lib/agent/clock")
+  const { SNAPSHOT } = await import("../lib/agent/clock")
   const { orders } = await import("../lib/schema")
+  const { observeCall, noteFromCall } = await import("../lib/agent/playbook/playbook")
+  const { findQuote } = await import("../lib/agent/sim/calls")
 
   const dir = join(process.cwd(), "lib", "agent", "fixtures")
   const refs = new Map((await db.select({ id: orders.id, reference: orders.reference }).from(orders)).map((o) => [o.reference, o.id]))
   let latest = SNAPSHOT
-  const counts = { runs: 0, steps: 0, calls: 0, driverMessages: 0, facts: 0, proposals: 0, callbacks: 0 }
+  const counts = { runs: 0, steps: 0, calls: 0, driverMessages: 0, facts: 0, proposals: 0, callbacks: 0, notes: 0 }
 
   for (const file of (await readdir(dir)).filter((f) => f.endsWith(".ndjson")).sort()) {
     const reference = file.replace(/\.ndjson$/, "")
@@ -101,8 +107,22 @@ async function main() {
       execution: p.execution, supersededByProposalId: p.supersededByProposalId, onApprove: p.onApprove ?? "", onReject: p.onReject ?? "", gate: p.gate, trustMode: p.trustMode ?? "ask", createdAt: p.createdAt,
     })))
     if (jobs.size) await db.insert(S.ringJobs).values([...jobs.values()].map((j) => ({ id: j.id, orderId, dueAt: j.dueAt, reason: j.reason, status: j.status, createdByRunId: j.createdByRunId, firedRunId: j.firedRunId })))
+    // Site playbook notes, in the order the runs wrote them.
+    type NoteIn = { topic: Parameters<typeof noteFromCall>[1][number]["topic"]; note: string; quote: string }
+    let notes = 0
+    for (const e of events) {
+      // Older recordings predate the simulator naming its menus ("hold ? s"): their path would read as noise, so only labelled ones count.
+      if (e.type === "call_ended" && (e.call.transcript as { label?: string }[]).some((t) => t.label)) notes += await observeCall(calls.get(e.call.id) ?? e.call)
+      if (e.type !== "tool_call" || e.tool !== "note_playbook") continue
+      const ok = events.some((r) => r.type === "tool_result" && r.stepId === e.stepId && r.ok)
+      const call = calls.get(String(e.input.callId))
+      if (!ok || !call) continue
+      const checked = (e.input.notes as NoteIn[]).flatMap((n) => { const turn = findQuote(n.quote, call.transcript); return turn ? [{ ...n, at: turn.at }] : [] })
+      notes += await noteFromCall(call, checked)
+    }
+    counts.notes += notes
     counts.calls += calls.size; counts.driverMessages += dms.size; counts.facts += facts.size; counts.proposals += props.size; counts.callbacks += jobs.size
-    console.log(`${reference}: ${segs.length} run${segs.length === 1 ? "" : "s"}, ${calls.size} calls, ${facts.size} facts, ${props.size} proposals`)
+    console.log(`${reference}: ${segs.length} recorded run${segs.length === 1 ? "" : "s"}, ${calls.size} simulated calls, ${facts.size} facts, ${props.size} proposals waiting, ${notes} site playbook notes`)
   }
 
   // The sim clock: one minute after the last recorded step.
@@ -115,8 +135,9 @@ async function main() {
     evalRuns += (await db.insert(S.ringEvalRuns).values(j.runs).onConflictDoNothing().returning()).length
     await db.insert(S.ringEvalResults).values(j.results).onConflictDoNothing()
   }
-  console.log(`\nLoaded ${counts.runs} recorded runs (${counts.steps} steps, ${counts.calls} calls, ${counts.facts} facts, ${counts.proposals} proposals waiting for a person) and ${evalRuns} new scenario-suite runs.`)
-  console.log(`Sim clock now ${await simNow()}. Approve or reject the proposals yourself on /decide.`)
+  console.log(`\nCreated: ${counts.runs} recorded runs (${counts.steps} steps, ${counts.calls} simulated calls, ${counts.facts} facts, ${counts.proposals} proposals waiting for a person), ${counts.notes} site playbook notes rebuilt from those runs, ${evalRuns} new scenario-suite runs on /evals.`)
+  console.log("Not created: no review, no correction, no learned rule, no claim. Those are a person's to make.")
+  console.log(`Sim clock now ${new Date(Date.parse(latest) + 60_000).toISOString()}. Approve or reject the proposals yourself on /decide.`)
   await db.$client.end()
 }
 

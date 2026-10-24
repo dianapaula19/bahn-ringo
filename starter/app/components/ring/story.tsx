@@ -170,7 +170,7 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
       {next.context && <p className="decision-context">{next.context}</p>}
       {next.source && <p className="decision-src">{next.source}</p>}
     </div> : triage.bucket !== "needs_you" && <p className="decision-next">Nothing waits on you.</p>}
-    {chooseRecovery && <RecoveryChoice orderId={story.orderId} onDone={onChanged} />}
+    {chooseRecovery && <RecoveryChoice orderId={story.orderId} reference={story.reference} onDone={onChanged} />}
     {(canRun || links.length > 0) && <div className="actions decision-actions">
       {canRun && triage.bucket === "ring" && runButton(true)}
       {links.map((l, i) => {
@@ -180,7 +180,7 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
       })}
       {canRun && triage.bucket !== "ring" && runButton(!links.length)}
     </div>}
-    {canClaim && <ClaimBox orderId={story.orderId} claim={story.claim ?? null} now={story.now} keys={keys} onDone={(c) => { onChanged(); if (c) onClaimed?.(c) }} />}
+    {canClaim && <ClaimBox orderId={story.orderId} reference={story.reference} claim={story.claim ?? null} now={story.now} keys={keys} onDone={(c) => { onChanged(); if (c) onClaimed?.(c) }} />}
     {ringPending.map((p) => <ProposalCard key={p.id} proposal={p} story={story} onChanged={onChanged} onReviewed={setReviewed} />)}
     {reviewed && <p className={`result tone-${reviewed.tone}`} role="status">{reviewed.text}</p>}
     {reviewed?.suggestion && <div className="learn-banner" role="status">
@@ -199,7 +199,7 @@ const REVIEWED: Record<ReviewDecision, string> = { APPROVED: "You accepted Ringo
 
 /** The customer's roadside-or-tow answer, as a person heard it. A note is required (who said it, when).
  *  Recording it books nothing: the next step becomes booking the recovery, which needs approval as a cost. */
-function RecoveryChoice({ orderId, onDone }: { orderId: string; onDone: () => void }) {
+function RecoveryChoice({ orderId, reference, onDone }: { orderId: string; reference: string; onDone: () => void }) {
   const [choice, setChoice] = useState<"roadside" | "tow" | null>(null)
   const [note, setNote] = useState("")
   const [busy, setBusy] = useState(false)
@@ -213,11 +213,12 @@ function RecoveryChoice({ orderId, onDone }: { orderId: string; onDone: () => vo
     setResult({ text: `Recorded. Then: ${r.then}`, tone: "ok" }); setChoice(null); setNote(""); onDone()
   }
   return <div className="recovery">
-    {!choice && <div className="actions decision-actions">
-      <button type="button" className="btn primary" onClick={() => setChoice("roadside")}>Customer chose roadside</button>
-      <button type="button" className="btn primary" onClick={() => setChoice("tow")}>Customer chose tow</button>
-    </div>}
-    {!choice && <p className="decision-src">Then: book it (it needs approval as a cost) and tell the driver who is coming.</p>}
+    {!choice && <ul className="will-list">
+      <li><button type="button" className="btn primary" onClick={() => setChoice("roadside")}>Customer chose roadside</button>
+        <Will>Records &ldquo;customer chose roadside&rdquo; on {reference}, with who told you · then: booking roadside help needs approval as a cost</Will></li>
+      <li><button type="button" className="btn primary" onClick={() => setChoice("tow")}>Customer chose tow</button>
+        <Will>Records &ldquo;customer chose tow&rdquo; on {reference}, with who told you · then: booking the recovery needs approval as a cost</Will></li>
+    </ul>}
     {choice && <div className="recovery-form">
       <label className="field"><span>Customer chose {choice === "tow" ? "a tow" : "roadside assistance"}. Who told you, and when? (required)</span>
         <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} autoFocus /></label>
@@ -231,7 +232,7 @@ function RecoveryChoice({ orderId, onDone }: { orderId: string; onDone: () => vo
 }
 
 /** "I'll handle it": takes the order off the shared queue until the recheck time (or until something new happens). */
-function ClaimBox({ orderId, claim, now, keys, onDone }: { orderId: string; claim: Claim | null; now: string; keys: boolean; onDone: (c: Claim | null) => void }) {
+function ClaimBox({ orderId, reference, claim, now, keys, onDone }: { orderId: string; reference: string; claim: Claim | null; now: string; keys: boolean; onDone: (c: Claim | null) => void }) {
   const [note, setNote] = useState("")
   const [minutes, setMinutes] = useState(30)
   const [busy, setBusy] = useState(false)
@@ -256,7 +257,7 @@ function ClaimBox({ orderId, claim, now, keys, onDone }: { orderId: string; clai
     <label className="claim-back"><span>Back in</span>
       <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>{RECHECK_MINUTES.map((m) => <option key={m} value={m}>{m < 60 ? `${m} min` : `${m / 60} h`}</option>)}</select></label>
     <button type="submit" className="btn" data-claim disabled={busy}><Icon name="check" size={14} />{busy ? "Taking it…" : "I'll handle it"}{keys && <> <kbd>A</kbd></>}</button>
-    <p className="claim-hint">Takes it off everyone&apos;s queue until <When at={new Date(Date.parse(now) + minutes * 60_000).toISOString()} now={now} />, or sooner if something new happens. Nothing is sent.</p>
+    <Will>Puts {reference} in Taken under your desk until <When at={new Date(Date.parse(now) + minutes * 60_000).toISOString()} now={now} /> (sooner if something new happens) · nothing is sent to anyone</Will>
     {error && <p className="result tone-danger" role="alert">{error}</p>}
   </form>
 }
@@ -298,10 +299,6 @@ export function ProposalCard({ proposal: p, story, onChanged, onReviewed }: { pr
     <p className="proposal-card-summary">{p.summary}</p>
     <p className="proposal-text">{p.rationale}</p>
     {mode !== "edit" && <Payload payload={p.proposedPayload} />}
-    {(p.onApprove || p.onReject) && <dl className="payload consequences">
-      {p.onApprove && <div><dt>If you accept</dt><dd>{p.onApprove}</dd></div>}
-      {p.onReject && <div><dt>If you reject</dt><dd>{p.onReject}</dd></div>}
-    </dl>}
     {blocks.length > 0 && <ul className="gate-list tone-danger">{blocks.map((f) => <li key={f.ruleId}><b>Blocked by the reviewer check:</b> {f.message}</li>)}</ul>}
     {conditions.length > 0 && <ul className="gate-list">{conditions.map((f) => <li key={f.ruleId}><b>Keep in mind:</b> {f.message}</li>)}</ul>}
 
@@ -319,11 +316,14 @@ export function ProposalCard({ proposal: p, story, onChanged, onReviewed }: { pr
 
     {readOnly ? <p className="proposal-foot">Recorded before Ringo. Shown for context; it can&apos;t be reviewed here.</p>
       : <div className="actions">
-        {mode === "idle" && <>
-          <button type="button" className="btn primary" data-key="a" disabled={busy || blocks.length > 0} onClick={() => send("APPROVED")}>Accept</button>
-          <button type="button" className="btn" data-key="e" disabled={busy} onClick={() => setMode("edit")}>Edit</button>
-          <button type="button" className="btn" data-key="r" disabled={busy} onClick={() => setMode("reject")}>Reject</button>
-        </>}
+        {mode === "idle" && <ul className="will-list">
+          <li><button type="button" className="btn primary" data-key="a" disabled={busy || blocks.length > 0} onClick={() => send("APPROVED")}>Accept</button>
+            <Will>{blocks.length ? "Blocked by the reviewer check: edit or reject instead" : <>Rechecks {story.reference} and records it if nothing changed since Ringo read it{p.onApprove && <> · then: {lower(p.onApprove)}</>}</>}</Will></li>
+          <li><button type="button" className="btn" data-key="e" disabled={busy} onClick={() => setMode("edit")}>Edit</button>
+            <Will>Lets you change the fields, then records your version with a note on what you changed</Will></li>
+          <li><button type="button" className="btn" data-key="r" disabled={busy} onClick={() => setMode("reject")}>Reject</button>
+            <Will>Records your reason; nothing on the order changes{p.onReject && <> · then: {lower(p.onReject)}</>}</Will></li>
+        </ul>}
         {mode === "edit" && <><button type="button" className="btn primary" data-submit disabled={busy || !note.trim()} onClick={() => send("EDITED")}>Accept with my changes</button><button type="button" className="btn" data-cancel onClick={() => { setMode("idle"); setDraft(p.proposedPayload); setNote("") }}>Cancel</button></>}
         {mode === "reject" && <><button type="button" className="btn danger" data-submit disabled={busy || !note.trim()} onClick={() => send("REJECTED")}>Reject</button><button type="button" className="btn" data-cancel onClick={() => { setMode("idle"); setNote("") }}>Cancel</button></>}
       </div>}
@@ -331,7 +331,16 @@ export function ProposalCard({ proposal: p, story, onChanged, onReviewed }: { pr
   </article>
 }
 
+/** The one line under a decision button: what pressing it writes, and what comes after. */
+function Will({ children }: { children: ReactNode }) { return <small className="will"><b>This will:</b> {children}</small> }
+const lower = (t: string) => t.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase())
+
 // ---------------------------------------------------------------- facts
+
+/** A timeline entry's "3 facts" link: What we know opens whatever hides them, scrolls to the first and highlights them. */
+const SHOW_FACTS = "ring:show-facts"
+const showFacts = (ids: string[]) => window.dispatchEvent(new CustomEvent<string[]>(SHOW_FACTS, { detail: ids }))
+const FIRST = 4
 
 export function FactsPanel({ story }: { story: OrderStory }) {
   const { facts, now } = story
@@ -340,18 +349,35 @@ export function FactsPanel({ story }: { story: OrderStory }) {
   const linked = new Set(kinds.keys())
   const current = facts.filter((f) => !f.supersededByFactId && f.level !== "refuted" && f.level !== "stale" && !overtaken.has(f.sourceId))
   const old = facts.filter((f) => !current.includes(f))
+  const [all, setAll] = useState(false)
+  const [oldOpen, setOldOpen] = useState(false)
+  const [lit, setLit] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    let clear: ReturnType<typeof setTimeout> | undefined
+    const on = (e: Event) => {
+      const ids = (e as CustomEvent<string[]>).detail
+      setAll(true); if (old.some((f) => ids.includes(f.id))) setOldOpen(true)
+      setLit(new Set(ids)); clearTimeout(clear); clear = setTimeout(() => setLit(new Set()), 2400)
+      requestAnimationFrame(() => document.getElementById(`fact-${ids[0]}`)?.scrollIntoView({ block: "center", behavior: "smooth" }))
+    }
+    window.addEventListener(SHOW_FACTS, on)
+    return () => { window.removeEventListener(SHOW_FACTS, on); clearTimeout(clear) }
+  }, [old])
+  const shown = all ? current : current.slice(0, FIRST)
+  const row = (f: Fact, isOld = false) => <li key={f.id} id={`fact-${f.id}`} className={lit.has(f.id) ? "is-lit" : undefined}><FactChip fact={f} now={now} linked={linked} who={factLizard(f, kinds)} old={isOld} /></li>
   return <section className="sec" aria-labelledby="facts-h">
-    <div className="sec-head"><h2 id="facts-h">What we know</h2><span className="note">How sure we are, who said it, the record it comes from, and when.</span></div>
+    <div className="sec-head"><h2 id="facts-h">What we know</h2><span className="note">How sure we are, who said it, the record it comes from, and when. Times are Helsinki time.</span></div>
     {facts.length === 0 && <p className="empty">No facts recorded on this order yet.</p>}
-    <ul className="fact-list">{current.map((f) => <li key={f.id}><FactChip fact={f} now={now} linked={linked} who={factLizard(f, kinds)} /></li>)}</ul>
-    {old.length > 0 && <details className="more"><summary><Icon name="chevron" size={12} />{old.length} no longer true or out of date</summary>
-      <ul className="fact-list">{old.map((f) => <li key={f.id}><FactChip fact={f} now={now} linked={linked} who={factLizard(f, kinds)} old /></li>)}</ul></details>}
+    <ul className="fact-list">{shown.map((f) => row(f))}</ul>
+    {current.length > shown.length && <button type="button" className="link-btn" onClick={() => setAll(true)}>Show {current.length - shown.length} more {current.length - shown.length === 1 ? "fact" : "facts"}</button>}
+    {old.length > 0 && <details className="more" open={oldOpen} onToggle={(e) => setOldOpen(e.currentTarget.open)}><summary><Icon name="chevron" size={12} />{old.length} no longer true or out of date</summary>
+      <ul className="fact-list">{old.map((f) => row(f, true))}</ul></details>}
   </section>
 }
 
 // ---------------------------------------------------------------- timeline + calls
 
-const RECENT = 10
+const RECENT = 5
 
 export function Timeline({ story }: { story: OrderStory }) {
   const [all, setAll] = useState(false)
@@ -365,7 +391,7 @@ export function Timeline({ story }: { story: OrderStory }) {
     return () => window.removeEventListener("hashchange", open)
   }, [])
   return <section className="sec" aria-labelledby="tl-h">
-    <div className="sec-head"><h2 id="tl-h">What happened</h2><span className="count num">{story.timeline.length || ""}</span><span className="note">Oldest first. Who said what, and when.</span></div>
+    <div className="sec-head"><h2 id="tl-h">What happened</h2><span className="count num">{story.timeline.length || ""}</span><span className="note">Oldest first. Who said what, and when. Helsinki time.</span></div>
     {story.timeline.length === 0 && <p className="empty">Nothing has happened on this order yet.</p>}
     {hidden > 0 && <button type="button" className="link-btn" onClick={() => setAll(true)}>Show {hidden} earlier {hidden === 1 ? "entry" : "entries"}</button>}
     <ol className="tl">{story.timeline.slice(hidden).map((e, i) => <TimelineEntry key={`${e.ref.id}-${i}`} entry={e} now={story.now} facts={e.factIds.map((id) => factsById.get(id)).filter((f): f is Fact => !!f)} call={e.ref.table === "ring_calls" ? calls.get(e.ref.id) : undefined} />)}</ol>
@@ -379,7 +405,8 @@ function TimelineEntry({ entry: e, now, facts, call }: { entry: StoryEntry; now:
     <div className="tl-body">
       <p className="tl-who"><RoleTag role={entryRole(e.actorKind)} /><b>{e.actor}</b>{e.channel && <span className="tl-channel">{e.channel.replace(/_/g, " ")}</span>}{e.simulated && <Simulated />}</p>
       <p className="tl-text">{e.text}</p>
-      {facts.length > 0 && <ul className="fact-list inline">{facts.map((f) => <li key={f.id}><FactChip fact={f} now={now} /></li>)}</ul>}
+      {facts.length > 0 && <button type="button" className="tl-facts" onClick={() => showFacts(facts.map((f) => f.id))} title={facts.map((f) => f.claim).join("\n")}>
+        {facts.length} {facts.length === 1 ? "fact" : "facts"} in What we know</button>}
       {call && <button type="button" className="link-btn" aria-expanded={open} onClick={() => setOpen((v) => !v)}>{open ? "Hide the call" : "Read the call"}</button>}
       {call && open && <CallView call={call} now={now} />}
     </div>

@@ -47,16 +47,19 @@ npm run demo:seed          # optional: the recorded runs and test results the vi
 npm run dev                # http://localhost:3000
 ```
 
-**After `npm run demo:seed`** (no model key, nothing is invented):
-- Needs you holds Ringo's recorded proposals for CD-420516, CD-420010, CD-420023 and CD-420593, waiting for you to accept, edit or reject them (on the order or in Decide). They come from five real recorded runs (`starter/lib/agent/fixtures/*.ndjson`), stored with trigger "replay". Each order's timeline shows the simulated calls.
+**What `npm run demo:seed` creates** (no model key, nothing is invented; it prints the same list when it finishes):
+- **6 recorded runs** from five real recorded fixtures (`starter/lib/agent/fixtures/*.ndjson`), stored with trigger "replay", with their steps, 5 simulated calls and 17 facts. Each order page shows the last run as a strip of steps (read order, read messages, read site rules, read playbook, the call, the stop) with how long each took, and `/engine` labels them "recorded run, no token data".
+- **5 proposals waiting for a person**: Needs you holds Ringo's proposals for CD-420516, CD-420010, CD-420023 and CD-420593, to accept, edit or reject on the order or in Decide.
+- **10 site playbook notes**, rebuilt from those runs' own `note_playbook` calls and checked against the call transcripts the same way the live tool checks them. Velantora Helsinki's playbook (`/sites/site-001#playbook`) shows what stock control said on the 516 call, in Finnish with the English beside it.
 - CD-420458 shows Ringo's recorded "seller hold, a person decides" stop. CD-420322 is the safety card; Ringo never runs on it.
 - `/evals` shows the three recorded scenario-suite runs from 24 Oct (`starter/eval/suite-2026-10-24-r3.json`, 29 of 30 passed, the miss included) and the Reviewer gate's honest leave-one-out score (3 of 10).
-- No review, correction or learned rule is seeded: approve 516 yourself to see the approved state, and a learned-rule suggestion only appears after you correct Ringo the same way twice.
+- **Not created:** no review, no correction, no learned rule and no "I'll handle it" claim. Approve 516 yourself to see the approved state; a learned-rule suggestion on `/trust` only appears after you correct Ringo the same way twice. If your `/trust` already shows one, your database has reviews from an earlier session: `POST /api/agent/reset`, then `npm run demo:seed` again.
+- Running it again is safe: it clears Ringo's rows on those five orders (runs, calls, facts, proposals, callbacks, claims and their playbook notes) and rebuilds them from the recordings.
 - Without `demo:seed` the app starts empty: "Ringo has not run" on every order and an empty `/evals`, until you run Ringo (with a key) or watch a recorded run.
 
 - **Ports.** Postgres is on 5438 and RustFS on 9009/9010. If a port is taken, change it in `starter/compose.yaml` and in the matching line of `starter/.env`.
 - **The model key.** It is read from `starter/.env.local`, never printed and never committed. The model is `ANTHROPIC_MODEL`, default `claude-sonnet-5-5`. Without a key the app still works: triage, the queue, the stories, reviews and trust need no model, and Ringo shows "offline" with **Watch a recorded run**, which replays a real recorded run for the five demo orders.
-- **Demo orders:** CD-420516 (key holder unknown), CD-420010 (the first call drops), CD-420023 (no street address), CD-420593 (driver on site, car not there), CD-420458 (seller hold, Ringo must not call), CD-420322 (safety, not a Ringo order). `POST /api/agent/reset` clears all Ringo rows and restarts the sim clock at the dataset snapshot (Wed 21 Oct 2026 09:00 UTC).
+- **Demo orders:** CD-420516 (key holder unknown), CD-420010 (the first call drops), CD-420023 (no street address), CD-420593 (driver on site, car not there), CD-420458 (seller hold, Ringo must not call), CD-420322 (safety, not a Ringo order). `POST /api/agent/reset` clears all Ringo rows (runs, proposals and their reviews, corrections, learned rules, claims, playbook notes; the recorded test results stay) and restarts the sim clock at the dataset snapshot (Wed 21 Oct 2026 09:00 UTC).
 
 ### Checks
 

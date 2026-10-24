@@ -112,6 +112,19 @@ export function fmtRange(start: string | null | undefined, end: string | null | 
   return `${fromDay} ${fromClock} – ${toDay} ${toClock} ${name}`
 }
 
+/** A window as the ops desk reads it: in the desk's zone. When the place keeps another clock, its own time follows,
+ *  labelled: "23 Oct 11:00–13:00 EEST (10:00–12:00 CEST, site time)". */
+export function fmtWindow(start: string | null | undefined, end: string | null | undefined, zone: string | null | undefined, whose = "site time"): string {
+  const desk = fmtRange(start, end, OPERATOR_ZONE)
+  const from = parse(start)
+  if (!from || !zone) return desk
+  const tz = safeZone(zone)
+  const at = (z: string) => parts(from, z, { day: "numeric", hour: "2-digit", minute: "2-digit" })
+  if (tz === OPERATOR_ZONE || at(tz) === at(OPERATOR_ZONE)) return desk
+  const local = fmtRange(start, end, tz)
+  return `${desk} (${local.slice(local.indexOf(" ", local.indexOf(" ") + 1) + 1)}, ${whose})`
+}
+
 export type Relative = { text: string; past: boolean; minutes: number }
 
 /** Distance between a time and the snapshot: "in 2 d", "4 h ago", "now". */

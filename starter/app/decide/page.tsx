@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import posthog from "posthog-js"
 import type { OrderStory, Proposal, QueueItem, ReviewDecision } from "@/lib/contract"
-import type { Claim, WithClaim } from "@/lib/triage/claim"
+import { needsYouSplit, type Claim, type WithClaim } from "@/lib/triage/claim"
 import { withBase } from "@/lib/base"
 import { fmtClockZone, relativeTo } from "@/lib/present/time"
 import { fieldLabel } from "@/lib/present/labels"
@@ -67,9 +67,9 @@ export default function DecidePage() {
   useEffect(() => {
     const c = new AbortController()
     loadQueue(c.signal).then((q) => {
-      const list = [...q.needsYou.filter((x) => inNow(x, q.now)), ...q.needsYou.filter((x) => !inNow(x, q.now))]
-      // Orders someone has taken are not in the pass; they come back by themselves at their recheck time.
-      const ids = list.filter((x) => !(x as QueueItem & WithClaim).claim).map((x) => x.orderId)
+      // The same open list as the queue's count (needsYouSplit): taken orders are not in the pass; they come back by themselves.
+      const list = needsYouSplit(q.needsYou as (QueueItem & WithClaim)[], q.now).open
+      const ids = list.map((x) => x.orderId)
       const d: Record<string, Done> = {}
       const left = ids
       setItems(list); setNow(q.now); setOrder(ids); setDone(d); setIdx(Math.max(0, left.indexOf(store.get(AT_KEY) ?? "")))
@@ -211,11 +211,11 @@ export default function DecidePage() {
   const safety = q?.reason === "SAFETY"
   const pending = ringPending(cur?.story)
 
-  return <AppFrame section="decide" snapshotAt={null}><main className="page dk-page">
+  return <AppFrame section="decide" snapshotAt={null} now={now || null}><main className="page dk-page">
     <header className="dk-top">
       <div className="dk-title">
         <h1>Decide</h1>
-        {items && total > 0 && <p className="dk-count num" aria-live="polite"><b>{left.length}</b> left{decided > 0 && <span> · {decided} of {total} decided</span>}</p>}
+        {items && total > 0 && <p className="dk-count num" aria-live="polite"><b>{left.length}</b> left{decided > 0 && <span> · {decided} of {total} decided</span>}<span className="dk-zone"> · Helsinki time</span></p>}
       </div>
       <div className="dk-top-actions">
         <button type="button" className="btn small" onClick={() => help.current?.showModal()}><kbd>?</kbd> Shortcuts</button>

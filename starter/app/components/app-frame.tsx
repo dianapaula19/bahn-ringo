@@ -24,7 +24,9 @@ const GROUPS: { label: string; links: { section: Section; href: string; label: s
   ] },
 ]
 
-export function AppFrame({ children, section, snapshotAt, board = false }: { children: ReactNode; section?: Section; snapshotAt?: string | null; board?: boolean }) {
+/** `now` is the desk clock (simulated, running from the snapshot): the same clock as the queue's "Checked" and every
+ *  "due in". `snapshotAt` is when the dataset was frozen. Both in Helsinki time. */
+export function AppFrame({ children, section, snapshotAt, now, board = false }: { children: ReactNode; section?: Section; snapshotAt?: string | null; now?: string | null; board?: boolean }) {
   return <div className={`app${board ? " app-board" : ""}`}>
     <SkipLink />
     <aside className="sidebar">
@@ -37,7 +39,7 @@ export function AppFrame({ children, section, snapshotAt, board = false }: { chi
           </Link>)}
         </div>)}
       </nav>
-      <div className="sidebar-foot"><SavingsLine />{snapshotAt && <>Snapshot {fmtDateTime(snapshotAt)}<br /></>}Fictional data · calls and drivers simulated<br /><Link href="/trust#crew" className="foot-link">Meet the crew</Link></div>
+      <div className="sidebar-foot"><SavingsLine />{now && <>Desk clock {fmtDateTime(now)} (simulated)<br /></>}{snapshotAt && <>Data as of {fmtDateTime(snapshotAt)}<br /></>}Fictional data · calls and drivers simulated<br /><Link href="/trust#crew" className="foot-link">Meet the crew</Link></div>
     </aside>
     <div className="main" id="main" tabIndex={-1}>{children}</div>
   </div>

@@ -3,7 +3,7 @@
 import { and, asc, eq, lte } from "drizzle-orm"
 import { db } from "@/lib/db"
 import type { CallbackJob, ResetResponse, RunDueResponse } from "@/lib/contract"
-import { ringCalls, ringClaims, ringDriverMessages, ringEvents, ringFacts, ringJobs, ringMeta, ringPlaybooks, ringProposals, ringRuns, ringSteps, ringTrust, ringTurns } from "@/lib/ring-schema"
+import { ringCalls, ringClaims, ringDriverMessages, ringEvents, ringFacts, ringJobs, ringMeta, ringPlaybooks, ringProposals, ringRuns, ringSteps, ringTrust, ringTurns, ringCorrections, ringLearnedRules } from "@/lib/ring-schema"
 import { newId, resetClock, simNow } from "./clock"
 import { liveRun, runRing } from "./loop"
 import { toJob } from "./store"
@@ -32,7 +32,7 @@ export async function runDue(opts: { wait: boolean; force?: boolean } = { wait: 
 }
 
 export async function reset(): Promise<ResetResponse> {
-  const tables = { ring_runs: ringRuns, ring_steps: ringSteps, ring_calls: ringCalls, ring_driver_messages: ringDriverMessages, ring_facts: ringFacts, ring_proposals: ringProposals, ring_events: ringEvents, ring_jobs: ringJobs, ring_trust: ringTrust, ring_meta: ringMeta, ring_playbooks: ringPlaybooks, ring_turns: ringTurns, ring_claims: ringClaims }
+  const tables = { ring_runs: ringRuns, ring_steps: ringSteps, ring_calls: ringCalls, ring_driver_messages: ringDriverMessages, ring_facts: ringFacts, ring_proposals: ringProposals, ring_events: ringEvents, ring_jobs: ringJobs, ring_trust: ringTrust, ring_meta: ringMeta, ring_playbooks: ringPlaybooks, ring_turns: ringTurns, ring_claims: ringClaims, ring_corrections: ringCorrections, ring_learned_rules: ringLearnedRules }
   const cleared: Record<string, number> = {}
   for (const [name, table] of Object.entries(tables)) cleared[name] = (await db.delete(table).returning()).length
   await resetClock()

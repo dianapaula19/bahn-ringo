@@ -133,7 +133,7 @@ export function effectiveLevel(f: Fact, now: string): EvidenceLevel {
   if (f.level === "refuted" || f.level === "stale") return f.level
   if (f.supersededByFactId) return "stale"
   const age = (Date.parse(now) - Date.parse(f.at)) / 60000
-  if (f.level === "quoted" && f.sourceKind !== "endpoint_detail" && age > 120) return "stale"
+  if (f.level === "quoted" && f.sourceKind !== "endpoint_detail" && f.sourceKind !== "alert" && age > 120) return "stale" // an open alert holds while it is open
   if (f.sourceKind === "tracking" && age > 60) return "stale"
   return f.level
 }

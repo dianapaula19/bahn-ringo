@@ -81,7 +81,7 @@ export default function TrustPage() {
             {(() => {
               const sub = r.locked ? (r.lockedReason ?? "Always needs a person.")
                 : g.mode === "ask" ? (r.promotable ? "Clean record: ready to hand over to Ringo." : null)
-                : r.updatedAt === ledger.now ? null : <>Set <When at={r.updatedAt} now={ledger.now} /></>
+                : r.updatedAt === ledger.now ? null : <>Set <When at={r.updatedAt} now={ledger.now} zone /></>
               return sub && <p className="trust-sub">{sub}</p>
             })()}
             {learnedFor(r).length > 0 && <p className="trust-sub">Checked against what you taught Ringo: <a href="#learned">{learnedFor(r).join(", ")}</a></p>}
