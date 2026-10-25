@@ -144,6 +144,20 @@ export function quoteShort(body: string, max = 100): string {
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
 }
 
+/** A queue row's title: at most `max` words. A text that fits stays whole; else its first clause (to ". ", "; " or
+ *  ": ") when that says enough on its own; else the first words with "…", never ending on "and", "the" and the like.
+ *  The full text stays on the order page and in the row's title attribute. */
+const TAIL = /\s+(a|an|the|and|or|but|of|to|at|in|on|for|with|across|whether|are|is|was|were|be|been|has|have)$/i
+export function shortHeadline(text: string, max = 12): string {
+  const words = (x: string) => x.split(/\s+/).filter(Boolean).length
+  if (words(text) <= max + 2) return text
+  const clause = /^(.+?)[.;:]\s/.exec(text)?.[1]
+  if (clause && words(clause) >= 4 && words(clause) <= max) return clause
+  let cut = text.split(/\s+/).slice(0, max).join(" ").replace(/[,;:.]+$/, "")
+  while (TAIL.test(cut)) cut = cut.replace(TAIL, "").replace(/[,;:.]+$/, "")
+  return `${cut}…${(cut.match(/“/g)?.length ?? 0) > (cut.match(/”/g)?.length ?? 0) ? "”" : ""}`
+}
+
 const lcFirst = (x: string) => x.charAt(0).toLowerCase() + x.slice(1)
 
 function unansweredDriver(b: Bundle, now: string) {
@@ -217,9 +231,10 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const lastRun = ring.runs.filter((r) => r.status !== "running" && r.decision?.outcome !== "failed").pop()
   if (pending.length || lastRun?.decision?.outcome === "needs_person") return {
     reason: "DECISION_WAITING", severity: "high",
-    // A row states the problem; Ringo's proposal goes in the chip ("Review Ringo's hold"). The problem is what the
-    // order would say without his proposal; if that is only "Ringo can call", the open gap itself.
-    why: pending.length ? underProposal(b, ring, now) ?? pending[0].summary : lastRun!.decision!.headline,
+    // A row states the problem as it stands now; Ringo's proposal goes in the chip ("Review Ringo's hold"). Once
+    // Ringo has stopped, that is his headline, the same line the order's hero shows (ring:check holds the two
+    // together). Only without a stop: what the order would say without his proposal, else the open gap itself.
+    why: ring.runs.findLast((r) => r.decision && r.decision.outcome !== "failed")?.decision?.headline ?? (pending.length ? underProposal(b, ring, now) ?? pending[0].summary : ""),
     sources: pending.length ? pending.map((p) => ref("ring_proposals", p.id)) : [ref("ring_runs", lastRun!.id)],
     oneDecision: lastRun?.decision?.oneDecision ?? null,
   }

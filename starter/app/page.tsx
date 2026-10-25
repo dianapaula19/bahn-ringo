@@ -12,7 +12,7 @@ import { AppFrame } from "./components/app-frame"
 import { Icon } from "./components/icons"
 import { CAST, LizardFace } from "./components/ringo"
 import { Ago, When } from "./components/ring/bits"
-import { dueSoon, nextAction } from "@/lib/triage/next-action"
+import { NOW_RULE, nextAction, type WithShort } from "@/lib/triage/next-action"
 import "./decide/decide.css"
 
 const PAGE = 50
@@ -112,7 +112,7 @@ export default function NeedsYou() {
   </main></AppFrame>
 }
 
-// Now: safety, anything overdue or due within 30 min, or critical/high due within 2 h (lib/triage/next-action.ts), by deadline.
+// Now: safety, a driver waiting, or overdue / due within 30 min (lib/triage/next-action.ts NOW_RULE), by deadline.
 // Taken: someone said "I'll handle it". The row comes back on its own at the recheck time or when something new happens.
 const claimOf = (q: QueueItem) => (q as QueueItem & WithClaim).claim ?? null
 type Split = ReturnType<typeof needsYouSplit<QueueItem & WithClaim>>
@@ -123,11 +123,11 @@ function NeedsYouGroups({ split: { urgent, later, taken }, now }: { split: Split
   const long = urgent.filter((q) => longOverdue(q, now))
   const fresh = urgent.filter((q) => !longOverdue(q, now))
   return <>
-    {urgent.length > 0 && <><h2 className="q-group" id="now">Now · {urgent.length}</h2>
+    {urgent.length > 0 && <><h2 className="q-group" id="now">Now · {urgent.length} <span className="q-group-note">{NOW_RULE}</span></h2>
       {fresh.length > 0 && <Rows items={fresh} now={now} label="Orders that need a person now" person />}
       {long.length > 0 && <><h3 className="q-group q-sub">Past due by more than an hour · {long.length} <span className="q-group-note">oldest first</span></h3>
         <Rows items={long} now={now} label="Orders past due by more than an hour" person /></>}</>}
-    {later.length > 0 && <><h2 className="q-group">When you can · {later.length}</h2><Rows items={later} now={now} label="Follow-ups" /></>}
+    {later.length > 0 && <><h2 className="q-group">When you can · {later.length} <span className="q-group-note">due later · by deadline</span></h2><Rows items={later} now={now} label="Follow-ups" /></>}
     {taken.length > 0 && <><h2 className="q-group" id="taken">Taken · {taken.length} <span className="q-group-note">not counted above; each comes back at its recheck time</span></h2><Rows items={taken} now={now} label="Orders a person is handling" /></>}
   </>
 }
@@ -181,7 +181,7 @@ function Rows({ items, now, label, person = false }: { items: QueueItem[]; now: 
         // The row (chip included) is one link that opens the order at its decision card.
         return <li key={q.orderId}><Link data-row={q.orderId} className={`q-row${barClass(q, now, person)}`} href={`/orders/${q.orderId}#decision`} onClick={() => { try { sessionStorage.setItem(ROW_KEY, q.orderId) } catch {} }}>
           <span className="q-main">
-            <span className="q-why" title={q.why}>{q.reason === "SAFETY" && <span className="sr-only">Safety: </span>}{q.why}</span>
+            <span className="q-why" title={q.why}>{q.reason === "SAFETY" && <span className="sr-only">Safety: </span>}{(q as QueueItem & WithShort).short ?? q.why}</span>
             <span className="q-meta"><span className="mono">{q.reference}</span> · {q.vehicle}</span>
             {claimOf(q) && <ClaimLine claim={claimOf(q)!} now={now} />}
           </span>
@@ -208,13 +208,12 @@ function barClass(q: QueueItem, now: string, person: boolean): string {
   return q.reason === "DRIVER_WAITING" || relativeTo(q.decideBy, now)?.past ? " is-pressing" : ""
 }
 
-// Red is for safety only. A late row says so in the same quiet marker as "due soon", not in a red column.
+// Red is for safety only. A late row says "overdue" in one small marker; "Due in 6 min" needs no "due soon" under it.
 function Due({ at, now, person, needsYou }: { at: string | null; now: string; person: boolean; needsYou: boolean }) {
   const rel = relativeTo(at, now)
   if (!at || !rel) return <span className="q-due">{needsYou ? "No deadline" : ""}</span>
   return <span className="q-due num">{rel.past ? <>Was due <When at={at} now={now} /></> : <>Due <Ago at={at} now={now} /></>}
-    {rel.past && person && <span className="q-soon">overdue {rel.text.replace(/ ago$/, "")}</span>}
-    {dueSoon({ decideBy: at }, now) && <span className="q-soon">due soon</span>}</span>
+    {rel.past && person && <span className="q-soon">overdue {rel.text.replace(/ ago$/, "")}</span>}</span>
 }
 
 /** Ringo's shift report: three plain lines over the queue and the handover. Counts come from the triaged rows

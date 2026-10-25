@@ -14,7 +14,7 @@ import { withBase } from "@/lib/base"
 import { relativeTo } from "@/lib/present/time"
 import { BY_HAND, thenLine } from "@/lib/triage/follow-up"
 import { fieldLabel } from "@/lib/present/labels"
-import { dueSoon, inNow, nextAction } from "@/lib/triage/next-action"
+import { inNow, nextAction } from "@/lib/triage/next-action"
 import { basisFacts, leadFacts } from "@/lib/triage/relevance"
 import { similarGroups, similarKey } from "@/lib/triage/similar"
 import { DESK, loadQueue, loadStory, reviewProposal } from "../_lib/agent-api"
@@ -298,7 +298,7 @@ function DueTag({ item, now }: { item: QueueItem; now: string }) {
   const urgent = inNow(item, now)
   // Red is for safety only; a late card is orange, like the queue's "overdue" marker.
   if (!rel) return urgent ? <span className={`chip ${item.reason === "SAFETY" ? "tone-danger" : "tone-warn"}`}>Now</span> : null
-  return <span className={`chip${rel.past && item.reason === "SAFETY" ? " tone-danger" : rel.past ? " tone-warn" : ""} num`}>{rel.past ? `Overdue ${rel.text.replace(/ ago$/, "")}` : <>Due <Ago at={item.decideBy} now={now} />{dueSoon(item, now) && " · due soon"}</>}</span>
+  return <span className={`chip${rel.past && item.reason === "SAFETY" ? " tone-danger" : rel.past ? " tone-warn" : ""} num`}>{rel.past ? `Overdue ${rel.text.replace(/ ago$/, "")}` : <>Due <Ago at={item.decideBy} now={now} /></>}</span>
 }
 
 /** The facts that matter: the last words of the driver, customer or site in the past 2 h (who is waiting

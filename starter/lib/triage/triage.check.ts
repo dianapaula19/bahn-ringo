@@ -18,7 +18,7 @@ import type { Bundle } from "@/lib/present/bundle"
 import { loadOrder } from "@/lib/present/load"
 import { fmtDateTime, fmtRange, fmtWindow } from "@/lib/present/time"
 import { ringClaims, ringEvents, ringProposals } from "@/lib/ring-schema"
-import { byDeadline, dueSoon, inNow, nextAction, unanswered } from "./next-action"
+import { byDeadline, heroProblem, inNow, nextAction, unanswered } from "./next-action"
 import { activeClaim, needsYouSplit, type Claim } from "./claim"
 import { readFileSync } from "node:fs"
 import { buildQueue, buildStory } from "@/lib/agent/story"
@@ -26,7 +26,7 @@ import { basisFacts, currentFacts, leadFacts } from "./relevance"
 import { personStep, thenLine } from "./follow-up"
 import { orderFacts, rankFacts } from "./facts"
 import { similarGroups } from "./similar"
-import { ringEligibility, triage } from "./triage"
+import { ringEligibility, shortHeadline, triage } from "./triage"
 
 const NOW = SNAPSHOT
 
@@ -204,36 +204,52 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
       }
     })
   }
-  test("a row states the problem, the chip names Ringo's proposal", () => {
-    const { facts, proposals } = fromFixture("CD-420516")
+  test("a row states the problem, the chip names Ringo's proposal; once he has stopped, the problem is his headline", () => {
+    const { events, facts, proposals } = fromFixture("CD-420516")
     const r = t("ord-00516", { ...emptyRing(), facts, proposals })
     assert.equal(r.reason, "DECISION_WAITING")
     assert.doesNotMatch(r.why, /^Ringo has|^Recorded proposal/)
     assert.match(r.why, /key holder/)
-    assert.equal(nextAction({ ...r, proposalAction: proposals[0].actionType }), "Review the access note")
+    assert.equal(nextAction({ ...r, proposalAction: proposals[0].actionType }), "Review Ringo's access note")
+    const stop = events.find((e) => e.type === "stop")
+    assert.ok(stop && stop.type === "stop")
+    const run = { id: "run-check", orderId: "ord-00516", trigger: "eval", status: "stopped", startedAt: NOW, endedAt: NOW, model: "", decision: stop.decision, error: null, operatorMessage: null } as RingOrderState["runs"][number]
+    assert.equal(t("ord-00516", { ...emptyRing(), facts, proposals, runs: [run] }).why, stop.decision.headline)
   })
-  test("Now on the demo data: 322, 458, 593 are Now; 413 (due Monday) and 055 (medium) are not", () => {
-    for (const id of ["ord-00322", "ord-00458", "ord-00593"]) assert.equal(inNow(t(id), NOW), true, id)
-    for (const id of ["ord-00413", "ord-00055"]) assert.equal(inNow(t(id), NOW), false, id)
+  test("every Needs-you row with an open Ringo proposal or stop says what its order's hero says", async () => {
+    const q = await buildQueue()
+    const open = q.needsYou.filter((x) => x.reason === "DECISION_WAITING")
+    for (const row of open) {
+      const story = await buildStory(row.orderId)
+      assert.ok(story)
+      assert.equal(row.why, heroProblem(story), `${row.reference}: the row and the order page disagree`)
+    }
+  })
+  test("row titles are short; the full text stays in why", () => {
+    assert.equal(shortHeadline("Car is not at Velantora Helsinki; hold collection and ask customer which site holds the VIN"), "Car is not at Velantora Helsinki")
+    assert.equal(shortHeadline("Attempt to book the next-day quoted vehicle crossing failed at 10:10: Provider request timed out without a confirmation reference."), "Attempt to book the next-day quoted vehicle crossing failed at 10:10")
+    assert.equal(shortHeadline("The Marseille site asks for separate vehicle and document releases across a booked import, live domestic offer and Friday queue."), "The Marseille site asks for separate vehicle and document releases…")
+    assert.equal(shortHeadline("Driver, 11:57: “Please tell me who confirms Tuesday's keys and where I should report.”"), "Driver, 11:57: “Please tell me who confirms Tuesday's keys and where I should report.”")
+    assert.equal(shortHeadline("Driver, 11:14: “Please check the replacement or ask the customer about another slot before twelve today.”"), "Driver, 11:14: “Please check the replacement or ask the customer about another…”")
+  })
+  test("Now on the demo data: 322 (safety), 593 (overdue), 413 (driver waiting) are Now; 458 (due in 51 min) and 055 (no deadline) are not", () => {
+    for (const id of ["ord-00322", "ord-00593", "ord-00413"]) assert.equal(inNow(t(id), NOW), true, id)
+    for (const id of ["ord-00458", "ord-00055"]) assert.equal(inNow(t(id), NOW), false, id)
   })
 })
 
-describe("Now: safety, anything overdue or due within 30 min, or critical/high due within 2 h; sorted by deadline", () => {
+describe("Now: safety, a driver waiting, or overdue / due within 30 min; both groups sorted by deadline", () => {
   const at = (min: number) => new Date(Date.parse(NOW) + min * 60_000).toISOString()
   const row = (reason: string, severity: string, decideBy: string | null) => ({ reason, severity, decideBy }) as Parameters<typeof inNow>[0]
   test("the rule's edges", () => {
     assert.equal(inNow(row("SAFETY", "critical", null), NOW), true)       // safety always, even with no due time
+    assert.equal(inNow(row("DRIVER_WAITING", "high", null), NOW), true)   // a driver waiting, even with no due time
     assert.equal(inNow(row("DUE_SOON", "high", at(-30)), NOW), true)      // overdue
-    assert.equal(inNow(row("DUE_SOON", "high", at(120)), NOW), true)      // exactly 2 h
-    assert.equal(inNow(row("DUE_SOON", "high", at(121)), NOW), false)     // just past the window
-    assert.equal(inNow(row("DRIVER_WAITING", "high", null), NOW), false)  // no due time: when you can
     assert.equal(inNow(row("DUE_SOON", "medium", at(-600)), NOW), true)   // overdue is Now at any severity ("When you can" never says Overdue)
-    assert.equal(inNow(row("DUE_SOON", "medium", at(60)), NOW), false)    // routine and not yet due
     assert.equal(inNow(row("DUE_SOON", "medium", at(30)), NOW), true)     // due within 30 min is Now at any severity
     assert.equal(inNow(row("DUE_SOON", "low", at(31)), NOW), false)       // just past the 30 min window
-    assert.equal(dueSoon(row("DUE_SOON", "medium", at(10)), NOW), true)   // the quiet "due soon" marker
-    assert.equal(dueSoon(row("DUE_SOON", "medium", at(-5)), NOW), false)  // overdue says "Overdue", not "due soon"
-    assert.equal(dueSoon(row("DUE_SOON", "medium", at(31)), NOW), false)
+    assert.equal(inNow(row("DUE_SOON", "high", at(120)), NOW), false)     // severity no longer pulls a row into Now
+    assert.equal(inNow(row("DECISION_WAITING", "high", null), NOW), false) // no deadline, nobody waiting: when you can
   })
   test("Now is sorted by deadline: safety leads, then overdue (oldest first), then the soonest", () => {
     const rows = [row("DUE_SOON", "high", at(50)), row("DUE_SOON", "high", at(-43)), row("SAFETY", "critical", at(15)), row("DUE_SOON", "medium", at(10)), row("DUE_SOON", "high", at(-600))]
@@ -245,6 +261,10 @@ describe("Now: safety, anything overdue or due within 30 min, or critical/high d
     const due = s.urgent.filter((x) => x.reason !== "SAFETY").map((x) => x.decideBy).filter((d): d is string => !!d)
     assert.deepEqual(due, [...due].sort())
     for (const x of s.later) assert.ok(!x.decideBy || Date.parse(x.decideBy) - Date.parse(q.now) > 30 * 60_000, `${x.orderId} is due within 30 min but sits in When you can`)
+    const later = s.later.map((x) => x.decideBy ?? "9")
+    assert.deepEqual(later, [...later].sort(), "When you can is in deadline order")
+    const i702 = s.later.findIndex((x) => x.reference === "CD-420702"), i071 = s.later.findIndex((x) => x.reference === "CD-420071")
+    if (i702 >= 0 && i071 >= 0) assert.ok(i071 < i702, "071 (due 51 min) comes before 702 (due 2 h)")
   })
 })
 

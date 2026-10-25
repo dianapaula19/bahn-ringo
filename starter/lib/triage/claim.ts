@@ -18,12 +18,12 @@ export function activeClaim(claims: Claim[], latestActivityAt: Iso | null, now: 
 }
 
 /** The one "needs you" count, used by every screen (queue header, shift report, Decide, board toggle):
- *  `open` is what nobody has taken: Now first, by deadline (overdue first), then the rest in rank order. `taken` rows are listed apart
+ *  `open` is what nobody has taken: Now first, then When you can, each by deadline (overdue first, no deadline last). `taken` rows are listed apart
  *  and never counted in the headline. */
 export function needsYouSplit<T extends WithClaim & Parameters<typeof inNow>[0]>(rows: T[], now: string): { open: T[]; taken: T[]; urgent: T[]; later: T[] } {
   const taken = rows.filter((q) => q.claim)
   const free = rows.filter((q) => !q.claim)
   const urgent = byDeadline(free.filter((q) => inNow(q, now)))
-  const later = free.filter((q) => !inNow(q, now))
+  const later = byDeadline(free.filter((q) => !inNow(q, now)))
   return { open: [...urgent, ...later], taken, urgent, later }
 }
