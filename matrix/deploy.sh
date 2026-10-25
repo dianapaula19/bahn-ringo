@@ -9,7 +9,7 @@
 #   1. git archive HEAD -> 4 MB chunks (the upload API rejects ~18 MB in one go) -> ~/projects/bahn-ring
 #   2. starter/.env.local (Anthropic key, PostHog, DB, NEXT_BASE_PATH) uploaded with --secret; never printed
 #   3. Postgres 17 + RustFS as plain `docker run` containers (the box has docker but no compose)
-#   4. npm ci, db:push, seed, attachments:seed, build with basePath /apps/bahn-ring (detached; log in ~/projects/bahn-setup.log)
+#   4. npm ci, db:push, seed, attachments:seed, demo:seed (frozen clock), build with basePath /apps/bahn-ring (detached; log in ~/projects/bahn-setup.log)
 #   5. ~/apps/bahn-ring/matrix.json -> Matrix starts matrix/prefix-proxy.mjs, which re-adds the /apps/bahn-ring
 #      prefix the gateway strips, in front of `next start`. Open it from the Matrix desktop.
 #   6. Ringo's background agent loop, supervised (log in ~/projects/bahn-loop.log)
@@ -30,6 +30,7 @@ echo "packed HEAD: $(du -h "$TMP/bahn-ring.tgz" | cut -f1), $(ls "$TMP"/part.* |
   { grep -E '^ANTHROPIC_(API_KEY|MODEL)=' "$HACK/.env" || true
     grep -E '^NEXT_PUBLIC_POSTHOG_' "$REPO/starter/.env.local" 2>/dev/null || true
     grep -E '^(DATABASE_URL|S3_)' "$REPO/starter/.env.example"
+    echo RING_CLOCK_SPEED=0  # frozen desk clock: the same queue as the video
     echo NEXT_BASE_PATH=/apps/bahn-ring; } > "$TMP/env.local" )
 echo "secrets file keys: $(cut -d= -f1 "$TMP/env.local" | tr '\n' ' ')"
 
@@ -40,7 +41,7 @@ run matrix upload --force --secret "$TMP/env.local" projects/bahn-ring/starter/.
 box 'docker start bahn-db 2>/dev/null || docker run -d --name bahn-db --restart unless-stopped -e POSTGRES_USER=controlroom -e POSTGRES_PASSWORD=controlroom -e POSTGRES_DB=controlroom -p 127.0.0.1:5438:5432 -v bahn_pg:/var/lib/postgresql/data postgres:17-alpine
 docker start bahn-files 2>/dev/null || docker run -d --name bahn-files --restart unless-stopped -e RUSTFS_ACCESS_KEY=controlroom -e RUSTFS_SECRET_KEY=controlroom-local-only -e RUSTFS_ADDRESS=0.0.0.0:9000 -p 127.0.0.1:9009:9000 -v bahn_files:/data rustfs/rustfs:1.0.1 /data'
 
-box 'cd projects/bahn-ring/starter && setsid nohup sh -c "set -e; set -a; . ./.env.local; set +a; npm ci --no-audit --no-fund; for i in \$(seq 30); do npm run -s db:push && break; sleep 2; done; npm run db:seed; npm run attachments:seed; npm run build; echo SETUP_DONE" > ../../bahn-setup.log 2>&1 < /dev/null &'
+box 'cd projects/bahn-ring/starter && setsid nohup sh -c "set -e; set -a; . ./.env.local; set +a; npm ci --no-audit --no-fund; for i in \$(seq 30); do npm run -s db:push && break; sleep 2; done; npm run db:seed; npm run attachments:seed; npm run demo:seed; npm run build; echo SETUP_DONE" > ../../bahn-setup.log 2>&1 < /dev/null &'
 echo "wait for SETUP_DONE:  matrix run -C . -- tail -3 projects/bahn-setup.log"
 
 run matrix upload --force "$REPO/matrix/icon.png" system/icons/bahn-ring.png   # launcher icon (manifest "icon": "bahn-ring")
