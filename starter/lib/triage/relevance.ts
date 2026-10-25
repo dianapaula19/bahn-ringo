@@ -45,3 +45,21 @@ export function rankByDecision(facts: Fact[], d: DecisionFocus): Fact[] {
 export function currentFacts(facts: Fact[], overtaken: Set<string> = new Set()): Fact[] {
   return facts.filter((f) => !f.supersededByFactId && f.level !== "refuted" && f.level !== "stale" && !overtaken.has(f.sourceId))
 }
+
+type Open = { status: string; origin?: string; evidenceRefs: { id: string }[] }
+
+/** The facts an open Ringo proposal rests on: the ones whose source record its evidence cites (a call, a message).
+ *  Superseded or refuted ones never count. A quote that only aged past 2 h still does: it is what the proposal was
+ *  written from, so it leads with its aged level shown, rather than vanishing. */
+export function basisFacts(facts: Fact[], proposals: Open[]): Fact[] {
+  const open = proposals.filter((p) => p.status === "PENDING_REVIEW" && p.origin !== "dataset")
+  if (!open.length) return []
+  const cited = new Set(open.flatMap((p) => p.evidenceRefs.map((r) => r.id)))
+  return facts.filter((f) => !f.supersededByFactId && f.level !== "refuted" && cited.has(f.sourceId))
+}
+
+/** "What we know" and Decide's "What matters": the open proposal's basis first, then what is still true, in decision order. */
+export function leadFacts(facts: Fact[], basis: Fact[], overtaken: Set<string> = new Set()): Fact[] {
+  const ids = new Set(basis.map((f) => f.id))
+  return [...basis, ...currentFacts(facts, overtaken).filter((f) => !ids.has(f.id))]
+}

@@ -81,12 +81,14 @@ export function factLizard(fact: Fact, entryKind: Map<string, StoryEntry["actorK
 
 /** A fact with its level, who said it, from which record, and when. Superseded facts are struck through.
  *  When the source is on the timeline (`linked`), the source names links to it. */
-export function FactChip({ fact, now, linked, old: forceOld, who }: { fact: Fact; now?: string | null; linked?: Set<string>; old?: boolean; who?: Lizard | null }) {
-  const old = forceOld || fact.level === "refuted" || fact.level === "stale" || !!fact.supersededByFactId
+/** `basis`: an open proposal rests on this fact (lib/triage/relevance.ts basisFacts). It is badged and never struck
+ *  through, even when its quote has aged; the level chip still says how sure it is now. */
+export function FactChip({ fact, now, linked, old: forceOld, who, basis = false }: { fact: Fact; now?: string | null; linked?: Set<string>; old?: boolean; who?: Lizard | null; basis?: boolean }) {
+  const old = !basis && (forceOld || fact.level === "refuted" || fact.level === "stale" || !!fact.supersededByFactId)
   const kind = KIND[fact.sourceKind] ?? "record"
-  return <span className={`fact-chip${old ? " old" : ""}`}>
+  return <span className={`fact-chip${old ? " old" : ""}${basis ? " is-basis" : ""}`}>
     <Level level={fact.level} />
-    <span className="fact-claim">{fact.claim}{fact.note && <span className="fact-quote">{fact.note}</span>}</span>
+    <span className="fact-claim">{basis && <span className="basis-tag">Basis for this proposal</span>}{fact.claim}{fact.note && <span className="fact-quote">{fact.note}</span>}</span>
     <span className="fact-src" title={`Source: ${fact.sourceId}`}>{who !== undefined && <RoleTag role={who ?? (/^(operations|dispatch|support|shift)/i.test(fact.by) ? "ops" : "system")} />}{fact.by} · {linked?.has(fact.sourceId) ? <a href={`#src-${fact.sourceId}`}>{kind}</a> : kind} · <When at={fact.at} now={now} /></span>
   </span>
 }
