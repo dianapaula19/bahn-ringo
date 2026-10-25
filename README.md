@@ -163,3 +163,7 @@ If port 5438 or 9009 is already in use on your computer, change it in
 - The starter's board of lanes is how people have worked so far. It is not the
   answer.
 - Questions: our channel on the event Discord, or our booth.
+
+## Credits
+
+Demo video music: "Funkorama" by Kevin MacLeod (incompetech.com), licensed under Creative Commons Attribution 4.0 (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/).
