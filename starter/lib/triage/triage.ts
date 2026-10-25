@@ -5,7 +5,7 @@ import { LEVEL_RANK } from "@/lib/agent/facts"
 import type { RingOrderState } from "@/lib/agent/store"
 import { rows, str, strings, type Bundle, type RelatedRow } from "@/lib/present/bundle"
 import { orderFacts } from "./facts"
-import { fmtClock } from "@/lib/present/time"
+import { OPERATOR_ZONE, fmtClock, fmtRange } from "@/lib/present/time"
 
 export const RING_KINDS = ["PICKUP_CONTACT_HANDLE_REQUIRED", "PICKUP_ACCESS_CHECK_REQUIRED", "KEY_HOLDER_STOCK_CHECK"]
 const RING_STATUSES = ["NEW", "WAITING_FOR_PICKUP"]
@@ -103,32 +103,60 @@ export const RECOVERY_THEN: Record<string, string> = {
   tow: "Book the tow (it needs approval as a cost) and tell the driver who is coming.",
 }
 
-function safetyDecision(b: Bundle, incident: RelatedRow | undefined, ring: RingOrderState): string {
+/** What a delay means downstream, from the order's own delivery window: on an in-transit order whose problem blocks the
+ *  car (a safety stop, an open incident). "late" only once the window has ended; before that "at risk", since nothing
+ *  in the records says how long the stop lasts. ponytail: no ETA model; a recovery time from the booking would sharpen it. */
+export function deliveryImpact(b: Bundle, now: string): string | null {
+  if (b.order.status !== "IN_TRANSIT") return null
+  if (!openIncidents(b).length && !openAlerts(b).some((a) => a.signal === "SAFETY_STOP" || a.severity === "critical")) return null
+  const sel = (purpose: string) => rows(b, "time_windows").find((t) => t.details.is_selected === true && t.details.purpose === purpose && str(t.details.end_at))
+  const w = sel("SELECTED_DELIVERY_SLOT") ?? sel("CUSTOMER_DELIVERY_PROMISE")
+  if (!w) return null
+  const end = String(w.details.end_at)
+  const range = fmtRange(String(w.details.start_at ?? end), end, OPERATOR_ZONE)
+  const city = b.places.get(b.order.deliveryAddressId)?.city
+  return `Delivery: ${city ? `to ${city}, ` : ""}due ${range.slice(0, range.lastIndexOf(" "))}: ${Date.parse(end) < Date.parse(now) ? "late" : "at risk"}; tell ${b.customer.name} when you call (reserved · ${w.details.purpose === "SELECTED_DELIVERY_SLOT" ? "delivery slot" : "delivery promise"})`
+}
+
+/** The short value of what the driver told Ringo, for the card's labelled lines; the full claim stays in What we know. */
+function brief(f: Fact): string {
+  const c = f.claim.replace(/\.$/, "")
+  if (f.subject === "driver.safety") {
+    const said = [/\bsafe\b/i.test(c) && "safe", /engine (is )?(off|switched off)/i.test(c) && "engine off"].filter(Boolean)
+    if (said.length) return said.join(", ")
+  }
+  if (f.subject === "incident.location") {
+    const parts = c.replace(/^driver says (that )?(the car is )?(at )?/i, "").split(/,\s*/)
+    return [parts[0], ...parts.slice(1).filter((x) => /^(row|bay|lane|level|space|pump)\b/i.test(x)).map((x) => x.replace(/\s+near\b.*$/i, ""))].join(", ")
+  }
+  if (f.subject === "incident.photo" && /\bsending\b|on (its|the) way/i.test(c)) return /not (yet )?(seen|received)/i.test(c) ? "sending, not yet seen" : "sending"
+  return c.replace(/^driver says (that )?/i, "")
+}
+
+/** The safety card: one labelled line per thing a person needs (Driver, Where, Photo, Customer, Delivery), each with
+ *  its level and source in brackets, then the decision. What the driver told Ringo in roadside mode (claimed facts)
+ *  is newer than the records and wins; the records fill the rest. app/components/ring/story.tsx draws the lines. */
+function safetyDecision(b: Bundle, incident: RelatedRow | undefined, ring: RingOrderState, now: string): string {
   const chose = ring.events.filter((e) => e.command === "recovery.choice").pop()
   const choice = chose && String(chose.changes.choice)
   if (choice && RECOVERY_THEN[choice]) return `Customer chose ${choice === "tow" ? "a tow" : "roadside assistance"} (recorded ${hhmm(chose.at)} by ${chose.actorId}). ${RECOVERY_THEN[choice]}`
   const msgs = [...b.messages].sort((x, y) => x.authoredAt.localeCompare(y.authoredAt))
   const safe = msgs.filter((m) => m.authorType === "driver" && /\bsafe\b/i.test(m.body)).pop()
   const cust = msgs.filter((m) => m.authorType === "customer").pop()
-  // What the driver told Ringo in roadside mode (claimed facts from his simulated chat) is newer than the records.
   const heard = (subject: string) => ring.facts.filter((f) => f.subject === subject && !f.supersededByFactId && f.level !== "refuted").sort((x, y) => x.at.localeCompare(y.at)).pop()
+  const told = (f: Fact) => `${brief(f)} (${f.level} · driver to Ringo ${hhmm(f.at)}, simulated)`
   const okNow = heard("driver.safety"), where = heard("incident.location"), pic = heard("incident.photo")
   const d = incident?.details ?? {}
-  const loc = d.location_verified === false ? "Location unverified" : "Location recorded"
-  const photo = d.warning_photo_status && d.warning_photo_status !== "RECEIVED" ? "no photo yet" : "photo received"
-  const told = [okNow, where, pic].filter((f): f is Fact => !!f)
-  const parts: string[] = []
-  if (told.length) {
-    // One sentence, one source note: "Driver says he is safe…; the car is at…; he is sending the photo (to Ringo 12:06, not verified)."
-    const claims = told.map((f, i) => (i ? f.claim.replace(/^driver says (that )?/i, "") : f.claim).replace(/\.$/, ""))
-    parts.push(`${claims.join("; ")} (to Ringo ${hhmm(told[told.length - 1].at)}, not verified).`)
-    if (!okNow) parts.unshift(safe ? `Driver says they are safe and stopped (driver ${hhmm(safe.authoredAt)}).` : "Driver safety not yet confirmed.")
-    if (!where) parts.push(`${loc}.`)
-    if (!pic) parts.push(`${photo.replace(/^\w/, (c) => c.toUpperCase())}.`)
-  } else parts.push(safe ? `Driver says they are safe and stopped (driver ${hhmm(safe.authoredAt)}).` : "Driver safety not yet confirmed.", `${loc}, ${photo}.`)
-  if (cust && /stop/i.test(cust.body)) parts.push(`Customer: keep it stopped (${hhmm(cust.authoredAt)}).`)
-  parts.push("Decide with the customer: roadside or tow.")
-  return parts.join(" ")
+  const lines = [
+    `Driver: ${okNow ? told(okNow) : safe ? `safe, stopped (claimed · driver ${hhmm(safe.authoredAt)})` : "safety not yet confirmed (no driver message says so)"}`,
+    `Where: ${where ? told(where) : `${d.location_verified === false ? "not verified" : "recorded"} (incident record)`}`,
+    `Photo: ${pic ? told(pic) : `${d.warning_photo_status && d.warning_photo_status !== "RECEIVED" ? "requested, not received" : "received"} (observed · incident record)`}`,
+  ]
+  if (cust && /stop/i.test(cust.body)) lines.push(`Customer: keep it stopped (quoted · customer ${hhmm(cust.authoredAt)})`)
+  const impact = deliveryImpact(b, now)
+  if (impact) lines.push(impact)
+  lines.push("Decide with the customer: roadside or tow.")
+  return lines.join("\n")
 }
 
 // A driver message that asks for something. "Understood, no cost to submit" or a position update needs no answer.
@@ -142,6 +170,20 @@ export function quoteShort(body: string, max = 100): string {
   const lead = s.find((x) => x !== ask && /\b(cannot|can't|won't|not|no)\b/i.test(x))
   const text = lead && lead.length + ask.length < max ? `${lead} ${ask}` : ask
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
+}
+
+/** A queue row's title: at most `max` words. A text that fits stays whole; else its first clause (to ". ", "; " or
+ *  ": ") when that says enough on its own; else the first words with "…", never ending on "and", "the" and the like.
+ *  The full text stays on the order page and in the row's title attribute. */
+const TAIL = /\s+(a|an|the|and|or|but|of|to|at|in|on|for|with|across|whether|are|is|was|were|be|been|has|have)$/i
+export function shortHeadline(text: string, max = 12): string {
+  const words = (x: string) => x.split(/\s+/).filter(Boolean).length
+  if (words(text) <= max + 2) return text
+  const clause = /^(.+?)[.;:]\s/.exec(text)?.[1]
+  if (clause && words(clause) >= 4 && words(clause) <= max) return clause
+  let cut = text.split(/\s+/).slice(0, max).join(" ").replace(/[,;:.]+$/, "")
+  while (TAIL.test(cut)) cut = cut.replace(TAIL, "").replace(/[,;:.]+$/, "")
+  return `${cut}…${(cut.match(/“/g)?.length ?? 0) > (cut.match(/”/g)?.length ?? 0) ? "”" : ""}`
 }
 
 const lcFirst = (x: string) => x.charAt(0).toLowerCase() + x.slice(1)
@@ -190,7 +232,7 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
     why: crit?.summary ?? "Open vehicle warning on the road. A person owns this.",
     sources: [...ring.events.filter((e) => e.command === "recovery.choice").slice(-1).map((e) => ref("ring_events", e.id)),
       ...(crit ? [ref("alerts", crit.id)] : []), ...(warn ? [ref("incidents", warn.id)] : [])],
-    oneDecision: safetyDecision(b, warn, ring),
+    oneDecision: safetyDecision(b, warn, ring, now),
   }
   // 2 FAILED_ACTION
   const failed = [...dsProps.filter((p) => p.details.status === "FAILED").map((p) => ref("agent_proposals", p.id)),
@@ -217,9 +259,10 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const lastRun = ring.runs.filter((r) => r.status !== "running" && r.decision?.outcome !== "failed").pop()
   if (pending.length || lastRun?.decision?.outcome === "needs_person") return {
     reason: "DECISION_WAITING", severity: "high",
-    // A row states the problem; Ringo's proposal goes in the chip ("Review Ringo's hold"). The problem is what the
-    // order would say without his proposal; if that is only "Ringo can call", the open gap itself.
-    why: pending.length ? underProposal(b, ring, now) ?? pending[0].summary : lastRun!.decision!.headline,
+    // A row states the problem as it stands now; Ringo's proposal goes in the chip ("Review Ringo's hold"). Once
+    // Ringo has stopped, that is his headline, the same line the order's hero shows (ring:check holds the two
+    // together). Only without a stop: what the order would say without his proposal, else the open gap itself.
+    why: ring.runs.findLast((r) => r.decision && r.decision.outcome !== "failed")?.decision?.headline ?? (pending.length ? underProposal(b, ring, now) ?? pending[0].summary : ""),
     sources: pending.length ? pending.map((p) => ref("ring_proposals", p.id)) : [ref("ring_runs", lastRun!.id)],
     oneDecision: lastRun?.decision?.oneDecision ?? null,
   }

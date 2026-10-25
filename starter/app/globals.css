@@ -574,7 +574,7 @@ details.more > :not(summary) { margin-top: 8px; }
 .q-step[aria-pressed="true"] .num { color: inherit; opacity: 0.75; }
 @media (max-width: 480px) { .q-steps { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: calc(-1 * var(--gutter)); padding-right: var(--gutter); } .q-step { flex: none; } }
 /* Severity is the left edge: red for critical, orange for high, nothing otherwise. Safety rows get a faint tint. */
-.q-row { display: grid; grid-template-columns: minmax(0, 1fr) 176px 140px; grid-template-areas: "main next due"; align-items: center; gap: 16px; min-height: 56px; padding: 11px 16px 11px 14px; border-left: 3px solid transparent; border-radius: 10px; background: var(--birch); box-shadow: var(--shadow-card); color: var(--ink); text-decoration: none; }
+.q-row { display: grid; grid-template-columns: minmax(0, 1fr) 200px 124px; grid-template-areas: "main next due"; align-items: center; gap: 16px; min-height: 56px; padding: 11px 16px 11px 14px; border-left: 3px solid transparent; border-radius: 10px; background: var(--birch); box-shadow: var(--shadow-card); color: var(--ink); text-decoration: none; }
 .q-row:hover { box-shadow: var(--shadow-card-hover); }
 .q-row:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .q-row.is-safety { border-left-color: var(--red); background: var(--red-bg); }
@@ -1022,3 +1022,10 @@ details.will > small { display: block; margin-top: 4px; font-size: inherit; }
 .board .card .card-body { padding-bottom: 9px; }
 .board .card:is(:hover, :focus-visible) .card-body > .card-line { display: flex; }
 .board .card:is(:hover, :focus-visible) .tray-line { display: flex; }
+/* The safety card's labelled lines: Driver, Where, Photo, Customer, Delivery, each with its level and source. */
+.decision-lines { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 6px 0 0; max-width: 72ch; }
+.decision-lines > div { display: contents; }
+.decision-lines dt { font-weight: 600; color: var(--ink, inherit); }
+.decision-lines dd { margin: 0; }
+.decision-line-src { font-size: 12px; color: var(--muted); white-space: nowrap; }
+@media (max-width: 560px) { .decision-line-src { white-space: normal; } }

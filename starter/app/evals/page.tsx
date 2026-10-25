@@ -33,6 +33,8 @@ const ORDER = (a: Result, b: Result) => rank(a) - rank(b) || a.title.localeCompa
 const scored = (r: Run) => r.passed + r.failed
 const REPEAT = 3
 type Repeat = { passed: number; runs: number; misses: string[] }
+/** A scenario run again on its own after the latest full run (e.g. after its expectations changed). */
+type Rerun = Result & { note: string | null }
 
 /** The latest leave-one-out report scripts/eval-reviewer.ts wrote (eval/gate-leave_one_out-*.json). */
 async function gateScore(): Promise<EvalReport | null> {
@@ -53,9 +55,9 @@ async function load() {
   const results = latest ? (await db.select().from(ringEvalResults).where(eq(ringEvalResults.evalRunId, latest.id))).sort(ORDER) : []
   // A scenario re-run on its own (--only) after the latest full run: shown on its card, not in the score.
   const later = latest ? all.filter((r) => r.status === "done" && r.startedAt > latest.startedAt && size(r) < full) : []
-  const rerun = new Map<string, { verdict: string; at: string; note: string | null }>()
+  const rerun = new Map<string, Rerun>()
   if (later.length) for (const x of (await db.select().from(ringEvalResults).where(inArray(ringEvalResults.evalRunId, later.map((r) => r.id)))).sort((a, b) => a.at.localeCompare(b.at)))
-    rerun.set(x.scenarioId, { verdict: x.verdict, at: x.at, note: later.find((r) => r.id === x.evalRunId)?.note ?? null })
+    rerun.set(x.scenarioId, { ...x, note: later.find((r) => r.id === x.evalRunId)?.note ?? null })
   // The same ten scenarios run again: k of n per scenario over the last REPEAT full runs, misses kept.
   const recent = runs.filter((r) => r.status === "done" && scored(r) > 0).slice(0, REPEAT)
   const repeat = new Map<string, Repeat>()
@@ -116,7 +118,12 @@ export default async function EvalsPage() {
   </main></AppFrame>
 }
 
-function Card({ r, reference, rerun, repeat }: { r: Result; reference: string; rerun?: { verdict: string; at: string; note: string | null }; repeat?: Repeat }) {
+// A card with a newer run on its own shows that run (what I should do now, and what I did); the full run's result
+// stays in the score and the repeat count, and the card says so.
+function Card({ r: full, reference, rerun, repeat: counted }: { r: Result; reference: string; rerun?: Rerun; repeat?: Repeat }) {
+  const r = rerun ?? full
+  // "3 of 3 runs passed" counts the full runs; once the expectation changed it is about another test, so it goes.
+  const repeat = rerun && rerun.expected !== full.expected ? undefined : counted
   const v = VERDICT[r.verdict as keyof typeof VERDICT] ?? VERDICT.void
   const checks = r.checks as CheckRow[]
   const reasons = r.reasons as string[]
@@ -133,7 +140,7 @@ function Card({ r, reference, rerun, repeat }: { r: Result; reference: string; r
       <div><dt>What I did</dt><dd>{r.actual}</dd></div>
     </dl>
     {reasons.length > 0 && <ul className="ev-reasons">{reasons.map((x) => <li key={x}>{x}</li>)}</ul>}
-    {rerun && <p className="ev-rerun">Run again on its own {fmtDateTime(rerun.at, ZONE)}: {(VERDICT[rerun.verdict as keyof typeof VERDICT] ?? VERDICT.void).label.toLowerCase()}{rerun.note ? ` (${rerun.note})` : ""}. Not in the score above.</p>}
+    {rerun && <p className="ev-rerun">This card shows a re-run of this scenario alone, {fmtDateTime(rerun.at, ZONE)}{rerun.note ? ` (${rerun.note})` : ""}. The score above counts the full run of {fmtDateTime(full.at, ZONE)}, which {full.expected === rerun.expected ? `was ${(VERDICT[full.verdict as keyof typeof VERDICT] ?? VERDICT.void).label.toLowerCase()}` : "expected something else then"}.</p>}
     <details className="ev-checks">
       <summary>{checks.filter((c) => c.ok).length} of {checks.length} checks held</summary>
       <ul>{checks.map((c) => <li key={c.label} className={c.ok ? "ok" : "bad"}><span aria-hidden="true">{c.ok ? "✓" : "✗"}</span><span className="sr-only">{c.ok ? "Held:" : "Missed:"}</span> {c.label}{c.setup ? <em> (the test itself)</em> : null}</li>)}</ul>

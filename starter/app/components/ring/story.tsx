@@ -8,7 +8,7 @@ import type { CallRecord, Fact, OrderStory, Proposal, ReviewDecision, StoryEntry
 import type { LearnedRule, ReviewWithSuggestion } from "@/lib/agent/learn/types"
 import { DESK, claimOrder, recordRecovery, releaseClaim, reviewProposal } from "../../_lib/agent-api"
 import { RECHECK_MINUTES, type Claim, type WithClaim } from "@/lib/triage/claim"
-import { unanswered } from "@/lib/triage/next-action"
+import { heroProblem, unanswered } from "@/lib/triage/next-action"
 import { basisFacts, leadFacts } from "@/lib/triage/relevance"
 import { BY_HAND, FOLLOW_UP_MINUTES, personStep, shortThen, stayLine, thenLine, type Names } from "@/lib/triage/follow-up"
 import { Icon } from "../icons"
@@ -98,6 +98,14 @@ function nextStepFrom(story: OrderStory, ctx: HeroContext | null, ringPending: P
   // On a safety stop the card is built from the records (and what Ringo heard from the driver, folded in by triage);
   // his roadside run never takes over the decision.
   const one = triage.reason === "SAFETY" ? triage.oneDecision : (settled ? null : decision?.oneDecision) ?? triage.oneDecision
+  if (one?.includes("\n")) {
+    // The safety card's labelled lines (lib/triage/triage.ts safetyDecision): "Driver: safe, engine off (claimed · …)".
+    const lines = one.split("\n")
+    return { text: lines.pop()!, context: <dl className="decision-lines">{lines.map((l) => {
+      const m = /^(\w+): (.*?)(?: \(([^()]*)\))?$/.exec(l)
+      return m ? <div key={l}><dt>{m[1]}</dt><dd>{m[2]}{m[3] && <span className="decision-line-src"> {m[3]}</span>}</dd></div> : <div key={l}><dd>{l}</dd></div>
+    })}</dl> }
+  }
   if (one) {
     const s = sentences(one)
     const context = s.length > 1 ? s.slice(0, -1).join(" ") : decision?.whatNext ? <>Meanwhile: {decision.whatNext}</> : undefined
@@ -148,14 +156,8 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
   const runButton = (primary: boolean) =>
     <button type="button" className={`btn${primary ? " primary" : ""}`} disabled={running} onClick={onRun} aria-controls="ringo"><Icon name="bot" size={15} /> {running ? "Ringo is working…" : "Run Ringo"}</button>
   const tone = triage.bucket === "needs_you" ? (triage.severity === "critical" ? "danger" : "warn") : triage.bucket === "ring" ? "accent" : "ok"
-  const recorded = triage.reason === "RECORDED_PROPOSAL" ? earlier.find((p) => !blocked(p)) : undefined
-  // With a stop decision, Ringo's headline says what he found; the proposal card below says what he asks.
-  // Once his proposals are reviewed, what he found still beats the dataset's older "waiting on…" line.
-  const settled = decision?.outcome === "proposal_ready" && story.proposals.some((p) => p.origin === "ring" && p.status !== "PENDING_REVIEW")
-  // Once a person has reviewed Ringo's proposal, his "…update ready" headline is history: say what was decided.
-  const lastReviewed = settled ? story.proposals.filter((p) => p.origin === "ring" && p.review).sort((x, y) => x.review!.reviewedAt.localeCompare(y.review!.reviewedAt)).pop() : undefined
-  const problem = lastReviewed && !ringPending.length ? `${REVIEWED[lastReviewed.review!.decision]}: ${lastReviewed.summary.replace(/\.$/, "")}.`
-    : decision && triage.reason !== "SAFETY" && (decision.outcome === "needs_person" || ringPending.length || settled) ? decision.headline : recorded?.rationale || triage.why
+  // The hero's first line, the same text the queue row is built from (lib/triage/next-action.ts heroProblem).
+  const problem = heroProblem(story)
   const names: Names = { customer: ctx?.customer?.name ?? null, driver: ctx?.driver?.name ?? null }
   const waiting = unanswered(story.timeline)
   const quoted = waiting && !triage.sources.some((s) => s.id === waiting.ref.id) ? waiting : null
@@ -177,7 +179,7 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
     {story.claim && <p className="decision-claim q-claim">{story.claim.by === DESK ? "You have it" : `${story.claim.by} has it`} · <When at={story.claim.at} now={story.now} /> · back in the queue at <When at={story.claim.recheckAt} now={story.now} />{story.claim.note && <> · {story.claim.note}</>}</p>}
     {next ? <div className="decision-next">
       <p><b>Next:</b> {next.text}</p>
-      {next.context && <p className="decision-context">{next.context}</p>}
+      {next.context && <div className="decision-context">{next.context}</div>}
       {next.source && <p className="decision-src">{next.source}</p>}
     </div> : triage.bucket !== "needs_you" && <p className="decision-next">Nothing waits on you.</p>}
     {chooseRecovery && <RecoveryChoice orderId={story.orderId} reference={story.reference} names={names} onDone={onChanged} />}
@@ -206,7 +208,6 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
   </section>
 }
 
-const REVIEWED: Record<ReviewDecision, string> = { APPROVED: "You accepted Ringo's proposal", EDITED: "You accepted Ringo's proposal with changes", REJECTED: "You rejected Ringo's proposal" }
 
 /** The customer's roadside-or-tow answer, as a person heard it. A note is required (who said it, when).
  *  Recording it books nothing: the next step becomes booking the recovery, which needs approval as a cost. */
