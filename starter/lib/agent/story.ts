@@ -11,7 +11,7 @@ import { loadBoardBundles, loadOrder } from "@/lib/present/load"
 import { orderFacts } from "@/lib/triage/facts"
 import { rankAll, ringEligibility, shortHeadline, triage } from "@/lib/triage/triage"
 import { activeClaim, type WithClaim } from "@/lib/triage/claim"
-import type { WithProposal, WithShort } from "@/lib/triage/next-action"
+import { heroProblem, type WithProposal, type WithShort } from "@/lib/triage/next-action"
 import { rankFacts } from "@/lib/triage/facts"
 import { SNAPSHOT, simNow } from "./clock"
 import { datasetProposals } from "./proposals"
@@ -32,7 +32,12 @@ function item(b: Bundle, t: Triage, ring: RingOrderState, now: string): QueueIte
   const v = b.items.find((i) => i.role === "PRIMARY")?.vehicle ?? b.items[0]?.vehicle
   const from = b.places.get(b.order.pickupAddressId)?.city ?? "?"
   const to = b.places.get(b.order.deliveryAddressId)?.city ?? "?"
-  return { ...t, chips: [], short: shortHeadline(t.why), vehicle: v ? `${v.make} ${v.model}` : "Vehicle unknown", customer: b.customer.name, route: `${from} → ${to}`, lane: b.order.lane,
+  // The row says what the order's hero says (one function for both, so they cannot drift), except a person's own
+  // follow-up, which names their step.
+  const decision = ring.runs.findLast((r) => r.decision && r.decision.outcome !== "failed")?.decision ?? null
+  const why = t.bucket === "needs_you" && !t.sources.some((s) => s.table === "ring_claims")
+    ? heroProblem({ triage: t, decision, proposals: [...datasetProposals(b, now), ...ring.proposals] }) : t.why
+  return { ...t, why, chips: [], short: shortHeadline(why), vehicle: v ? `${v.make} ${v.model}` : "Vehicle unknown", customer: b.customer.name, route: `${from} → ${to}`, lane: b.order.lane,
     claim: t.bucket === "needs_you" ? activeClaim(ring.claims, lastActivity(b, ring), now) : null,
     proposalAction: ring.proposals.find((p) => p.status === "PENDING_REVIEW")?.actionType ?? null }
 }

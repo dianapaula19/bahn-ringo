@@ -231,9 +231,10 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     const run = { id: "run-check", orderId: "ord-00516", trigger: "eval", status: "stopped", startedAt: NOW, endedAt: NOW, model: "", decision: stop.decision, error: null, operatorMessage: null } as RingOrderState["runs"][number]
     assert.equal(t("ord-00516", { ...emptyRing(), facts, proposals, runs: [run] }).why, stop.decision.headline)
   })
-  test("every Needs-you row with an open Ringo proposal or stop says what its order's hero says", async () => {
+  test("every Needs-you row says what its order's hero says (open Ringo proposals and stops included)", async () => {
     const q = await buildQueue()
-    const open = q.needsYou.filter((x) => x.reason === "DECISION_WAITING")
+    const open = q.needsYou.filter((x) => !x.sources.some((s) => s.table === "ring_claims")) // a follow-up names the person's step
+    assert.ok(open.some((x) => x.reason === "DECISION_WAITING") || !q.needsYou.some((x) => x.pendingProposalIds.length), "no open-proposal row was checked")
     for (const row of open) {
       const story = await buildStory(row.orderId)
       assert.ok(story)
