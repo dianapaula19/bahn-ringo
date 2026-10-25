@@ -29,12 +29,20 @@ export function pickupSiteId(b: Bundle): string | null {
   return m ? m[1] : null
 }
 
-export function ringEligibility(b: Bundle): { ok: boolean; reason: string | null } {
-  if (openAlerts(b).some((a) => a.signal === "SAFETY_STOP") || openIncidents(b).some((i) => i.details.kind === "VEHICLE_WARNING"))
-    return { ok: false, reason: "On-the-road safety: a person owns this." }
-  if (!RING_STATUSES.includes(b.order.status)) return { ok: false, reason: "Ringo works pickup readiness before collection only." }
-  if (!pickupSiteId(b)) return { ok: false, reason: "No pickup site or pickup contact to call." }
-  return { ok: true, reason: null }
+/** How Ringo may work an order. "pickup": the full pickup-readiness job. "roadside": a car stopped on the road for
+ *  safety; Ringo works driver-only and safety-limited (lib/agent/tools.ts ROADSIDE): he may ask the assigned driver if
+ *  they are safe and where exactly they are, ask for the warning-light photo, and send one holding reply. No calls, no
+ *  proposals, no advice; roadside or tow stays a person's decision. */
+export type RingMode = "pickup" | "roadside"
+
+export function ringEligibility(b: Bundle): { ok: boolean; reason: string | null; mode: RingMode | null } {
+  if (openAlerts(b).some((a) => a.signal === "SAFETY_STOP") || openIncidents(b).some((i) => i.details.kind === "VEHICLE_WARNING")) {
+    const driver = rows(b, "work_assignments").some((a) => a.details.status !== "CANCELLED" && str(a.details.driver_id))
+    return driver ? { ok: true, reason: null, mode: "roadside" } : { ok: false, reason: "On-the-road safety with no assigned driver: a person owns this.", mode: null }
+  }
+  if (!RING_STATUSES.includes(b.order.status)) return { ok: false, reason: "Ringo works pickup readiness before collection only.", mode: null }
+  if (!pickupSiteId(b)) return { ok: false, reason: "No pickup site or pickup contact to call.", mode: null }
+  return { ok: true, reason: null, mode: "pickup" }
 }
 
 /** "I can wait another 30 minutes" → the time the driver said they leave. Only the driver's newest message counts. */
@@ -102,11 +110,22 @@ function safetyDecision(b: Bundle, incident: RelatedRow | undefined, ring: RingO
   const msgs = [...b.messages].sort((x, y) => x.authoredAt.localeCompare(y.authoredAt))
   const safe = msgs.filter((m) => m.authorType === "driver" && /\bsafe\b/i.test(m.body)).pop()
   const cust = msgs.filter((m) => m.authorType === "customer").pop()
-  const parts = [safe ? `Driver says they are safe and stopped (driver ${hhmm(safe.authoredAt)}).` : "Driver safety not yet confirmed."]
+  // What the driver told Ringo in roadside mode (claimed facts from his simulated chat) is newer than the records.
+  const heard = (subject: string) => ring.facts.filter((f) => f.subject === subject && !f.supersededByFactId && f.level !== "refuted").sort((x, y) => x.at.localeCompare(y.at)).pop()
+  const okNow = heard("driver.safety"), where = heard("incident.location"), pic = heard("incident.photo")
   const d = incident?.details ?? {}
   const loc = d.location_verified === false ? "Location unverified" : "Location recorded"
   const photo = d.warning_photo_status && d.warning_photo_status !== "RECEIVED" ? "no photo yet" : "photo received"
-  parts.push(`${loc}, ${photo}.`)
+  const told = [okNow, where, pic].filter((f): f is Fact => !!f)
+  const parts: string[] = []
+  if (told.length) {
+    // One sentence, one source note: "Driver says he is safe…; the car is at…; he is sending the photo (to Ringo 12:06, not verified)."
+    const claims = told.map((f, i) => (i ? f.claim.replace(/^driver says (that )?/i, "") : f.claim).replace(/\.$/, ""))
+    parts.push(`${claims.join("; ")} (to Ringo ${hhmm(told[told.length - 1].at)}, not verified).`)
+    if (!okNow) parts.unshift(safe ? `Driver says they are safe and stopped (driver ${hhmm(safe.authoredAt)}).` : "Driver safety not yet confirmed.")
+    if (!where) parts.push(`${loc}.`)
+    if (!pic) parts.push(`${photo.replace(/^\w/, (c) => c.toUpperCase())}.`)
+  } else parts.push(safe ? `Driver says they are safe and stopped (driver ${hhmm(safe.authoredAt)}).` : "Driver safety not yet confirmed.", `${loc}, ${photo}.`)
   if (cust && /stop/i.test(cust.body)) parts.push(`Customer: keep it stopped (${hhmm(cust.authoredAt)}).`)
   parts.push("Decide with the customer: roadside or tow.")
   return parts.join(" ")
@@ -141,6 +160,22 @@ function waitLine(b: Bundle, now: string): string | null {
   const w = driverWaitUntil(b)
   if (!w) return null
   return `${w.until > now ? "Driver leaves at" : "Driver could wait until"} ${hhmm(w.until)} (said ${hhmm(w.said)}).`
+}
+
+/** The open problem in the order's own records: the first open task outside Ringo's gaps, else Ringo's gap, else an open alert. */
+function problemOf(b: Bundle): string | null {
+  const items = openItems(b)
+  const task = items.find((w) => !RING_KINDS.includes(String(w.details.kind)) && str(w.details.summary)) ?? items.find((w) => str(w.details.summary))
+  if (task) return String(task.details.summary)
+  const alert = openAlerts(b)[0]
+  return alert ? alertText(alert.summary) : null
+}
+
+/** What the queue row says under Ringo's open proposal: the reason the order would have without it. */
+function underProposal(b: Bundle, ring: RingOrderState, now: string): string | null {
+  const without = { ...ring, proposals: ring.proposals.filter((p) => p.status !== "PENDING_REVIEW"), runs: ring.runs.filter((r) => r.status === "running") }
+  const hit = rules(b, without, now)
+  return hit.reason === "RING_CAN_CALL" || hit.reason === "RING_WORKING" || hit.reason === "WAITING_EXTERNAL" || hit.reason === "QUIET" ? problemOf(b) : hit.why
 }
 
 function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
@@ -182,7 +217,9 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const lastRun = ring.runs.filter((r) => r.status !== "running" && r.decision?.outcome !== "failed").pop()
   if (pending.length || lastRun?.decision?.outcome === "needs_person") return {
     reason: "DECISION_WAITING", severity: "high",
-    why: pending.length ? `Ringo has ${pending.length === 1 ? "a proposal" : `${pending.length} proposals`} for you: ${pending[0].summary}` : lastRun!.decision!.headline,
+    // A row states the problem; Ringo's proposal goes in the chip ("Review Ringo's hold"). The problem is what the
+    // order would say without his proposal; if that is only "Ringo can call", the open gap itself.
+    why: pending.length ? underProposal(b, ring, now) ?? pending[0].summary : lastRun!.decision!.headline,
     sources: pending.length ? pending.map((p) => ref("ring_proposals", p.id)) : [ref("ring_runs", lastRun!.id)],
     oneDecision: lastRun?.decision?.oneDecision ?? null,
   }
@@ -199,7 +236,8 @@ function rules(b: Bundle, ring: RingOrderState, now: string): Hit {
   const dsPending = dsProps.filter((p) => p.details.status === "PENDING_REVIEW")
   if (dsPending.length) return {
     reason: "RECORDED_PROPOSAL", severity: "medium", sources: dsPending.map((p) => ref("agent_proposals", p.id)),
-    why: `Recorded proposal: ${String(dsPending[0].details.summary)}`,
+    // The problem, not the fix: the open task or alert the recorded proposal answers. The chip says "Review recorded proposal".
+    why: problemOf(b) ?? `Recorded proposal: ${String(dsPending[0].details.summary)}`,
   }
   // 7 CUSTOMER_CONTACT
   const identity = items.find((w) => w.details.kind === "IDENTITY_INPUT_REQUIRED")

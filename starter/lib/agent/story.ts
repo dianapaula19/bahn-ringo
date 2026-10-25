@@ -11,6 +11,7 @@ import { loadBoardBundles, loadOrder } from "@/lib/present/load"
 import { orderFacts } from "@/lib/triage/facts"
 import { rankAll, ringEligibility, triage } from "@/lib/triage/triage"
 import { activeClaim, type WithClaim } from "@/lib/triage/claim"
+import type { WithProposal } from "@/lib/triage/next-action"
 import { rankFacts } from "@/lib/triage/facts"
 import { SNAPSHOT, simNow } from "./clock"
 import { datasetProposals } from "./proposals"
@@ -27,12 +28,13 @@ function lastActivity(b: Bundle, ring: RingOrderState): string | null {
 }
 
 // The queue does not draw fact chips (the story carries them), so rows leave them out: they were most of the payload.
-function item(b: Bundle, t: Triage, ring: RingOrderState, now: string): QueueItem & WithClaim {
+function item(b: Bundle, t: Triage, ring: RingOrderState, now: string): QueueItem & WithClaim & WithProposal {
   const v = b.items.find((i) => i.role === "PRIMARY")?.vehicle ?? b.items[0]?.vehicle
   const from = b.places.get(b.order.pickupAddressId)?.city ?? "?"
   const to = b.places.get(b.order.deliveryAddressId)?.city ?? "?"
   return { ...t, chips: [], vehicle: v ? `${v.make} ${v.model}` : "Vehicle unknown", customer: b.customer.name, route: `${from} → ${to}`, lane: b.order.lane,
-    claim: t.bucket === "needs_you" ? activeClaim(ring.claims, lastActivity(b, ring), now) : null }
+    claim: t.bucket === "needs_you" ? activeClaim(ring.claims, lastActivity(b, ring), now) : null,
+    proposalAction: ring.proposals.find((p) => p.status === "PENDING_REVIEW")?.actionType ?? null }
 }
 
 /** Every order triaged, with messages attached so driver/customer rules can read them. */

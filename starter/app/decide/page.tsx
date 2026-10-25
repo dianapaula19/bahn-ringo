@@ -15,7 +15,7 @@ import { relativeTo } from "@/lib/present/time"
 import { BY_HAND, thenLine } from "@/lib/triage/follow-up"
 import { fieldLabel } from "@/lib/present/labels"
 import { dueSoon, inNow, nextAction } from "@/lib/triage/next-action"
-import { currentFacts } from "@/lib/triage/relevance"
+import { basisFacts, leadFacts } from "@/lib/triage/relevance"
 import { similarGroups, similarKey } from "@/lib/triage/similar"
 import { DESK, loadQueue, loadStory, reviewProposal } from "../_lib/agent-api"
 import { AppFrame } from "../components/app-frame"
@@ -238,7 +238,7 @@ export default function DecidePage() {
       onAccept={acceptBatch} onClose={() => setBatch(null)} />}
 
     {!batch && q && <>
-      <p className="dk-ringo"><RingoFace size={32} /><span>{safety ? "This one is on the road. A person owns it; I stay off the line."
+      <p className="dk-ringo"><RingoFace size={32} /><span>{safety ? "This one is on the road. I only ask the driver if they're safe, where they are and for a photo. Roadside or tow is yours."
         : pending.length ? "I wrote this one up. Your call."
           : q.reason === "RECORDED_PROPOSAL" ? "Recorded before my time. You do this one by hand."
             : "One at a time. I keep the rest parked."}</span></p>
@@ -296,8 +296,9 @@ export default function DecidePage() {
 function DueTag({ item, now }: { item: QueueItem; now: string }) {
   const rel = relativeTo(item.decideBy, now)
   const urgent = inNow(item, now)
-  if (!rel) return urgent ? <span className="chip tone-danger">Now</span> : null
-  return <span className={`chip${rel.past && urgent ? " tone-danger" : rel.past ? " tone-warn" : ""} num`}>{rel.past ? `Overdue ${rel.text.replace(/ ago$/, "")}` : <>Due <Ago at={item.decideBy} now={now} />{dueSoon(item, now) && " · due soon"}</>}</span>
+  // Red is for safety only; a late card is orange, like the queue's "overdue" marker.
+  if (!rel) return urgent ? <span className={`chip ${item.reason === "SAFETY" ? "tone-danger" : "tone-warn"}`}>Now</span> : null
+  return <span className={`chip${rel.past && item.reason === "SAFETY" ? " tone-danger" : rel.past ? " tone-warn" : ""} num`}>{rel.past ? `Overdue ${rel.text.replace(/ ago$/, "")}` : <>Due <Ago at={item.decideBy} now={now} />{dueSoon(item, now) && " · due soon"}</>}</span>
 }
 
 /** The facts that matter: the last words of the driver, customer or site in the past 2 h (who is waiting
@@ -305,7 +306,8 @@ function DueTag({ item, now }: { item: QueueItem; now: string }) {
  *  minus a line that repeats the headline. Each has its source and time. */
 function Facts({ story }: { story: OrderStory }) {
   const kinds = new Map(story.timeline.map((e) => [e.ref.id, e.actorKind]))
-  const chips = currentFacts(story.facts, new Set(story.triage.overtaken.map((o) => o.ref.id))).filter((f) => f.claim !== story.triage.why).slice(0, 3)
+  const basis = basisFacts(story.facts, story.proposals)
+  const chips = leadFacts(story.facts, basis, new Set(story.triage.overtaken.map((o) => o.ref.id))).filter((f) => f.claim !== story.triage.why).slice(0, 3)
   const since = Date.parse(story.now) - 2 * 3600_000
   const voices = (["driver", "customer", "site"] as const)
     .map((k) => story.timeline.filter((e) => e.actorKind === k && Date.parse(e.at) >= since).at(-1))
@@ -316,7 +318,7 @@ function Facts({ story }: { story: OrderStory }) {
       <p>&ldquo;{e.text}&rdquo;</p>
       <p className="fact-src"><RoleTag role={entryRole(e.actorKind)} />{e.actor}{e.channel ? ` · ${e.channel.replace(/_/g, " ")}` : ""} · <a href={withBase(`/orders/${story.orderId}#src-${e.ref.id}`)}><When at={e.at} now={story.now} /></a></p>
     </li>)}</ul>}
-    {chips.length ? <ul className="fact-list">{chips.map((f) => <li key={f.id}><FactChip fact={f} now={story.now} who={factLizard(f, kinds)} /></li>)}</ul>
+    {chips.length ? <ul className="fact-list">{chips.map((f) => <li key={f.id}><FactChip fact={f} now={story.now} who={factLizard(f, kinds)} basis={basis.includes(f)} /></li>)}</ul>
       : !voices.length && <p className="empty">No facts recorded on this order yet. The records behind the card are linked above.</p>}
   </section>
 }
