@@ -120,9 +120,9 @@ export default async function EnginePage({ searchParams }: Props) {
       <p className="intro">Under the hood. Kick the tyres all you like, nothing here changes an order.</p>
     </div></div>
     <p className="note-text">Every model turn and tool call of Ringo's last {RUNS} runs, with timing, tokens and the reviewer check. Runs loaded by demo:seed are recordings: they keep their steps and timing but carry no token data. Watching a replay adds nothing here. Times are Helsinki time on the sim clock.</p>
-    <p className="engine-ph">{ph.on
-      ? <>PostHog LLM analytics is on: each model call is sent as <code>$ai_generation</code> and each tool call as <code>$ai_span</code>, with the run id as the session id (no prompt text). {ph.url ? <a href={ph.url} target="_blank" rel="noopener noreferrer">Open LLM analytics ↗</a> : "Open LLM analytics in your PostHog app."}</>
-      : <>PostHog LLM analytics is off (no <code>NEXT_PUBLIC_POSTHOG_*</code> settings). Everything on this page comes from the local database.</>}</p>
+    <details className="engine-ph"><summary>For engineers: product analytics {ph.on ? "is on" : "is off"}</summary><p>{ph.on
+      ? <>PostHog LLM analytics is on: each model turn is sent as <code>$ai_generation</code> and each tool step as <code>$ai_span</code>, with the run id as the session id (no prompt text). {ph.url ? <a href={ph.url} target="_blank" rel="noopener noreferrer">Open LLM analytics ↗</a> : "Open LLM analytics in your PostHog app."}</>
+      : <>PostHog LLM analytics is off (no <code>NEXT_PUBLIC_POSTHOG_*</code> settings). Everything on this page comes from the local database.</>}</p></details>
 
     {runs.length === 0 ? <p className="empty engine-empty">Nothing on the books yet. Send me out on an order and every turn I take lands here.</p>
       : <ul className="engine-runs">{runs.map((run) => {

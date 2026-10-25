@@ -49,3 +49,5 @@
 .engine-why summary { cursor: pointer; font-weight: 500; color: var(--ink); }
 .engine-why details p { margin: 2px 0 2px 16px; max-width: 76ch; }
 .engine-savings { margin-top: 28px; }
+.engine-ph summary { cursor: pointer; color: var(--muted); }
+.engine-ph p { margin: 8px 0 0; }

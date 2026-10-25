@@ -139,7 +139,7 @@ export function RunPanel({ story, onDone, heroRun = false, runRequest = 0, onRun
     </div>
     <form className="ring-chat" onSubmit={(e) => { e.preventDefault(); const t = message.trim(); if (t && !running && !busyElsewhere) { setMessage(""); start("operator", t) } }}>
       <label className="sr-only" htmlFor="ring-msg">Tell Ringo something</label>
-      <textarea id="ring-msg" rows={1} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Tell Ringo something, e.g. “call stock control again” or “don't call before 10:00”"
+      <textarea id="ring-msg" rows={1} value={message} onChange={(e) => setMessage(e.target.value)} placeholder={story.triage.reason === "SAFETY" ? "Tell Ringo something, e.g. “ask if the photo is sent”" : "Tell Ringo something, e.g. “call stock control again” or “don't call before 10:00”"}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit() } else if (e.key === "Escape" && !running) e.currentTarget.blur() }} />
       <button type="submit" className="btn" disabled={running || busyElsewhere || !message.trim()}>Send</button>
     </form>
