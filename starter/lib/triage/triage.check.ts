@@ -26,7 +26,7 @@ import { basisFacts, currentFacts, leadFacts } from "./relevance"
 import { personStep, thenLine } from "./follow-up"
 import { orderFacts, rankFacts } from "./facts"
 import { similarGroups } from "./similar"
-import { ringEligibility, shortHeadline, triage } from "./triage"
+import { deliveryImpact, ringEligibility, shortHeadline, triage } from "./triage"
 
 const NOW = SNAPSHOT
 
@@ -49,7 +49,14 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
   test("322 is the first SAFETY card, not a Ringo order, with a row-built decision", () => {
     const r = t("ord-00322")
     assert.equal(r.bucket, "needs_you"); assert.equal(r.reason, "SAFETY"); assert.equal(r.severity, "critical")
-    assert.equal(r.oneDecision, "Driver says they are safe and stopped (driver 11:22). Location unverified, no photo yet. Customer: keep it stopped (11:40). Decide with the customer: roadside or tow.")
+    assert.equal(r.oneDecision, [
+      "Driver: safe, stopped (claimed · driver 11:22)",
+      "Where: not verified (incident record)",
+      "Photo: requested, not received (observed · incident record)",
+      "Customer: keep it stopped (quoted · customer 11:40)",
+      "Delivery: to Hamburg, due 21 Oct 13:00–17:00: at risk; tell Marvellin Motorhandel when you call (reserved · delivery promise)",
+      "Decide with the customer: roadside or tow.",
+    ].join("\n"))
     assert.deepEqual(r.overtaken.map((o) => [o.ref.id, o.overtakenBy.id]), [["alert-x105238e92e7f3ba6", "alert-x539dcfdd5a51d9ab"]])
     // A safety stop is driver-only roadside mode for Ringo, never the pickup job.
     assert.deepEqual(ringEligibility(bundles.get("ord-00322")!), { ok: true, reason: null, mode: "roadside" })
@@ -59,9 +66,17 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     assert.ok(facts.some((f) => f.subject === "incident.location" && f.sourceKind === "ring_driver_message" && f.level === "claimed"), "the recorded run wrote the driver's location as a claim")
     const r = t("ord-00322", { ...emptyRing(), facts })
     assert.equal(r.reason, "SAFETY")
-    assert.match(r.oneDecision ?? "", /Lindenfeld Ost.*not verified/)
+    assert.match(r.oneDecision ?? "", /^Driver: safe, engine off \(claimed · driver to Ringo \d\d:\d\d, simulated\)$/m)
+    assert.match(r.oneDecision ?? "", /^Where: Lindenfeld Ost service area, row C \(claimed · driver to Ringo/m)
+    assert.match(r.oneDecision ?? "", /^Photo: sending, not yet seen \(claimed/m)
     assert.match(r.oneDecision ?? "", /Decide with the customer: roadside or tow\.$/)
     assert.equal(nextAction(r), "Decide: roadside or tow")
+  })
+  test("delivery impact: 'at risk' while the window is open, 'late' only once it has ended, nothing off the road", () => {
+    const b = bundles.get("ord-00322")!
+    assert.match(deliveryImpact(b, NOW) ?? "", /^Delivery: to Hamburg, due 21 Oct 13:00–17:00: at risk; tell Marvellin Motorhandel when you call/)
+    assert.match(deliveryImpact(b, "2026-10-21T14:01:00.000Z") ?? "", /: late; /)
+    assert.equal(deliveryImpact(bundles.get("ord-00516")!, NOW), null) // waiting for pickup, not in transit
   })
   test("322 roadside mode guards: no instructions, no moving the car, no recovery promised, no mechanical advice", () => {
     assert.ok(roadsideCheck("Please drive to the next garage.", "question"))

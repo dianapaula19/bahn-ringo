@@ -98,6 +98,14 @@ function nextStepFrom(story: OrderStory, ctx: HeroContext | null, ringPending: P
   // On a safety stop the card is built from the records (and what Ringo heard from the driver, folded in by triage);
   // his roadside run never takes over the decision.
   const one = triage.reason === "SAFETY" ? triage.oneDecision : (settled ? null : decision?.oneDecision) ?? triage.oneDecision
+  if (one?.includes("\n")) {
+    // The safety card's labelled lines (lib/triage/triage.ts safetyDecision): "Driver: safe, engine off (claimed · …)".
+    const lines = one.split("\n")
+    return { text: lines.pop()!, context: <dl className="decision-lines">{lines.map((l) => {
+      const m = /^(\w+): (.*?)(?: \(([^()]*)\))?$/.exec(l)
+      return m ? <div key={l}><dt>{m[1]}</dt><dd>{m[2]}{m[3] && <span className="decision-line-src"> {m[3]}</span>}</dd></div> : <div key={l}><dd>{l}</dd></div>
+    })}</dl> }
+  }
   if (one) {
     const s = sentences(one)
     const context = s.length > 1 ? s.slice(0, -1).join(" ") : decision?.whatNext ? <>Meanwhile: {decision.whatNext}</> : undefined
@@ -171,7 +179,7 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
     {story.claim && <p className="decision-claim q-claim">{story.claim.by === DESK ? "You have it" : `${story.claim.by} has it`} · <When at={story.claim.at} now={story.now} /> · back in the queue at <When at={story.claim.recheckAt} now={story.now} />{story.claim.note && <> · {story.claim.note}</>}</p>}
     {next ? <div className="decision-next">
       <p><b>Next:</b> {next.text}</p>
-      {next.context && <p className="decision-context">{next.context}</p>}
+      {next.context && <div className="decision-context">{next.context}</div>}
       {next.source && <p className="decision-src">{next.source}</p>}
     </div> : triage.bucket !== "needs_you" && <p className="decision-next">Nothing waits on you.</p>}
     {chooseRecovery && <RecoveryChoice orderId={story.orderId} reference={story.reference} names={names} onDone={onChanged} />}
