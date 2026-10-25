@@ -15,7 +15,7 @@ test("line + hold + estimates; open calls and failed steps don't count", () => {
   assert.equal(s.calls, 1)
   assert.equal(s.lineSeconds, 90)
   assert.equal(s.holdSeconds, 35)
-  assert.deepEqual([s.reads, s.notes, s.driverMessages], [3, 2, 1])
+  assert.deepEqual([s.reads, s.notes, s.driverMessages, s.proposals], [3, 2, 1, 0])
   assert.equal(s.estimateSeconds, (3 * 2 + 2 * 1 + 1 * 3) * 60)
   assert.equal(s.totalSeconds, 90 + 35 + 660)
 })

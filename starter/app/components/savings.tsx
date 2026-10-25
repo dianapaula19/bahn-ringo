@@ -33,6 +33,27 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 const MIN = (n: number) => `${n} min`
 
+/** What Ringo did today, counted from his runs' own steps, and what people decided on his proposals (all time,
+ *  from the trust ledger). /trust leads with this; time saved comes later and smaller. */
+export function ActivitySection({ decisions }: { decisions: { accepted: number; edited: number; rejected: number } | null }) {
+  const [s] = useSavings()
+  const head = <div className="sec-head"><h2 id="did-h">What Ringo did</h2>
+    {s && s !== "error" && <span className="note">Today, {fmtDay(s.now, "Europe/Helsinki")} (Helsinki). Calls and driver chats are simulated.</span>}</div>
+  if (s === "error") return <section className="sec" aria-labelledby="did-h">{head}<p className="board-error" role="alert">Could not count Ringo&apos;s work right now.</p></section>
+  if (!s) return <section className="sec" aria-labelledby="did-h" aria-busy="true">{head}<div className="q-skel" /></section>
+  const items: [number, string, string][] = [
+    [s.calls, "call", "calls to pickup sites"], [s.driverMessages, "driver message", "driver messages"],
+    [s.notes, "fact", "facts written, each with its source"], [s.proposals, "proposal", "proposals for a person"],
+    ...(decisions ? [[decisions.accepted, "accepted", "accepted by a person"] as [number, string, string]] : []),
+  ]
+  return <section className="sec" aria-labelledby="did-h">
+    {head}
+    {s.runs === 0 ? <p className="empty">Nothing yet today. Open an order and run Ringo, or load the recorded runs with <code>npm run demo:seed</code>.</p>
+      : <dl className="did-grid">{items.map(([n, , label]) => <div key={label}><dt>{label}</dt><dd className="num">{n}</dd></div>)}</dl>}
+    {decisions && decisions.edited + decisions.rejected > 0 && <p className="note-text">People also edited {plural(decisions.edited, "proposal")} and rejected {decisions.rejected}.</p>}
+  </section>
+}
+
 /** `edit`: the estimate form (on /trust); /engine shows the numbers only. */
 export function SavingsSection({ edit = true }: { edit?: boolean }) {
   const [s, set] = useSavings()
@@ -74,8 +95,8 @@ export function SavingsSection({ edit = true }: { edit?: boolean }) {
       <p className="savings-ringo"><RingoFace size={32} /><span>{s.runs
         ? "I sit through the hold music so you don't have to. Here's today's tab."
         : "Nothing on the tab yet today. When I work an order, the minutes show up here."}</span></p>
-      {s.runs > 0 && <p className="savings-total"><span className="savings-big">{fmtSeconds(s.lineSeconds + s.holdSeconds)}</span>
-        <span className="savings-sub">measured: on the phone for you, {plural(s.calls, "call")} · {plural(s.runs, "run")}</span></p>}
+      {s.runs > 0 && <p className="savings-total"><span className="savings-sub">{plural(s.runs, "run")}, {plural(s.calls, "call")}, {plural(s.notes, "fact")} written, {plural(s.proposals, "proposal")}. On the phone for you: </span>
+        <b className="num">{fmtSeconds(s.lineSeconds + s.holdSeconds)}</b> <span className="savings-sub">(measured)</span></p>}
       <dl className="savings-parts">
         <div><dt>On the line <span className="savings-kind">measured</span></dt>
           <dd>{s.calls ? <>{plural(s.calls, "call")}, {fmtSeconds(s.lineSeconds)}</> : "No calls yet"}</dd></div>

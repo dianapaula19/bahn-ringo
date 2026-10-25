@@ -1,7 +1,12 @@
 /* Time Ringo saved (app/components/savings.tsx). Palette and type from globals.css. */
 .savings-card { padding: 18px 20px; border-radius: var(--radius-lg); background: var(--birch); box-shadow: var(--shadow-card); }
 .savings-ringo { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--brown); }
-.savings-total { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin-top: 14px; }
+.savings-total { margin-top: 14px; font-size: 13.5px; }
+/* What Ringo did (ActivitySection): counts first, as plain numbers. */
+.did-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.did-grid > div { display: flex; flex-direction: column-reverse; gap: 2px; padding: 12px 14px; border-radius: var(--radius); background: var(--birch); box-shadow: 0 0 0 1px var(--hair); }
+.did-grid dd { font-family: var(--font-display); font-size: 24px; font-weight: 600; color: var(--ink); }
+.did-grid dt { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
 .savings-big { font-family: var(--font-display); font-weight: 600; font-size: 30px; letter-spacing: -0.02em; color: var(--ink); }
 .savings-sub { font-size: 13.5px; color: var(--muted); }
 .savings-parts { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--hair-soft); }

@@ -40,10 +40,14 @@ function counts(actionType: ActionType, proposals: Proposal[]) {
     edited: reviews.filter((p) => p.review!.decision === "EDITED").length,
     rejected: reviews.filter((p) => p.review!.decision === "REJECTED").length,
     streak: last5.length === 5 && last5.every(unchanged),
+    /** Unchanged approvals since the last edit or rejection: the progress toward promotion (5). */
+    cleanRun: reviews.length - 1 - reviews.findLastIndex((p) => !unchanged(p)),
   }
 }
 
-export async function ledger(now: string): Promise<TrustRow[]> {
+export type LedgerRow = TrustRow & { cleanRun: number }
+
+export async function ledger(now: string): Promise<LedgerRow[]> {
   const [rows, props] = await Promise.all([db.select().from(ringTrust), db.select().from(ringProposals)])
   const proposals = props.map(toProposal)
   return ACTION_TYPES.map((actionType) => {
@@ -54,7 +58,7 @@ export async function ledger(now: string): Promise<TrustRow[]> {
     return {
       actionType, mode, locked: def.locked, lockedReason: def.lockedReason,
       approvedUnchanged: c.approvedUnchanged, edited: c.edited, rejected: c.rejected,
-      promotable: !def.locked && mode === "ask" && c.approvedUnchanged >= 5 && c.streak,
+      promotable: !def.locked && mode === "ask" && c.approvedUnchanged >= 5 && c.streak, cleanRun: c.cleanRun,
       updatedAt: row?.updatedAt ? new Date(row.updatedAt).toISOString() : now,
     }
   })
