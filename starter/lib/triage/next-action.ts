@@ -14,7 +14,7 @@ const has = (t: Input, table: string) => t.sources.some((s) => s.table === table
 // The proposal is the chip, the problem is the row's text.
 const REVIEW: Record<string, string> = {
   "pickup.hold": "Review Ringo's hold", "endpoint.record_access": "Review Ringo's access note", "endpoint.record_contact": "Review Ringo's new contact",
-  "address.update": "Review Ringo's address change", "driver.instruct": "Review Ringo's driver message", "slot.change": "Review Ringo's new slot",
+  "address.update": "Review Ringo's address", "driver.instruct": "Review Ringo's driver message", "slot.change": "Review Ringo's new slot",
 }
 
 export function nextAction(t: Input): string | null {
