@@ -574,7 +574,7 @@ details.more > :not(summary) { margin-top: 8px; }
 .q-step[aria-pressed="true"] .num { color: inherit; opacity: 0.75; }
 @media (max-width: 480px) { .q-steps { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: calc(-1 * var(--gutter)); padding-right: var(--gutter); } .q-step { flex: none; } }
 /* Severity is the left edge: red for critical, orange for high, nothing otherwise. Safety rows get a faint tint. */
-.q-row { display: grid; grid-template-columns: minmax(0, 1fr) 176px 116px; grid-template-areas: "main next due"; align-items: center; gap: 16px; min-height: 56px; padding: 11px 16px 11px 14px; border-left: 3px solid transparent; border-radius: 10px; background: var(--birch); box-shadow: var(--shadow-card); color: var(--ink); text-decoration: none; }
+.q-row { display: grid; grid-template-columns: minmax(0, 1fr) 176px 140px; grid-template-areas: "main next due"; align-items: center; gap: 16px; min-height: 56px; padding: 11px 16px 11px 14px; border-left: 3px solid transparent; border-radius: 10px; background: var(--birch); box-shadow: var(--shadow-card); color: var(--ink); text-decoration: none; }
 .q-row:hover { box-shadow: var(--shadow-card-hover); }
 .q-row:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .q-row.is-safety { border-left-color: var(--red); background: var(--red-bg); }
@@ -583,8 +583,12 @@ details.more > :not(summary) { margin-top: 8px; }
 .q-why { font-size: 14.5px; font-weight: 600; line-height: 1.4; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .q-meta { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .q-meta .mono { font-size: 12px; }
-.q-next { grid-area: next; justify-self: start; padding: 4px 10px; border-radius: 999px; background: var(--hair-soft); font-size: 12.5px; font-weight: 500; line-height: 1.3; color: var(--ink); }
-.is-safety .q-next { background: var(--birch); }
+/* The chip is the row link's own label (opens the order at its decision card): link text, not a button. */
+.q-next { grid-area: next; justify-self: start; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--teal-ink); text-decoration: underline; text-decoration-color: var(--hair); text-underline-offset: 3px; }
+.q-row:hover .q-next { text-decoration-color: currentColor; }
+.q-sub { margin-top: 18px; font-weight: 500; }
+.q-sub + .q-list { margin-top: 8px; }
+.is-safety .q-next { color: var(--red-ink); }
 .q-due { grid-area: due; font-size: 12.5px; color: var(--muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .q-due.tone-danger { color: var(--red-ink); font-weight: 650; }
 .q-soon { display: block; font-size: 11px; font-weight: 600; color: var(--orange-ink); margin-top: 1px; }
@@ -635,6 +639,7 @@ details.more > :not(summary) { margin-top: 8px; }
 .fact-chip { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 2px 12px; align-items: baseline; padding: 10px 14px; font-size: 14px; line-height: 1.45; }
 .fact-chip .chip { grid-row: span 2; justify-self: start; }
 .fact-claim { color: var(--ink); }
+.basis-tag { display: block; width: fit-content; margin-bottom: 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--teal-ink); }
 .fact-src { font-size: 12.5px; color: var(--muted); }
 .role-tag { display: inline-block; margin-right: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .role-tag.r-ringo { color: var(--teal-ink); }
@@ -1001,6 +1006,12 @@ details.more > :not(summary) { margin-top: 8px; }
 .will-list > li > .btn { justify-self: stretch; justify-content: center; }
 .will { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
 .will b { font-weight: 600; color: var(--ink); }
+details.will > summary { cursor: pointer; list-style: none; width: fit-content; }
+details.will > summary::-webkit-details-marker { display: none; }
+details.will > summary::after { content: " · more"; color: var(--subtle); }
+details.will[open] > summary::after { content: " · less"; }
+details.will.strong > summary { color: var(--ink); font-weight: 500; }
+details.will > small { display: block; margin-top: 4px; font-size: inherit; }
 .claim-box .will { flex-basis: 100%; }
 @media (max-width: 560px) { .will-list { grid-template-columns: minmax(0, 1fr); gap: 4px; } .will-list > li > .btn { justify-self: start; margin-top: 6px; } }
 

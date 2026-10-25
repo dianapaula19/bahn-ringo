@@ -45,6 +45,12 @@ export function thenLine(step: string, backAt: string, names: Names = {}): strin
   return `Then: you ${step} · owner: ${OWNER} · back in your queue at ${fmtClock(backAt)} or when ${whoReplies(step, names)}`
 }
 
+/** The one-line version under a button: "you release driver dispatch, back 12:39". The full thenLine sits behind it. */
+export function shortThen(step: string, backAt: string): string {
+  const words = step.split(/[,(;]| · /)[0].trim().split(/\s+/)
+  return `you ${words.slice(0, 6).join(" ")}${words.length > 6 ? "…" : ""}, back ${fmtClock(backAt)}`
+}
+
 /** For a step that keeps the order in the queue (it never leaves): "… · it stays in Now until the recovery is booked". */
 export function stayLine(step: string, until: string): string {
   return `Then: you ${step} · owner: ${OWNER} · it stays in Now ${until}`

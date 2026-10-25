@@ -11,7 +11,7 @@ import type { OrderLoad } from "@/lib/present/load"
 import { ringDriverMessages, ringFacts, ringJobs, ringMeta } from "@/lib/ring-schema"
 import { orderFacts } from "@/lib/triage/facts"
 import { fmtClock } from "@/lib/present/time"
-import { pickupSiteId, triage } from "@/lib/triage/triage"
+import { pickupSiteId, triage, type RingMode } from "@/lib/triage/triage"
 import { newId, simNow } from "./clock"
 import { type AiTraceContext } from "./llm"
 import { checkFact, resolveSources, type FactInput } from "./facts"
@@ -21,7 +21,7 @@ import { driverReply } from "./sim/driver"
 import { observeCall, noteFromCall, readPlaybook } from "./playbook/playbook"
 import { callLang, callRung, checkBoth, findQuote, LANG_NAME, ladderCheck, RUNG_LABEL, RUNGS, SAID_TOPICS, type PlaybookEntry, type PlaybookTopic, type Rung, type Turn } from "./sim/calls"
 import { callStep, isOpen, loadCall, MAX_INPUTS, startCall, translate } from "./sim/phone"
-import { scenarioFor, walk } from "./sim/scenarios"
+import { ROADSIDE_DRIVERS, scenarioFor, walk } from "./sim/scenarios"
 import { ringFor, toDriverMessage, type RingOrderState } from "./store"
 
 export const LIMITS = { toolCalls: 24, callInputs: MAX_INPUTS, proposeAttempts: 3 }
@@ -30,6 +30,8 @@ export type RunCtx = {
   runId: string
   orderId: string
   loaded: OrderLoad
+  /** "roadside": a safety stop on the road; only ROADSIDE_TOOLS run, driver-only (lib/triage/triage.ts ringEligibility). */
+  mode: RingMode
   emit: (e: RunEvent) => Promise<void>
   reads: { order: string | null; messages: string | null; docs: string | null }
   /** Site playbooks read in this run (siteId → notes). Dialling a site needs its playbook read first. */
@@ -75,8 +77,8 @@ export const TOOLS: Anthropic.Tool[] = ([
     S({ orderId: str, siteId: str, purpose: str, rung: { type: "string", enum: RUNGS }, why: str, reconciled: S({ callId: str, finding: str }, ["callId", "finding"]) }, ["orderId", "siteId", "purpose", "rung"])],
   ["call_input", "Act on the live call: exactly one of press (menu digits; several at once, e.g. \"32\", when the playbook knows the path), say (speak to a person or voicemail, in the line's language), wait (stay on hold or let a menu repeat), hangup. A press that reaches a person or mailbox on a different rung than this call's is refused.",
     S({ callId: str, press: str, say: str, wait: { type: "boolean" }, hangup: { type: "boolean" } }, ["callId"])],
-  ["send_driver_message", "Message the order's assigned driver (simulated). A question is sent and answered. An instruction (anything that changes what the driver does) is not sent: it becomes a driver.instruct proposal for a person.",
-    S({ orderId: str, body: str, intent: { type: "string", enum: ["question", "instruction"] } }, ["orderId", "body", "intent"])],
+  ["send_driver_message", "Message the order's assigned driver (simulated). A question is sent and answered. An instruction (anything that changes what the driver does) is not sent: it becomes a driver.instruct proposal for a person. A holding reply (roadside safety orders only) tells the driver a person is arranging recovery; it is sent and needs no answer.",
+    S({ orderId: str, body: str, intent: { type: "string", enum: ["question", "instruction", "holding"] } }, ["orderId", "body", "intent"])],
   ["propose_action", "Propose a change for a person to review. The Reviewer gate checks it first and the trust ledger decides whether it needs approval. Payload is a list of key/value entries. Use these keys: endpoint.record_access → access_instruction (the full new instruction, one sentence); endpoint.record_contact → contact_name, contact_role, contact_handle; address.update → address_line1, city; driver.instruct → message; pickup.hold → reason.",
     S({ command: { type: "string", description: "Dotted, e.g. endpoint.record_access" }, actionType: { type: "string", enum: ACTIONS }, targetType: str, targetId: str, alertId: str,
       payload: { type: "array", items: S({ key: str, value: { anyOf: [{ type: "string" }, { type: "boolean" }, { type: "array", items: { type: "string" } }] } }, ["key", "value"]) },
@@ -336,14 +338,40 @@ async function notePlaybook(ctx: RunCtx, input: { callId: string; notes: { topic
 
 // ------------------------------------------------------------------ driver
 
-async function sendDriverMessage(ctx: RunCtx, input: { body: string; intent: "question" | "instruction" }): Promise<ToolOutcome> {
+/** Roadside mode: what Ringo may run on a safety stop. Everything else is refused in runTool. */
+export const ROADSIDE_TOOLS = new Set<ToolName>(["read_order", "read_messages", "read_docs", "record_fact", "send_driver_message", "stop_with_decision"])
+const ROADSIDE_MESSAGES = 3
+// On a safety stop nothing Ringo writes may sound like moving or starting the car, or like a recovery is arranged.
+const ROADSIDE_BAN = /\b(start\w*|driv(e|ing)|move (it|the car)|tow(ing)? (is|will)|roadside (is|will)|on (its|their) way|will (arrive|be there)|coming at)\b/i
+
+export function roadsideCheck(body: string, intent: string): string | null {
+  if (intent === "instruction") return "On a safety stop Ringo sends no instructions. Ask a question, or send the holding reply."
+  const m = ROADSIDE_BAN.exec(body)
+  return m ? `On a safety stop Ringo never mentions moving or starting the car, or a recovery as arranged ("${m[0]}").` : null
+}
+
+async function sendDriverMessage(ctx: RunCtx, input: { body: string; intent: "question" | "instruction" | "holding" }): Promise<ToolOutcome> {
   const bundle = b(ctx)
   const asg = rows(bundle, "work_assignments").find((a) => a.details.status !== "CANCELLED")
   const driverId = typeof asg?.details.driver_id === "string" ? asg.details.driver_id : null
   if (!driverId || !asg) return { ok: false, summary: "No assigned driver on this order.", content: { error: "No assigned driver." } }
   const bad = checkSpeech(input.body)
   if (bad) return { ok: false, summary: `Message not sent: ${bad}`, content: { error: bad } }
+  if (input.intent === "holding" && ctx.mode !== "roadside") return { ok: false, summary: "Message not sent: a holding reply is for roadside safety orders only.", content: { error: "Use intent question or instruction." } }
+  if (ctx.mode === "roadside") {
+    const why = roadsideCheck(input.body, input.intent)
+    if (why) return { ok: false, summary: `Message not sent: ${why}`, content: { error: why } }
+    const sent = (await ringFor(ctx.orderId)).driverMessages.filter((d) => d.runId === ctx.runId && d.direction === "out").length
+    if (sent >= ROADSIDE_MESSAGES) return { ok: false, summary: "Message not sent: three messages is the limit on a safety stop.", content: { error: "Limit reached. Record what you learned and stop with needs_person." } }
+  }
   const name = bundle.dir.driverName(driverId) ?? driverId
+  if (input.intent === "holding") {
+    const msg = { id: newId("dm"), runId: ctx.runId, orderId: ctx.orderId, driverId, direction: "out", intent: "holding", body: input.body, proposalId: null, at: await simNow() }
+    await db.insert(ringDriverMessages).values(msg)
+    await ctx.emit({ type: "driver_message", message: toDriverMessage(msg) })
+    ctx.did.push(`Sent ${name} a holding reply: a person is arranging recovery (simulated chat)`)
+    return { ok: true, content: { sentId: msg.id }, summary: `Holding reply sent to ${name}` }
+  }
   if (input.intent === "instruction") {
     const r = await doPropose(ctx, {
       command: "driver.instruct", actionType: "driver.instruct", targetType: "work_assignment", targetId: asg.id,
@@ -358,7 +386,7 @@ async function sendDriverMessage(ctx: RunCtx, input: { body: string; intent: "qu
   await db.insert(ringDriverMessages).values(out)
   await ctx.emit({ type: "driver_message", message: toDriverMessage(out) })
   const recent = ctx.loaded.messages.filter((m) => m.authorType === "driver").slice(-3).map((m) => m.body)
-  const text = await driverReply({ driverName: name, question: input.body, scenario: scenario(ctx)?.sc ?? null, recent, ai: ctx.ai })
+  const text = await driverReply({ driverName: name, question: input.body, driver: scenario(ctx)?.sc.driver ?? ROADSIDE_DRIVERS[ctx.orderId] ?? null, recent, ai: ctx.ai })
   const back = { id: newId("dm"), runId: ctx.runId, orderId: ctx.orderId, driverId, direction: "in", intent: "reply", body: text, proposalId: null, at: await simNow() }
   await db.insert(ringDriverMessages).values(back)
   await ctx.emit({ type: "driver_message", message: toDriverMessage(back) })
@@ -421,6 +449,7 @@ async function stopWithDecision(ctx: RunCtx, input: StopDecision): Promise<ToolO
   if (bad.length) return fail(`These are not fact ids on this order: ${bad.join(", ")}`)
   const pending = ring.proposals.filter((p) => p.status === "PENDING_REVIEW")
   if (input.outcome === "proposal_ready" && !pending.length) return fail("proposal_ready needs at least one pending proposal.")
+  if (ctx.mode === "roadside" && input.outcome !== "needs_person") return fail("On a safety stop roadside or tow is a person's decision: stop with outcome needs_person.")
   // ponytail: "did" is built from what the tools actually did, never from the model's own account of it.
   const noted = (await db.select({ id: ringFacts.id }).from(ringFacts).where(eq(ringFacts.runId, ctx.runId))).length
   ctx.stopped = { ...input, did: [...ctx.did, ...(noted ? [`Wrote down ${noted} fact${noted === 1 ? "" : "s"}, each with its source`] : [])] }
@@ -433,6 +462,8 @@ export async function runTool(ctx: RunCtx, name: RingTool, input: Record<string,
   if (missing.length) return { ok: false, summary: `Missing ${missing.join(", ")}.`, content: { error: `Missing required fields: ${missing.join(", ")}` } }
   for (const k of ["found", "did", "options", "evidenceRefs", "payload", "notes"]) if (k in input && !Array.isArray(input[k])) return { ok: false, summary: `${k} must be a list.`, content: { error: `${k} must be an array.` } }
   if (typeof input.orderId === "string" && input.orderId !== ctx.orderId) return { ok: false, summary: "Wrong order id.", content: { error: `This run is for ${ctx.orderId}.` } }
+  if (ctx.mode === "roadside" && !ROADSIDE_TOOLS.has(name)) return { ok: false, summary: `Refused on a safety stop: ${name}`,
+    content: { error: "On a safety stop Ringo only reads, asks the assigned driver, records what they say and stops for a person. No calls, no proposals, no callbacks." } }
   switch (name) {
     case "read_order": return readOrder(ctx)
     case "read_messages": return readMessages(ctx, input as { sinceIso?: string })
@@ -442,7 +473,7 @@ export async function runTool(ctx: RunCtx, name: RingTool, input: Record<string,
     case "note_playbook": return notePlaybook(ctx, input as unknown as Parameters<typeof notePlaybook>[1])
     case "place_call": return placeCall(ctx, input as unknown as Parameters<typeof placeCall>[1])
     case "call_input": return callInput(ctx, input as { callId: string })
-    case "send_driver_message": return sendDriverMessage(ctx, input as { body: string; intent: "question" })
+    case "send_driver_message": return sendDriverMessage(ctx, input as { body: string; intent: "question" | "instruction" | "holding" })
     case "propose_action": return doPropose(ctx, input as unknown as ProposeToolInput)
     case "schedule_callback": return scheduleCallback(ctx, input as { dueAt: string; reason: string })
     case "stop_with_decision": return stopWithDecision(ctx, input as unknown as StopDecision)

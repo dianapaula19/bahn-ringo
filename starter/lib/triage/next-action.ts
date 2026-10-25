@@ -3,9 +3,17 @@
 // null when nothing concrete can be said: the row shows no chip rather than "A person must act".
 import type { StoryEntry, Triage } from "@/lib/contract"
 
-type Input = Pick<Triage, "reason" | "why" | "oneDecision" | "sources">
+/** A queue row also carries the action type of Ringo's open proposal (lib/agent/story.ts), so the chip can name it. */
+export type WithProposal = { proposalAction?: string | null }
+type Input = Pick<Triage, "reason" | "why" | "oneDecision" | "sources"> & WithProposal
 
 const has = (t: Input, table: string) => t.sources.some((s) => s.table === table)
+
+// The proposal is the chip, the problem is the row's text.
+const REVIEW: Record<string, string> = {
+  "pickup.hold": "Review Ringo's hold", "endpoint.record_access": "Review the access note", "endpoint.record_contact": "Review the new contact",
+  "address.update": "Review the address", "driver.instruct": "Review the driver message", "slot.change": "Review the new slot",
+}
 
 export function nextAction(t: Input): string | null {
   switch (t.reason) {
@@ -15,9 +23,9 @@ export function nextAction(t: Input): string | null {
       if (has(t, "ring_proposals")) return "Run Ringo again"
       return /\bbook/i.test(t.why) ? "Check failed booking" : "Check what failed"
     case "AUTHORITY_BLOCKED": return "Confirm with customer"
-    case "DECISION_WAITING": return has(t, "ring_proposals") ? "Review proposal" : "Answer Ringo"
+    case "DECISION_WAITING": return has(t, "ring_proposals") ? REVIEW[t.proposalAction ?? ""] ?? "Review Ringo's proposal" : "Answer Ringo"
     case "DRIVER_WAITING": return "Answer driver"
-    case "RECORDED_PROPOSAL": return "Review proposal"
+    case "RECORDED_PROPOSAL": return "Do it by hand"
     case "CUSTOMER_CONTACT": return "Confirm with customer"
     case "DUE_SOON": return dueSoonStep(t.why)
     case "RING_CAN_CALL": return "Run Ringo"

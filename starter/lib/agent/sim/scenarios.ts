@@ -64,6 +64,20 @@ type Override = (orderId: string, site: SiteLike) => SimScenario | null
 let override: Override | null = null
 export const setScenarioOverride = (fn: Override | null) => { override = fn }
 
+/** Drivers on orders with no pickup site to call (a car already on the road): the driver sim's hidden script.
+ *  CD-420322: stopped for a red warning between Munich and Hamburg. Every place and name is fictional. */
+export const ROADSIDE_DRIVERS: Record<string, SimScenario["driver"]> = {
+  "ord-00322": {
+    driverId: "drv-319", persona: "Kasper Kovelund, freelance car delivery driver, calm, a little tired, short in chat, writes in English.",
+    knows: [
+      "You stopped the Bentley Continental GT after a red warning light came on and the car felt different when accelerating. The engine is off.",
+      "You are safe, standing by the car at the Lindenfeld Ost service area car park, northbound towards Hamburg, row C near the fuel station. Nobody is in danger.",
+      "You took a photo of the dashboard with the warning light and can send it in the chat right away; you have not diagnosed anything.",
+      "You will not drive or start the car until someone tells you who is collecting it.",
+    ],
+  },
+}
+
 export function scenarioFor(orderId: string, site: SiteLike): SimScenario {
   return override?.(orderId, site) ?? baseScenario(orderId, site)
 }

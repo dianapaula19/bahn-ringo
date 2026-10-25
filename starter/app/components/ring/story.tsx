@@ -9,8 +9,8 @@ import type { LearnedRule, ReviewWithSuggestion } from "@/lib/agent/learn/types"
 import { DESK, claimOrder, recordRecovery, releaseClaim, reviewProposal } from "../../_lib/agent-api"
 import { RECHECK_MINUTES, type Claim, type WithClaim } from "@/lib/triage/claim"
 import { unanswered } from "@/lib/triage/next-action"
-import { currentFacts } from "@/lib/triage/relevance"
-import { BY_HAND, FOLLOW_UP_MINUTES, personStep, stayLine, thenLine, type Names } from "@/lib/triage/follow-up"
+import { basisFacts, leadFacts } from "@/lib/triage/relevance"
+import { BY_HAND, FOLLOW_UP_MINUTES, personStep, shortThen, stayLine, thenLine, type Names } from "@/lib/triage/follow-up"
 import { Icon } from "../icons"
 import { ACTION, FactChip, MODE, Simulated, When, entryRole, factLizard } from "./bits"
 import { RingoFace, RoleTag } from "../ringo"
@@ -95,11 +95,13 @@ function nextStepFrom(story: OrderStory, ctx: HeroContext | null, ringPending: P
     const s = sentences(decision.whatNext.replace(/^(after|once) (approval|approved|you approve)[^,]*,\s*/i, "").replace(/^\w/, (c) => c.toUpperCase()))
     return { text: s[0], context: s.length > 1 ? s.slice(1).join(" ") : undefined, source: byRingo }
   }
-  const one = (settled ? null : decision?.oneDecision) ?? triage.oneDecision
+  // On a safety stop the card is built from the records (and what Ringo heard from the driver, folded in by triage);
+  // his roadside run never takes over the decision.
+  const one = triage.reason === "SAFETY" ? triage.oneDecision : (settled ? null : decision?.oneDecision) ?? triage.oneDecision
   if (one) {
     const s = sentences(one)
     const context = s.length > 1 ? s.slice(0, -1).join(" ") : decision?.whatNext ? <>Meanwhile: {decision.whatNext}</> : undefined
-    return { text: s[s.length - 1], context, source: byRingo }
+    return { text: s[s.length - 1], context, source: triage.reason === "SAFETY" ? undefined : byRingo }
   }
   if (decision?.whatNext && triage.bucket === "needs_you") return { text: decision.whatNext, source: byRingo }
   const task = ctx?.tasks.find((t) => triage.sources.some((s) => s.id === t.id) && t.nextAction) ?? (triage.bucket === "needs_you" ? ctx?.tasks.find((t) => t.nextAction) : undefined)
@@ -153,7 +155,7 @@ export function DecisionPanel({ story, ctx, onChanged, onRun, running = false, o
   // Once a person has reviewed Ringo's proposal, his "…update ready" headline is history: say what was decided.
   const lastReviewed = settled ? story.proposals.filter((p) => p.origin === "ring" && p.review).sort((x, y) => x.review!.reviewedAt.localeCompare(y.review!.reviewedAt)).pop() : undefined
   const problem = lastReviewed && !ringPending.length ? `${REVIEWED[lastReviewed.review!.decision]}: ${lastReviewed.summary.replace(/\.$/, "")}.`
-    : decision && (decision.outcome === "needs_person" || ringPending.length || settled) ? decision.headline : recorded?.rationale || triage.why
+    : decision && triage.reason !== "SAFETY" && (decision.outcome === "needs_person" || ringPending.length || settled) ? decision.headline : recorded?.rationale || triage.why
   const names: Names = { customer: ctx?.customer?.name ?? null, driver: ctx?.driver?.name ?? null }
   const waiting = unanswered(story.timeline)
   const quoted = waiting && !triage.sources.some((s) => s.id === waiting.ref.id) ? waiting : null
@@ -224,9 +226,9 @@ function RecoveryChoice({ orderId, reference, names, onDone }: { orderId: string
   return <div className="recovery">
     {!choice && <ul className="will-list">
       <li><button type="button" className="btn primary" onClick={() => setChoice("roadside")}>Customer chose roadside</button>
-        <Will>Records &ldquo;customer chose roadside&rdquo; on {reference}, with who told you · {stayLine(`book roadside assistance (it needs approval as a cost) and tell ${names.driver ?? "the driver"} who is coming`, "until it is booked")}</Will></li>
+        <Will strong line="Records the choice → you book roadside, it stays in Now">Records &ldquo;customer chose roadside&rdquo; on {reference}, with who told you · {stayLine(`book roadside assistance (it needs approval as a cost) and tell ${names.driver ?? "the driver"} who is coming`, "until it is booked")}</Will></li>
       <li><button type="button" className="btn primary" onClick={() => setChoice("tow")}>Customer chose tow</button>
-        <Will>Records &ldquo;customer chose tow&rdquo; on {reference}, with who told you · {stayLine(`book the tow (it needs approval as a cost) and tell ${names.driver ?? "the driver"} who is coming`, "until it is booked")}</Will></li>
+        <Will strong line="Records the choice → you book the tow, it stays in Now">Records &ldquo;customer chose tow&rdquo; on {reference}, with who told you · {stayLine(`book the tow (it needs approval as a cost) and tell ${names.driver ?? "the driver"} who is coming`, "until it is booked")}</Will></li>
     </ul>}
     {choice && <div className="recovery-form">
       <label className="field"><span>Customer chose {choice === "tow" ? "a tow" : "roadside assistance"}. Who told you, and when? (required)</span>
@@ -265,7 +267,7 @@ function ClaimBox({ orderId, reference, claim, now, keys, names, step, followUp,
   }
   if (claim || followUp) return <div className="claim-box">
     {followUp && <><button type="button" className="btn small" disabled={busy} onClick={giveBack}><Icon name="check" size={14} />Done: close my follow-up</button>
-      <Will>Closes your follow-up on {reference}; it leaves Needs you unless its records still need a person · nothing is sent to anyone</Will></>}
+      <Will line="Closes your follow-up; sends nothing">Closes your follow-up on {reference}; it leaves Needs you unless its records still need a person · nothing is sent to anyone</Will></>}
     {claim && !followUp && <button type="button" className="btn small" disabled={busy} onClick={giveBack}>Hand it back to the queue</button>}
     {error && <p className="result tone-danger" role="alert">{error}</p>}</div>
   return <form className="claim-box" onSubmit={(e) => { e.preventDefault(); take() }}>
@@ -273,7 +275,7 @@ function ClaimBox({ orderId, reference, claim, now, keys, names, step, followUp,
     <label className="claim-back"><span>Back in</span>
       <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>{RECHECK_MINUTES.map((m) => <option key={m} value={m}>{m < 60 ? `${m} min` : `${m / 60} h`}</option>)}</select></label>
     <button type="submit" className="btn" data-claim disabled={busy}><Icon name="check" size={14} />{busy ? "Taking it…" : "I'll handle it"}{keys && <> <kbd>A</kbd></>}</button>
-    <Will>Puts {reference} in Taken under your desk; nothing is sent to anyone · {thenLine(note.trim() || step, new Date(Date.parse(now) + minutes * 60_000).toISOString(), names)}</Will>
+    <Will line={`Takes it, sends nothing → ${shortThen(note.trim() || step, new Date(Date.parse(now) + minutes * 60_000).toISOString())}`}>Puts {reference} in Taken under your desk; nothing is sent to anyone · {thenLine(note.trim() || step, new Date(Date.parse(now) + minutes * 60_000).toISOString(), names)}</Will>
     {error && <p className="result tone-danger" role="alert">{error}</p>}
   </form>
 }
@@ -290,7 +292,8 @@ export function ProposalCard({ proposal: p, story, names = {}, onChanged, onRevi
   // The same step and time the server writes as your follow-up when you press (lib/agent/proposals.ts handOver).
   const whatNext = (story.runs.find((r) => r.id === p.runId)?.decision ?? story.decision)?.whatNext
   const backAt = new Date(Date.parse(story.now) + FOLLOW_UP_MINUTES * 60_000).toISOString()
-  const afterAccept = thenLine(personStep(p.onApprove, names) ?? personStep(whatNext, names) ?? BY_HAND, backAt, names)
+  const acceptStep = personStep(p.onApprove, names) ?? personStep(whatNext, names) ?? BY_HAND
+  const afterAccept = thenLine(acceptStep, backAt, names)
 
   async function send(decision: ReviewDecision) {
     if (decision !== "APPROVED" && !note.trim()) return
@@ -338,11 +341,11 @@ export function ProposalCard({ proposal: p, story, names = {}, onChanged, onRevi
       : <div className="actions">
         {mode === "idle" && <ul className="will-list">
           <li><button type="button" className="btn primary" data-key="a" disabled={busy || blocks.length > 0} onClick={() => send("APPROVED")}>Accept</button>
-            <Will>{blocks.length ? "Blocked by the reviewer check: edit or reject instead" : <>Rechecks {story.reference} and records it if nothing changed since Ringo read it{p.onApprove && <> · {lower(p.onApprove).replace(/\.$/, "")}</>} · {afterAccept}</>}</Will></li>
+            <Will strong line={blocks.length ? "Blocked by the reviewer check: edit or reject instead" : `${DOES[p.actionType ?? ""] ?? "Records it"} → ${shortThen(acceptStep, backAt)}`}>{blocks.length ? "Blocked by the reviewer check: edit or reject instead" : <>Rechecks {story.reference} and records it if nothing changed since Ringo read it{p.onApprove && <> · {lower(p.onApprove).replace(/\.$/, "")}</>} · {afterAccept}</>}</Will></li>
           <li><button type="button" className="btn" data-key="e" disabled={busy} onClick={() => setMode("edit")}>Edit</button>
-            <Will>Lets you change the fields, then records your version with a note on what you changed · {afterAccept}</Will></li>
+            <Will line={`Your version, with a note → ${shortThen(acceptStep, backAt)}`}>Lets you change the fields, then records your version with a note on what you changed · {afterAccept}</Will></li>
           <li><button type="button" className="btn" data-key="r" disabled={busy} onClick={() => setMode("reject")}>Reject</button>
-            <Will>Records your reason; nothing on the order changes{p.onReject && <> · {lower(p.onReject).replace(/\.$/, "")}</>} · {thenLine(BY_HAND, backAt, names)}</Will></li>
+            <Will line={`Nothing changes → ${shortThen("work it out by hand", backAt)}`}>Records your reason; nothing on the order changes{p.onReject && <> · {lower(p.onReject).replace(/\.$/, "")}</>} · {thenLine(BY_HAND, backAt, names)}</Will></li>
         </ul>}
         {mode === "edit" && <><button type="button" className="btn primary" data-submit disabled={busy || !note.trim()} onClick={() => send("EDITED")}>Accept with my changes</button><button type="button" className="btn" data-cancel onClick={() => { setMode("idle"); setDraft(p.proposedPayload); setNote("") }}>Cancel</button></>}
         {mode === "reject" && <><button type="button" className="btn danger" data-submit disabled={busy || !note.trim()} onClick={() => send("REJECTED")}>Reject</button><button type="button" className="btn" data-cancel onClick={() => { setMode("idle"); setNote("") }}>Cancel</button></>}
@@ -351,8 +354,16 @@ export function ProposalCard({ proposal: p, story, names = {}, onChanged, onRevi
   </article>
 }
 
-/** The one line under a decision button: what pressing it writes, and what comes after. */
-function Will({ children }: { children: ReactNode }) { return <small className="will"><b>This will:</b> {children}</small> }
+/** What Accept writes, in three words, for the one-line "This will" under the button. */
+const DOES: Record<string, string> = {
+  "endpoint.record_access": "Updates the access note", "endpoint.record_contact": "Records the contact", "pickup.hold": "Holds the pickup",
+  "driver.instruct": "Sends the driver message", "address.update": "Changes the address", "slot.change": "Changes the slot",
+}
+
+/** Under a decision button: one line (what pressing it writes → what comes next); the full account opens on click. */
+function Will({ line, strong = false, children }: { line: string; strong?: boolean; children: ReactNode }) {
+  return <details className={`will${strong ? " strong" : ""}`}><summary>{line}</summary><small><b>This will:</b> {children}</small></details>
+}
 const lower = (t: string) => t.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase())
 
 // ---------------------------------------------------------------- facts
@@ -367,7 +378,10 @@ export function FactsPanel({ story }: { story: OrderStory }) {
   const overtaken = new Set(story.triage.overtaken.map((o) => o.ref.id))
   const kinds = new Map(story.timeline.map((e) => [e.ref.id, e.actorKind]))
   const linked = new Set(kinds.keys())
-  const current = currentFacts(facts, overtaken) // already in decision order (rankFacts), the same list Decide leads with
+  // The open proposal's basis first, then the rest in decision order (rankFacts): the same list Decide leads with.
+  const basis = basisFacts(facts, story.proposals)
+  const basisIds = new Set(basis.map((f) => f.id))
+  const current = leadFacts(facts, basis, overtaken)
   const old = facts.filter((f) => !current.includes(f))
   const [all, setAll] = useState(false)
   const [oldOpen, setOldOpen] = useState(false)
@@ -384,7 +398,7 @@ export function FactsPanel({ story }: { story: OrderStory }) {
     return () => { window.removeEventListener(SHOW_FACTS, on); clearTimeout(clear) }
   }, [old])
   const shown = all ? current : current.slice(0, FIRST)
-  const row = (f: Fact, isOld = false) => <li key={f.id} id={`fact-${f.id}`} className={lit.has(f.id) ? "is-lit" : undefined}><FactChip fact={f} now={now} linked={linked} who={factLizard(f, kinds)} old={isOld} /></li>
+  const row = (f: Fact, isOld = false) => <li key={f.id} id={`fact-${f.id}`} className={lit.has(f.id) ? "is-lit" : undefined}><FactChip fact={f} now={now} linked={linked} who={factLizard(f, kinds)} old={isOld} basis={!isOld && basisIds.has(f.id)} /></li>
   return <section className="sec" aria-labelledby="facts-h">
     <div className="sec-head"><h2 id="facts-h">What we know</h2><span className="note">How sure we are, who said it, the record it comes from, and when. Times are Helsinki time.</span></div>
     {facts.length === 0 && <p className="empty">No facts recorded on this order yet.</p>}

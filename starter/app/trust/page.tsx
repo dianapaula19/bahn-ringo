@@ -11,7 +11,7 @@ import { Icon } from "../components/icons"
 import { CastLineup, RingoFace } from "../components/ringo"
 import { ACTION, MODE, When } from "../components/ring/bits"
 import { LearnedRules, Suggestions } from "./learned"
-import { SavingsSection } from "../components/savings"
+import { ActivitySection, SavingsSection } from "../components/savings"
 
 const GROUPS: { mode: TrustMode; title: string; note: string }[] = [
   { mode: "auto", title: "Ringo does these on his own", note: "Asking and looking. Nothing on the order changes." },
@@ -58,6 +58,7 @@ export default function TrustPage() {
       <p className="intro">Ringo earns trust one action at a time. Bookings, dates, costs, addresses and customer messages always need a person.</p>
     </div></div>
     {learned && <Suggestions rules={learned.rules} now={learned.now} onChanged={() => refresh()} />}
+    <ActivitySection decisions={ledger ? { accepted: sum(ledger.rows, "approvedUnchanged"), edited: sum(ledger.rows, "edited"), rejected: sum(ledger.rows, "rejected") } : null} />
     {/* The crew sits above the rules: at the bottom it was only visible until the rules loaded and pushed it off screen. */}
     <section className="sec crew" id="crew" aria-labelledby="crew-h">
       <div className="sec-head"><h2 id="crew-h">Meet the crew</h2><span className="note">Who said it, at a glance. All fictional.</span></div>
@@ -80,7 +81,7 @@ export default function TrustPage() {
               : r.locked && <span className="chip tone-neutral" title={r.lockedReason ?? "Locked"}><Icon name="key" size={12} />Always asks</span>}</p>
             {(() => {
               const sub = r.locked ? (r.lockedReason ?? "Always needs a person.")
-                : g.mode === "ask" ? (r.promotable ? "Clean record: ready to hand over to Ringo." : null)
+                : g.mode === "ask" ? (r.promotable ? "Clean record: ready to hand over to Ringo." : <>{Math.min(PROMOTE_AT, clean(r))} of {PROMOTE_AT} clean approvals in a row toward letting Ringo do it</>)
                 : r.updatedAt === ledger.now ? null : <>Set <When at={r.updatedAt} now={ledger.now} zone /></>
               return sub && <p className="trust-sub">{sub}</p>
             })()}
@@ -105,6 +106,11 @@ export default function TrustPage() {
     <footer className="sec note-text"><Link href="/evals" className="foot-link">How we test Ringo</Link>: ten scripted situations, scored on what Ringo actually did.</footer>
   </main></AppFrame>
 }
+
+const PROMOTE_AT = 5
+/** Unchanged approvals since the last edit or rejection (lib/agent/trust.ts sends it beside the contract row). */
+const clean = (r: TrustRow) => (r as TrustRow & { cleanRun?: number }).cleanRun ?? 0
+const sum = (rows: TrustRow[], k: "approvedUnchanged" | "edited" | "rejected") => rows.reduce((n, r) => n + r[k], 0)
 
 /** A circle with a slash: "never", not "locked". */
 const NeverIcon = () => <svg viewBox="0 0 16 16" width={12} height={12} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">

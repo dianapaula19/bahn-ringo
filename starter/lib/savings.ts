@@ -26,6 +26,8 @@ export type Savings = {
   reads: number
   driverMessages: number
   notes: number
+  /** Proposals Ringo wrote for a person (successful propose_action steps). */
+  proposals: number
   estimates: SavingsEstimates
   estimateSeconds: number
   totalSeconds: number
@@ -45,11 +47,12 @@ export function computeSavings(input: { now: string; runs: number; calls: Saving
   const reads = count((t) => READ_TOOLS.has(t))
   const driverMessages = count((t) => t === "send_driver_message")
   const notes = count((t) => t === "record_fact")
+  const proposals = count((t) => t === "propose_action")
   const e = input.estimates
   const estimateSeconds = (reads * e.readMin + driverMessages * e.driverMessageMin + notes * e.noteMin) * 60
   return {
     now: input.now, day: helsinkiDay(input.now), runs: input.runs, calls: ended.length,
-    lineSeconds: Math.round(lineSeconds), holdSeconds, reads, driverMessages, notes, estimates: e,
+    lineSeconds: Math.round(lineSeconds), holdSeconds, reads, driverMessages, notes, proposals, estimates: e,
     estimateSeconds, totalSeconds: Math.round(lineSeconds + holdSeconds + estimateSeconds),
   }
 }

@@ -47,7 +47,7 @@ async function main() {
   const { db } = await import("../lib/db")
   const S = await import("../lib/ring-schema")
   const { clearOrder } = await import("../lib/agent/jobs")
-  const { SNAPSHOT } = await import("../lib/agent/clock")
+  const { SNAPSHOT, CLOCK_SPEED, resetClock, simNow } = await import("../lib/agent/clock")
   const { orders } = await import("../lib/schema")
   const { observeCall, noteFromCall } = await import("../lib/agent/playbook/playbook")
   const { findQuote } = await import("../lib/agent/sim/calls")
@@ -125,9 +125,6 @@ async function main() {
     console.log(`${reference}: ${segs.length} recorded run${segs.length === 1 ? "" : "s"}, ${calls.size} simulated calls, ${facts.size} facts, ${props.size} proposals waiting, ${notes} site playbook notes`)
   }
 
-  // The sim clock: one minute after the last recorded step.
-  const epoch = Date.now() - (Date.parse(latest) - Date.parse(SNAPSHOT)) - 60_000
-  await db.insert(S.ringMeta).values({ key: "clock_epoch", value: epoch }).onConflictDoUpdate({ target: S.ringMeta.key, set: { value: epoch } })
 
   let evalRuns = 0
   for (const file of (await readdir(join(process.cwd(), "eval"))).filter((f) => /^suite-.*\.json$/.test(f)).sort()) {
@@ -137,7 +134,10 @@ async function main() {
   }
   console.log(`\nCreated: ${counts.runs} recorded runs (${counts.steps} steps, ${counts.calls} simulated calls, ${counts.facts} facts, ${counts.proposals} proposals waiting for a person), ${counts.notes} site playbook notes rebuilt from those runs, ${evalRuns} new scenario-suite runs on /evals.`)
   console.log("Not created: no review, no correction, no learned rule, no claim. Those are a person's to make.")
-  console.log(`Sim clock now ${new Date(Date.parse(latest) + 60_000).toISOString()}. Approve or reject the proposals yourself on /decide.`)
+  // Last, so seeding time never counts: the sim clock restarts one minute after the last recorded step and the runs
+  // read as "a few minutes ago". With RING_CLOCK_SPEED=0 the desk stays frozen at 12:09 Helsinki instead.
+  await resetClock(new Date(Date.parse(latest) + 60_000).toISOString())
+  console.log(`Sim clock now ${await simNow()}${CLOCK_SPEED === 0 ? " (frozen by RING_CLOCK_SPEED=0)" : ""}. Approve or reject the proposals yourself on /decide.`)
   await db.$client.end()
 }
 

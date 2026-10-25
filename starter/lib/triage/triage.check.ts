@@ -3,31 +3,41 @@
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { after, before, describe, test } from "node:test"
-import type { Fact } from "@/lib/contract"
-import { inArray, or } from "drizzle-orm"
+import type { Fact, Proposal, RunEvent } from "@/lib/contract"
+import { eq, inArray, or } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { RULES, type GateContext } from "@/lib/agent/caselaw"
 import { SNAPSHOT, simNow } from "@/lib/agent/clock"
 import { checkFact, type SourceInfo } from "@/lib/agent/facts"
 import { checkSpeech, runGate } from "@/lib/agent/gate"
+import { ROADSIDE_TOOLS, roadsideCheck } from "@/lib/agent/tools"
 import { propose, review, type ProposeInput } from "@/lib/agent/proposals"
 import { triageAll } from "@/lib/agent/story"
 import { emptyRing, type RingOrderState } from "@/lib/agent/store"
 import type { Bundle } from "@/lib/present/bundle"
 import { loadOrder } from "@/lib/present/load"
 import { fmtDateTime, fmtRange, fmtWindow } from "@/lib/present/time"
-import { ringEvents, ringProposals } from "@/lib/ring-schema"
+import { ringClaims, ringEvents, ringProposals } from "@/lib/ring-schema"
 import { byDeadline, dueSoon, inNow, nextAction, unanswered } from "./next-action"
 import { activeClaim, needsYouSplit, type Claim } from "./claim"
 import { readFileSync } from "node:fs"
 import { buildQueue, buildStory } from "@/lib/agent/story"
-import { currentFacts } from "./relevance"
+import { basisFacts, currentFacts, leadFacts } from "./relevance"
 import { personStep, thenLine } from "./follow-up"
 import { orderFacts, rankFacts } from "./facts"
 import { similarGroups } from "./similar"
 import { ringEligibility, triage } from "./triage"
 
 const NOW = SNAPSHOT
+
+/** A recorded Ringo run (lib/agent/fixtures, what demo:seed loads) as ring state: its facts, open proposals and stop. */
+function fromFixture(ref: string) {
+  const events = readFileSync(`lib/agent/fixtures/${ref}.ndjson`, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as RunEvent)
+  const facts = events.flatMap((e) => (e.type === "fact" ? [e.fact as Fact] : []))
+  const proposals = events.flatMap((e) => (e.type === "proposal" ? [e.proposal as Proposal] : []))
+  const found = events.flatMap((e) => (e.type === "stop" ? e.decision.found : []))
+  return { events, facts, proposals, found }
+}
 // Close the DB pool so the process exits with node:test's own exit code.
 after(() => db.$client.end())
 let bundles = new Map<string, Bundle>()
@@ -41,7 +51,28 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     assert.equal(r.bucket, "needs_you"); assert.equal(r.reason, "SAFETY"); assert.equal(r.severity, "critical")
     assert.equal(r.oneDecision, "Driver says they are safe and stopped (driver 11:22). Location unverified, no photo yet. Customer: keep it stopped (11:40). Decide with the customer: roadside or tow.")
     assert.deepEqual(r.overtaken.map((o) => [o.ref.id, o.overtakenBy.id]), [["alert-x105238e92e7f3ba6", "alert-x539dcfdd5a51d9ab"]])
-    assert.equal(ringEligibility(bundles.get("ord-00322")!).ok, false)
+    // A safety stop is driver-only roadside mode for Ringo, never the pickup job.
+    assert.deepEqual(ringEligibility(bundles.get("ord-00322")!), { ok: true, reason: null, mode: "roadside" })
+  })
+  test("322 roadside mode: the record-built card folds in what the driver told Ringo; the decision stays roadside or tow", () => {
+    const { facts } = fromFixture("CD-420322")
+    assert.ok(facts.some((f) => f.subject === "incident.location" && f.sourceKind === "ring_driver_message" && f.level === "claimed"), "the recorded run wrote the driver's location as a claim")
+    const r = t("ord-00322", { ...emptyRing(), facts })
+    assert.equal(r.reason, "SAFETY")
+    assert.match(r.oneDecision ?? "", /Lindenfeld Ost.*not verified/)
+    assert.match(r.oneDecision ?? "", /Decide with the customer: roadside or tow\.$/)
+    assert.equal(nextAction(r), "Decide: roadside or tow")
+  })
+  test("322 roadside mode guards: no instructions, no moving the car, no recovery promised, no mechanical advice", () => {
+    assert.ok(roadsideCheck("Please drive to the next garage.", "question"))
+    assert.ok(roadsideCheck("Stay with the car.", "instruction"))
+    assert.ok(roadsideCheck("The tow is on its way.", "holding"))
+    assert.ok(roadsideCheck("Can you start it once to check?", "question"))
+    assert.ok(checkSpeech("Try to restart the engine."))
+    assert.equal(roadsideCheck("A person is arranging recovery and will tell you who is coming. Please stay with the car somewhere safe.", "holding"), null)
+    assert.equal(roadsideCheck("Are you safe? Where exactly are you: service area, road, direction?", "question"), null)
+    const sent = fromFixture("CD-420322").events.filter((e) => e.type === "tool_call").map((e) => (e as { tool: string }).tool)
+    assert.ok(sent.every((tool) => ROADSIDE_TOOLS.has(tool as never)), `recorded roadside run used: ${sent.join(", ")}`)
   })
   test("458 seller hold is AUTHORITY_BLOCKED", () => {
     const r = t("ord-00458")
@@ -155,6 +186,31 @@ describe("triage on the demo orders (CONTRACT §8)", () => {
     const first4 = currentFacts(s.facts).slice(0, 4)
     assert.ok(first4.some((f) => f.sourceKind === "ring_call" && /VIN/.test(f.claim) && /not/.test(f.claim)), first4.map((f) => f.claim).join(" | "))
     assert.ok(!first4.some((f) => /contact$/.test(f.subject)))
+  })
+  // Round 6: on the live demo the clock had run 3 h past the snapshot, Ringo's call quotes had aged to "out of date",
+  // and an older reception claim (516) or a monitoring claim (593) led. The open proposal's basis leads regardless.
+  for (const [ref, id, lead] of [["CD-420516", "ord-00516", /stock control key cabinet/], ["CD-420593", "ord-00593", /not on the Helsinki stock list/]] as const) {
+    test(`What we know on ${ref} leads with the facts behind Ringo's open proposal, even 4 h later`, () => {
+      const { facts, proposals } = fromFixture(ref)
+      const b = bundles.get(id)!
+      const ring = { ...emptyRing(), facts, proposals }
+      for (const at of [NOW, new Date(Date.parse(NOW) + 4 * 3600_000).toISOString()]) {
+        const ranked = rankFacts(orderFacts(b, ring, at), triage(b, ring, at), b.order.status, { cited: proposals.flatMap((p) => p.evidenceRefs.map((r) => r.id)) })
+        const basis = basisFacts(ranked, proposals)
+        const lead1 = leadFacts(ranked, basis)[0]
+        assert.ok(basis.includes(lead1), `${at}: first fact is not a basis fact: ${lead1?.claim}`)
+        assert.match(lead1.claim, lead, at)
+        assert.equal(lead1.sourceKind, "ring_call")
+      }
+    })
+  }
+  test("a row states the problem, the chip names Ringo's proposal", () => {
+    const { facts, proposals } = fromFixture("CD-420516")
+    const r = t("ord-00516", { ...emptyRing(), facts, proposals })
+    assert.equal(r.reason, "DECISION_WAITING")
+    assert.doesNotMatch(r.why, /^Ringo has|^Recorded proposal/)
+    assert.match(r.why, /key holder/)
+    assert.equal(nextAction({ ...r, proposalAction: proposals[0].actionType }), "Review the access note")
   })
   test("Now on the demo data: 322, 458, 593 are Now; 413 (due Monday) and 055 (medium) are not", () => {
     for (const id of ["ord-00322", "ord-00458", "ord-00593"]) assert.equal(inNow(t(id), NOW), true, id)
@@ -314,10 +370,15 @@ describe("evidence ladder", () => {
 describe("recheck before write", () => {
   const ORDER = "ord-00004"
   const made: string[] = []
+  let claimsBefore: string[] = []
+  before(async () => { claimsBefore = (await db.select({ id: ringClaims.id }).from(ringClaims).where(eq(ringClaims.orderId, ORDER))).map((c) => c.id) })
   after(async () => {
     if (!made.length) return
     await db.delete(ringEvents).where(or(inArray(ringEvents.proposalId, made), inArray(ringEvents.id, made)))
     await db.delete(ringProposals).where(inArray(ringProposals.id, made))
+    // An approval hands the follow-up to the desk (a claim); the self-check's own claims go too (found in round 6: they piled up on 004).
+    const mine = (await db.select({ id: ringClaims.id }).from(ringClaims).where(eq(ringClaims.orderId, ORDER))).map((c) => c.id).filter((id) => !claimsBefore.includes(id))
+    if (mine.length) await db.delete(ringClaims).where(inArray(ringClaims.id, mine))
   })
   const input = (actionType: ProposeInput["actionType"]): ProposeInput => ({ command: actionType, actionType, targetType: "order", targetId: ORDER,
     payload: { note: "self-check" }, rationale: "self-check", summary: "self-check", evidenceRefs: [], onApprove: "Done.", onReject: "Nothing changes." })
