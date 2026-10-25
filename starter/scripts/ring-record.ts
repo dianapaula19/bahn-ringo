@@ -10,7 +10,7 @@ import { db } from "../lib/db"
 import type { RunEvent } from "../lib/contract"
 import { ringRuns, ringSteps } from "../lib/ring-schema"
 
-const DEMO = ["ord-00516", "ord-00458", "ord-00593", "ord-00010", "ord-00023"]
+const DEMO = ["ord-00516", "ord-00458", "ord-00593", "ord-00010", "ord-00023", "ord-00322"]
 
 async function main() {
   const ids = process.argv.slice(2).filter((a) => a.startsWith("ord-"))

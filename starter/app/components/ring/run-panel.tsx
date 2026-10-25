@@ -129,7 +129,9 @@ export function RunPanel({ story, onDone, heroRun = false, runRequest = 0, onRun
 
   return <section className="ring-panel" aria-labelledby="ring-h" ref={panel}>
     <div className="sec-head"><RingoFace size={40} /><h2 id="ring-h">Ringo</h2>
-      <span className="note">Reads first, then rings the site or asks the driver. Never the customer.</span></div>
+      <span className="note">{story.triage.reason === "SAFETY"
+        ? "On the road: only asks the driver if they're safe, where they are and for a photo, then a holding reply. No calls, no advice; roadside or tow is yours."
+        : "Reads first, then rings the site or asks the driver. Never the customer."}</span></div>
     <div className="ring-controls">
       {!heroRun && <button type="button" className="btn primary" disabled={running || busyElsewhere} onClick={() => start("operator")}><Icon name="bot" size={15} /> {running && replaying ? "Replaying…" : running || busyElsewhere ? "Ringo is working…" : "Run Ringo"}</button>}
       <button type="button" className="btn" disabled={running} onClick={() => start("replay")}>{running && replaying ? "Replaying…" : "Watch a recorded run"}</button>
@@ -229,8 +231,9 @@ export function runSteps(events: RunEvent[], span?: { startedAt: string; endedAt
   }
   const push = (s: Step) => { flush(); out.push(s) }
   const took = (e: Extract<RunEvent, { type: "tool_result" }>) => Math.max(0, t(e) - (started.get(e.stepId) ?? t(e)))
+  const asked = new Map<string, Record<string, unknown>>()
   for (const e of events) {
-    if (e.type === "tool_call") { started.set(e.stepId, t(e)); if (e.tool === "place_call") dialled = t(e) }
+    if (e.type === "tool_call") { started.set(e.stepId, t(e)); asked.set(e.stepId, e.input); if (e.tool === "place_call") dialled = t(e) }
     else if (e.type === "tool_result" && READ[e.tool]) push({ label: READ[e.tool]!, ms: took(e) })
     else if (e.type === "tool_result" && e.tool === "record_fact" && e.ok) { wrote.facts++; wrote.ms += took(e) }
     else if (e.type === "tool_result" && e.tool === "note_playbook" && e.ok) { wrote.notes++; wrote.ms += took(e) }
@@ -238,7 +241,7 @@ export function runSteps(events: RunEvent[], span?: { startedAt: string; endedAt
       const rung = callRung(e.call.transcript)
       const how = CALL_OUT[e.call.outcome ?? ""]
       push({ label: `Call ${rung ? RUNG_LABEL[rung].toLowerCase() : "the site"}${how ? ` (${how})` : ""}`, ms: Number.isFinite(dialled) ? t(e) - dialled : NaN, sim: true, tone: how ? "warn" : undefined })
-    } else if (e.type === "tool_result" && e.tool === "send_driver_message" && e.ok) push({ label: "Message driver", ms: took(e), sim: true })
+    } else if (e.type === "tool_result" && e.tool === "send_driver_message" && e.ok) push({ label: driverStep(asked.get(e.stepId)), ms: took(e), sim: true })
     else if (e.type === "tool_result" && e.tool === "schedule_callback" && e.ok) push({ label: "Book callback", ms: took(e) })
     else if (e.type === "stop") push({ label: STOPPED[e.decision.outcome], ms: NaN })
   }
@@ -248,6 +251,16 @@ export function runSteps(events: RunEvent[], span?: { startedAt: string; endedAt
   const whole = span?.endedAt ? Date.parse(span.endedAt) - Date.parse(span.startedAt) : NaN
   if (Number.isFinite(whole) && whole > total) return finish(out, whole)
   return finish(out, total)
+}
+
+/** A driver message as its step: what Ringo asked or said, in two or three words. ponytail: keyword match on the body. */
+function driverStep(input: Record<string, unknown> | undefined): string {
+  const body = String(input?.body ?? ""), intent = String(input?.intent ?? "")
+  if (intent === "holding") return "Holding reply"
+  if (intent === "instruction") return "Driver message (for approval)"
+  if (/\bphoto|picture\b/i.test(body)) return "Ask for photo"
+  const safe = /\bsafe\b/i.test(body), where = /\bwhere\b|which service area|location|landmark/i.test(body)
+  return safe && where ? "Ask: safe? where?" : where ? "Ask: where exactly?" : safe ? "Ask: safe?" : "Ask driver"
 }
 
 function finish(out: Step[], total: number) {
@@ -276,7 +289,7 @@ function RunSteps({ runs, now }: { runs: RunSummary[]; now: string }) {
   const { steps, total, thinking } = detail ? runSteps(detail.events, detail.run) : { steps: [], total: 0, thinking: 0 }
   const lead = <>{run === list[0] ? "Ringo last ran" : "Ringo ran"} <When at={run.startedAt} now={now} />{run.trigger === "replay" && " (a recorded run)"}</>
   const head = <div className="run-steps-head">
-    <p>{lead}{steps.length > 0 && <> · {steps.some((x) => x.sim) ? "cheap work first, then the call, then stop" : "read first; no call needed, so he stopped"} · {dur(total)} in all{thinking >= 1000 && <> ({dur(thinking)} thinking between steps)</>}</>} · <TraceLink runId={run.id} />
+    <p>{lead}{steps.length > 0 && <> · {steps.some((x) => x.label.startsWith("Call")) ? "cheap work first, then the call, then stop" : steps.some((x) => x.sim) ? "read first, then the driver only, then stop" : "read first; no call needed, so he stopped"} · {dur(total)} in all{thinking >= 1000 && <> ({dur(thinking)} thinking between steps)</>}</>} · <TraceLink runId={run.id} />
     {list.length > 1 && <label className="run-pick"><span className="sr-only">Show the steps of</span><select value={run.id} onChange={(e) => setRunId(e.target.value)}>
       {list.map((r, i) => <option key={r.id} value={r.id}>{i === 0 ? "Latest run" : "Earlier run"} {dayKey(r.startedAt) === dayKey(now) ? fmtClock(r.startedAt) : fmtDateTime(r.startedAt, null, false)}{r.decision ? ` · ${OUTCOME[r.decision.outcome]}` : ""}</option>)}</select></label>}</p>
   </div>

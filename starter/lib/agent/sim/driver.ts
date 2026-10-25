@@ -4,9 +4,9 @@ import type { SimScenario } from "@/lib/contract"
 import { shortReply, type AiTraceContext } from "../llm"
 
 export async function driverReply(input: {
-  driverName: string; question: string; scenario: SimScenario | null; recent: string[]; ai: AiTraceContext | null
+  driverName: string; question: string; driver: SimScenario["driver"] | null; recent: string[]; ai: AiTraceContext | null
 }): Promise<string> {
-  const d = input.scenario?.driver
+  const d = input.driver
   const knows = d?.knows ?? input.recent.map((m) => `You wrote earlier: "${m}"`)
   const system = [
     `You are ${d?.persona ?? `${input.driverName}, a freelance car delivery driver`}. This is a simulated driver chat in a training system; the sender is "Ringo", the operations assistant.`,

@@ -3,16 +3,16 @@
 // `onEvent` (the NDJSON stream, or a script's log).
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
-import { and, eq } from "drizzle-orm"
+import { and, eq, max } from "drizzle-orm"
 import Anthropic from "@anthropic-ai/sdk"
 import { db } from "@/lib/db"
 import type { RunEvent, RunSummary, RunTrigger, StopDecision, ToolName } from "@/lib/contract"
 import { loadOrder } from "@/lib/present/load"
 import { ringRuns, ringSteps } from "@/lib/ring-schema"
 import { ringEligibility } from "@/lib/triage/triage"
-import { newId, simNow } from "./clock"
+import { CLOCK_SPEED, newId, simNow } from "./clock"
 import { anthropic, BETAS, captureAiToolSpan, flushAiObservability, MODEL, newAiTrace, recordModelCall } from "./llm"
-import { LIMITS, runTool, TOOLS, type RunCtx, type ToolOutcome } from "./tools"
+import { LIMITS, ROADSIDE_TOOLS, runTool, TOOLS, type RunCtx, type ToolOutcome } from "./tools"
 
 export const SYSTEM = `You are Ringo, the pickup readiness agent in a car delivery control room. Your job on one order: find out whether the car can be collected (who has the keys, where the handover is, who releases it, which papers are needed), write down what you learn as graded facts, and then either finish or bring a person one clear decision.
 
@@ -41,13 +41,31 @@ How to work:
 
 Speak to people in plain, short sentences. Write all text for an operations person, not an engineer.`
 
+/** Roadside mode (a car stopped on the road for safety): driver-only legwork. Code enforces the limits in tools.ts. */
+export const ROADSIDE_SYSTEM = `You are Ringo, the assistant in a car delivery control room. This order is a car stopped on the road for safety. A person owns it: the roadside-or-tow decision, the customer and any booking are theirs. Your only job is to save that person legwork with the assigned driver, then hand back.
+
+You may (code enforces this; anything else is refused):
+1. read_order and read_messages first. Note what the driver already said and what is still unknown.
+2. Message the assigned driver (send_driver_message), at most three messages in all:
+   - intent "question": ask whether they are safe right now and where exactly they are (service area or road, direction, a landmark), in one message. Skip what the record already answers clearly.
+   - intent "question": ask them to send a photo of the warning light on the dashboard, only if no photo has been received.
+   - intent "holding": last, one short holding reply: a person is arranging recovery and will tell them who is coming; please stay with the car somewhere safe. Never say who is coming or when, never promise a tow or roadside help.
+3. record_fact for what the driver answers: sourceKind ring_driver_message, the reply's id, level claimed (a driver's word is a claim). Subjects: driver.safety, incident.location, incident.photo. One plain sentence each, in English.
+4. stop_with_decision with outcome needs_person: the headline says what you learned (at most 120 characters), oneDecision is the person's roadside-or-tow decision with the customer, found lists the fact ids you wrote, whatNext says what the person does next.
+
+Never: mechanical advice or diagnosis (no restart, reset, check the oil, drive on, try again), guessing what is wrong, blame, contacting the customer or anyone but the driver, calling a site, proposing changes, or telling the driver to move the car.
+Speak to the driver in plain, short, calm sentences.`
+
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export async function liveRun(orderId: string): Promise<string | null> {
   const [row] = await db.select().from(ringRuns).where(and(eq(ringRuns.orderId, orderId), eq(ringRuns.status, "running")))
   // A run "running" for more than 10 minutes (sim clock) died with its process.
   const now = await simNow()
-  if (row && Date.parse(now) - Date.parse(row.startedAt) > 10 * 60_000 * (Number(process.env.RING_CLOCK_SPEED ?? 1) || 1)) {
+  // On a frozen clock (RING_CLOCK_SPEED=0) sim time stands still, so the cutoff is 10 wall-clock minutes since its last step.
+  const lastWall = row && CLOCK_SPEED === 0 ? (await db.select({ at: max(ringSteps.wallAt) }).from(ringSteps).where(eq(ringSteps.runId, row.id)))[0]?.at : null
+  const dead = !!row && (CLOCK_SPEED === 0 ? Date.now() - (lastWall ? Date.parse(String(lastWall)) : 0) > 10 * 60_000 : Date.parse(now) - Date.parse(row.startedAt) > 10 * 60_000 * CLOCK_SPEED)
+  if (row && dead) {
     await db.update(ringRuns).set({ status: "failed", error: "Run stopped without finishing.", endedAt: now }).where(eq(ringRuns.id, row.id))
     return null
   }
@@ -96,12 +114,12 @@ export async function runRing(input: {
     await db.insert(ringSteps).values({ runId, seq: seq++, event: e, wallAt: new Date().toISOString() })
     await onEvent(e)
   }
-  const ctx: RunCtx = { runId, orderId: input.orderId, loaded, emit, reads: { order: null, messages: null, docs: null }, playbooks: new Map(), liveCallId: null, proposeAttempts: 0, toolCalls: 0, did: [], stopped: null, ai: null }
+  const eligibility = ringEligibility(loaded.bundle)
+  const ctx: RunCtx = { runId, orderId: input.orderId, loaded, emit, mode: eligibility.mode ?? "pickup", reads: { order: null, messages: null, docs: null }, playbooks: new Map(), liveCallId: null, proposeAttempts: 0, toolCalls: 0, did: [], stopped: null, ai: null }
   await emit({ type: "run_started", runId, orderId: input.orderId, trigger: input.trigger, at: startedAt, model: MODEL, replay: false })
 
   let status: RunSummary["status"] = "stopped"
   let error: string | null = null
-  const eligibility = ringEligibility(loaded.bundle)
   try {
     if (!eligibility.ok) {
       ctx.stopped = forcedStop(eligibility.reason ?? "Not a Ringo order.", [], "This order needs a person.")
@@ -147,8 +165,8 @@ async function loop(client: Anthropic, ctx: RunCtx, input: { orderId: string; tr
     const turnStartedAt = Date.now()
     const stream = client.beta.messages.stream({
       model: MODEL, max_tokens: 16000, betas: BETAS, fallbacks: "default",
-      system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
-      tools: TOOLS as Anthropic.Beta.BetaTool[], tool_choice: { type: "auto" },
+      system: [{ type: "text", text: ctx.mode === "roadside" ? ROADSIDE_SYSTEM : SYSTEM, cache_control: { type: "ephemeral" } }],
+      tools: (ctx.mode === "roadside" ? TOOLS.filter((t) => ROADSIDE_TOOLS.has(t.name as ToolName)) : TOOLS) as Anthropic.Beta.BetaTool[], tool_choice: { type: "auto" },
       thinking: { type: "adaptive" }, output_config: { effort: "medium" }, messages,
     } as Anthropic.Beta.MessageCreateParamsStreaming)
     const msg = await stream.finalMessage().catch(async (e) => { await recordModelCall(ctx.ai, "ringo_turn", turnStartedAt, null, e); throw e })
